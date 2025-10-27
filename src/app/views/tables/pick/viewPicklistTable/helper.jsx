@@ -1,0 +1,643 @@
+/* eslint-disable */
+import StatusBadge from '@core/components/StatusBadge'
+
+export const locations = [
+    {
+        sn: 1,
+        id: 23,
+        order_no: 'Or01',
+        location: 'R9-09',
+        bin_no: 'Pallet-01',
+        sku_no: 'SKU1',
+        description: 'Product A',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 1,
+        pna_qty: 7,
+        qty: 7,
+        item_id: '21989876',
+        picker_id: 'USR101',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Rahul Sharma'
+    },
+    {
+        sn: 2,
+        id: 32,
+        order_no: 'Or02',
+        location: 'R9-09',
+        bin_no: 'Pallet-01',
+        sku_no: 'SKU1',
+        description: 'Product B',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 1,
+        pna_qty: 0,
+        qty: 0,
+        item_id: '21989877',
+        picker_id: 'USR102',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Priya Verma'
+    },
+    {
+        sn: 3,
+        id: 45,
+        order_no: 'Or03',
+        location: 'R8-08',
+        bin_no: 'Pallet-02',
+        sku_no: 'SKU2',
+        description: 'Product C',
+        expected_pick_qty: 5,
+        picked_qty: 2,
+        removed_qty: 0,
+        pna_qty: 2,
+        qty: 2,
+        item_id: '21989878',
+        picker_id: 'USR103',
+        picked_at: '14-11-2024 10:35',
+        remarks: ''
+    },
+    {
+        sn: 4,
+        id: 52,
+        order_no: 'Or04',
+        location: 'R7-07',
+        bin_no: 'Pallet-03',
+        sku_no: 'SKU3',
+        description: 'Product D',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 2,
+        pna_qty: 3,
+        qty: 3,
+        item_id: '21989879',
+        picker_id: 'USR104',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Amit Kumar'
+    },
+    {
+        sn: 5,
+        id: 63,
+        order_no: 'Or05',
+        location: 'R6-06',
+        bin_no: 'Pallet-04',
+        sku_no: 'SKU4',
+        description: 'Product E',
+        expected_pick_qty: 7,
+        picked_qty: 4,
+        removed_qty: 0,
+        pna_qty: 2,
+        qty: 2,
+        item_id: '21989880',
+        picker_id: 'USR105',
+        picked_at: '14-11-2024 10:35',
+        remarks: ''
+    },
+    {
+        sn: 6,
+        id: 74,
+        order_no: 'Or06',
+        location: 'R5-05',
+        bin_no: 'Pallet-05',
+        sku_no: 'SKU5',
+        description: 'Product F',
+        expected_pick_qty: 3,
+        picked_qty: 3,
+        removed_qty: 0,
+        pna_qty: 0,
+        qty: 0,
+        item_id: '21989881',
+        picker_id: 'USR106',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order cancelled'
+    },
+    {
+        sn: 7,
+        id: 85,
+        order_no: 'Or07',
+        location: 'R4-04',
+        bin_no: 'Pallet-06',
+        sku_no: 'SKU6',
+        description: 'Product G',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 1,
+        pna_qty: 1,
+        qty: 1,
+        item_id: '21989882',
+        picker_id: 'USR107',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Ramesh Patel'
+    },
+    {
+        sn: 8,
+        id: 96,
+        order_no: 'Or08',
+        location: 'R3-03',
+        bin_no: 'Pallet-07',
+        sku_no: 'SKU7',
+        description: 'Product H',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 1,
+        pna_qty: 1,
+        qty: 1,
+        item_id: '21989883',
+        picker_id: 'USR108',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Neha Gupta'
+    },
+    {
+        sn: 9,
+        id: 107,
+        order_no: 'Or09',
+        location: 'R2-02',
+        bin_no: 'Pallet-08',
+        sku_no: 'SKU8',
+        description: 'Product I',
+        expected_pick_qty: 6,
+        picked_qty: 3,
+        removed_qty: 0,
+        pna_qty: 2,
+        qty: 2,
+        item_id: '21989884',
+        picker_id: 'USR109',
+        picked_at: '14-11-2024 10:35',
+        remarks: ''
+    },
+    {
+        sn: 10,
+        id: 118,
+        order_no: 'Or10',
+        location: 'R1-01',
+        bin_no: 'Pallet-09',
+        sku_no: 'SKU9',
+        description: 'Product J',
+        expected_pick_qty: 2,
+        picked_qty: 1,
+        removed_qty: 0,
+        pna_qty: 1,
+        qty: 1,
+        item_id: '21989885',
+        picker_id: 'USR110',
+        picked_at: '14-11-2024 10:35'
+    },
+    {
+        sn: 11,
+        id: 129,
+        order_no: 'Or11',
+        location: 'R0-00',
+        bin_no: 'Pallet-10',
+        sku_no: 'SKU10',
+        description: 'Product K',
+        expected_pick_qty: 0,
+        picked_qty: 0,
+        removed_qty: 1,
+        pna_qty: 2,
+        qty: 2,
+        item_id: '21989886',
+        picker_id: 'USR111',
+        picked_at: '14-11-2024 10:35',
+        remarks: 'Order removed from Picklist by Kavita Mehta'
+    },
+    {
+        sn: 12,
+        id: 140,
+        order_no: 'Or12',
+        location: 'R9-09',
+        bin_no: 'Pallet-11',
+        sku_no: 'SKU11',
+        description: 'Product L',
+        expected_pick_qty: 7,
+        picked_qty: 5,
+        removed_qty: 0,
+        pna_qty: 1,
+        qty: 1,
+        item_id: '21989887',
+        picker_id: 'USR112',
+        picked_at: '14-11-2024 10:35',
+        remarks: ''
+    }
+]
+
+export const headers = [
+    [
+        {
+            id: 990,
+            label: 'Sr No',
+            key: 's_no',
+            search: true,
+            isFrontend: true,
+            sort: false,
+            stick: true,
+            visible: true,
+            minWidth: 3.1,
+            maxWidth: 3.1
+        },
+        {
+            id: 0,
+            label: 'Order No',
+            key: 'order_no',
+            search: true,
+            sort: true,
+            stick: true,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 1,
+            label: 'Location',
+            key: 'address',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 2,
+            label: 'Bin No',
+            key: 'bin_no',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 4,
+            label: 'SKU No',
+            key: 'item_no',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 6,
+            label: 'Description',
+            key: 'description',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+
+        {
+            id: 9,
+            label: 'Exp Pick Qty',
+            key: 'expected_quantity',
+            search: true,
+            align: 'center',
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 10,
+            label: 'Picked Qty',
+            key: 'picked_quantity',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 11,
+            label: 'Removed Qty',
+            key: 'removed_quantity',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 13,
+            label: 'Remarks',
+            key: 'remarks',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 12,
+            maxWidth: 12
+        },
+        {
+            id: 12,
+            label: 'PNA Qty',
+            key: 'pna_quantity',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 14,
+            label: 'Lot',
+            key: 'lot_no',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 15,
+            label: 'MFD',
+            key: 'mfd_date',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 16,
+            label: 'Expiry',
+            key: 'expiry_date',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 17,
+            label: 'Mrp',
+            key: 'mrp',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 18,
+            label: 'Created At',
+            key: 'created_at',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 19,
+            label: 'Updated At',
+            key: 'updated_at',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        }
+    ],
+    [
+        {
+            id: 990,
+            label: 'Sr No',
+            key: 's_no',
+            search: true,
+            isFrontend: true,
+            sort: false,
+            stick: true,
+            visible: true,
+            minWidth: 3.1,
+            maxWidth: 3.1
+        },
+        {
+            id: 1,
+            label: 'Order No',
+            key: 'order_no',
+            search: true,
+            sort: true,
+            stick: true,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 2,
+            label: 'Location',
+            key: 'address',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 3,
+            label: 'Storage Bin No',
+            key: 'bin_no',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 4,
+            label: 'Pick Bin No',
+            key: 'pick_bin',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 6,
+            label: 'SKU No',
+            key: 'item_no',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 8,
+            label: 'Description',
+            key: 'description',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 9,
+            label: 'Item Id',
+            key: 'uid',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 10,
+            label: 'Exp Pick Qty',
+            key: 'expected_quantity',
+            search: true,
+            align: 'center',
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 11,
+            label: 'Picked Qty',
+            key: 'picked_quantity',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 12,
+            label: 'Removed Qty',
+            key: 'removed_quantity',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 13,
+            label: 'Remarks',
+            key: 'remarks',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 12,
+            maxWidth: 12
+        },
+        // {
+        //     id: 11,
+        //     label: 'PNA Qty',
+        //     key: 'pna_quantity',
+        //     align: 'center',
+        //     search: true,
+        //     sort: true,
+        //     stick: false,
+        //     visible: true,
+        //     minWidth: 8,
+        //     maxWidth: 8
+        // },
+        {
+            id: 14,
+            label: 'Picker Name',
+            key: 'picker_name',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 15,
+            label: 'Picked At',
+            key: 'picked_at',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 16,
+            label: 'Created At',
+            key: 'created_at',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        },
+        {
+            id: 17,
+            label: 'Updated At',
+            key: 'updated_at',
+            align: 'center',
+            search: true,
+            sort: true,
+            stick: false,
+            visible: true,
+            minWidth: 8,
+            maxWidth: 8
+        }
+    ]
+]
+
+/* Updated ArrowButton Styling Logic */
+export const getStatusVariant = status => {
+    switch (status) {
+        case 'Completed':
+            return 'green'
+        case 'Discarded':
+            return 'red'
+        case 'In Progress':
+            return 'orange'
+    }
+}
+
+export const STATUS_TYPE = {
+    Pending: {
+        label: 'Pending',
+        color: 'info'
+    },
+    Completed: {
+        label: 'Completed',
+        color: 'success'
+    }
+}

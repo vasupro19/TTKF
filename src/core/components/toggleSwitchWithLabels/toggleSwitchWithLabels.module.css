@@ -1,0 +1,69 @@
+.toggleSwitch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.labelText {
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+}
+
+.switchWrapper {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 20px;
+}
+
+.input {
+  display: none;
+}
+
+.background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #ddd;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #ccc;
+  transition: background-color 0.3s ease-in-out;
+}
+
+.background:hover {
+  box-shadow: inset 0 0 0 1px #a9b1bf;
+  transition: all 0.2s ease-in-out;
+}
+
+.handle {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s ease-in-out;
+}
+
+.input:checked + .background .handle {
+  transform: translateX(26px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 2px #12b76a;
+}
+
+.input:checked + .background {
+  background-color: #12b76a;
+  box-shadow: inset 0 0 0 1px #039855;
+}
+
+@media (max-width: 480px) {
+  .labelText {
+    font-size: 8px
+  }
+}
+

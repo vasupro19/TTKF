@@ -1,0 +1,16 @@
+{
+    "account": "Account",
+    "masterclient": "Client Account",
+    "masterAccount": "Master Account",
+    "location": "Location Master",
+    "masterLocation": "Master Location",
+    "member": "Member",
+    "masterUser": "Master User",
+    "inbound": "Inbound",
+    "processone": "Process One",
+    "outbound": "Outbound",
+    "process": "Process",
+    "processthree": "Process Three",
+    "processNew": "Process New",
+    "processthreeNested": "Process Three Nestd"
+}

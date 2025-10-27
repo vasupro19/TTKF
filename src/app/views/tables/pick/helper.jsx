@@ -1,0 +1,357 @@
+import { OUTBOUND_STATUS } from '@/constants'
+
+export const locations = [
+    {
+        id: 1,
+        refNo: ['#NAV1869-1'],
+        pickListID: 'UTT-007865-1',
+        status: 'Assigned',
+        createdAt: '14-11-2024 10:30',
+        orderCount: 5,
+        pickType: 'Order',
+        channel: ['Myntra', 'Amazon', 'Flipkart'],
+        quantity: 1691,
+        pickedQty: 0,
+        pendingQty: 1691,
+        createdBy: 'John Doe'
+    },
+    {
+        id: 2,
+        refNo: ['#NAV1870-1'],
+        pickListID: 'UTT-007865-2',
+        status: 'In Progress',
+        createdAt: '14-11-2024 10:35',
+        orderCount: 6,
+        pickType: 'Order',
+        channel: ['Myntra', 'Amazon', 'Ajio'],
+        quantity: 500,
+        pickedQty: 200,
+        pendingQty: 300,
+        createdBy: 'Alice Smith'
+    },
+    {
+        id: 3,
+        refNo: ['#NAV1871-1'],
+        pickListID: 'UTT-007865-3',
+        status: 'Part Picked',
+        createdAt: '14-11-2024 10:40',
+        orderCount: 8,
+        pickType: 'Order',
+        channel: ['Flipkart', 'Amazon', 'Myntra'],
+        quantity: 200,
+        pickedQty: 100,
+        pendingQty: 100,
+        createdBy: 'Wave'
+    },
+    {
+        id: 4,
+        refNo: ['#NAV1872-1'],
+        pickListID: 'UTT-007865-4',
+        status: 'Complete',
+        createdAt: '14-11-2024 10:45',
+        orderCount: 4,
+        pickType: 'Order',
+        channel: ['Ajio', 'Amazon', 'Flipkart'],
+        quantity: 250,
+        pickedQty: 250,
+        pendingQty: 0,
+        createdBy: 'Wave'
+    },
+    {
+        id: 5,
+        refNo: [
+            'BTC/2465-1',
+            'BTC/2465-2',
+            'BTC/2465-3',
+            'BTC/2465-4',
+            'BTC/2465-5',
+            'BTC/2465-6',
+            'BTC/2465-7',
+            'BTC/2465-8',
+            'BTC/2465-9',
+            'BTC/2465-10'
+        ],
+        pickListID: 'UTT-006665-1',
+        status: 'Assigned',
+        createdAt: '14-11-2024 11:00',
+        orderCount: 10,
+        pickType: 'Batch',
+        channel: ['Amazon', 'Flipkart', 'Myntra'],
+        quantity: 14,
+        pickedQty: 12,
+        pendingQty: 2,
+        createdBy: 'Charlie Brown'
+    },
+    {
+        id: 6,
+        refNo: ['BTC/2466-1', 'BTC/2466-2', 'BTC/2466-3', 'BTC/2466-4', 'BTC/2466-5', 'BTC/2466-6'],
+        pickListID: 'UTT-006665-2',
+        status: 'Part Picked',
+        createdAt: '14-11-2024 11:05',
+        orderCount: 6,
+        pickType: 'Batch',
+        channel: ['Amazon', 'Ajio', 'Myntra'],
+        quantity: 20,
+        pickedQty: 15,
+        pendingQty: 5,
+        createdBy: 'Wave'
+    },
+    {
+        id: 7,
+        refNo: [
+            'BTC/2467-1',
+            'BTC/2467-2',
+            'BTC/2467-3',
+            'BTC/2467-4',
+            'BTC/2467-5',
+            'BTC/2467-6',
+            'BTC/2467-7',
+            'BTC/2467-8'
+        ],
+        pickListID: 'UTT-006665-3',
+        status: 'Cancelled',
+        createdAt: '14-11-2024 11:10',
+        orderCount: 8,
+        pickType: 'Batch',
+        channel: ['Myntra', 'Flipkart', 'Amazon', 'Ajio'],
+        quantity: 30,
+        pickedQty: 25,
+        pendingQty: 5,
+        createdBy: 'David Johnson'
+    },
+    {
+        id: 8,
+        refNo: ['BTC/2468-1', 'BTC/2468-2', 'BTC/2468-3', 'BTC/2468-4', 'BTC/2468-5'],
+        pickListID: 'UTT-006665-4',
+        status: 'Complete',
+        createdAt: '14-11-2024 11:15',
+        orderCount: 5,
+        pickType: 'Batch',
+        channel: ['Ajio', 'Amazon', 'Flipkart'],
+        quantity: 40,
+        pickedQty: 40,
+        pendingQty: 0,
+        createdBy: 'Emma Wilson'
+    },
+    {
+        id: 9,
+        refNo: ['BTC/2469-1', 'BTC/2469-2', 'BTC/2469-3', 'BTC/2469-4', 'BTC/2469-5', 'BTC/2469-6', 'BTC/2469-7'],
+        pickListID: 'UTT-006665-5',
+        status: 'In Progress',
+        createdAt: '14-11-2024 11:20',
+        orderCount: 7,
+        pickType: 'Batch',
+        channel: ['Myntra', 'Amazon', 'Flipkart'],
+        quantity: 50,
+        pickedQty: 0,
+        pendingQty: 50,
+        createdBy: 'Wave'
+    },
+    {
+        id: 10,
+        refNo: [
+            'BTC/2470-1',
+            'BTC/2470-2',
+            'BTC/2470-3',
+            'BTC/2470-4',
+            'BTC/2470-5',
+            'BTC/2470-6',
+            'BTC/2470-7',
+            'BTC/2470-8',
+            'BTC/2470-9'
+        ],
+        pickListID: 'UTT-006665-6',
+        status: 'Assigned',
+        createdAt: '14-11-2024 11:25',
+        orderCount: 9,
+        pickType: 'Batch',
+        channel: ['Amazon', 'Flipkart', 'Ajio'],
+        quantity: 60,
+        pickedQty: 30,
+        pendingQty: 30,
+        createdBy: 'Sophia Martinez'
+    },
+    {
+        id: 11,
+        refNo: [
+            'BTC/2471-1',
+            'BTC/2471-2',
+            'BTC/2471-3',
+            'BTC/2471-4',
+            'BTC/2471-5',
+            'BTC/2471-6',
+            'BTC/2471-7',
+            'BTC/2471-8',
+            'BTC/2471-9',
+            'BTC/2471-10'
+        ],
+        pickListID: 'UTT-006665-7',
+        status: 'In Progress',
+        createdAt: '14-11-2024 11:30',
+        orderCount: 10,
+        pickType: 'Batch',
+        channel: ['Myntra', 'Amazon', 'Ajio'],
+        quantity: 70,
+        pickedQty: 35,
+        pendingQty: 35,
+        createdBy: 'Wave'
+    },
+    {
+        id: 12,
+        refNo: ['BTC/2472-1', 'BTC/2472-2', 'BTC/2472-3', 'BTC/2472-4'],
+        pickListID: 'UTT-006665-8',
+        status: 'Complete',
+        createdAt: '14-11-2024 11:35',
+        orderCount: 4,
+        pickType: 'Batch',
+        channel: ['Amazon', 'Flipkart', 'Myntra'],
+        quantity: 80,
+        pickedQty: 80,
+        pendingQty: 0,
+        createdBy: 'Liam Anderson'
+    }
+]
+
+export const headers = [
+    {
+        id: 0,
+        label: 'Sr No',
+        key: 's_no',
+        isFrontend: true,
+        search: false,
+        sort: false,
+        stick: true,
+        visible: true,
+        minWidth: 3,
+        maxWidth: 3
+    },
+    {
+        id: 1,
+        label: 'Picklist ID',
+        key: 'no',
+        search: true,
+        sort: true,
+        stick: true,
+        visible: true,
+        minWidth: 9,
+        maxWidth: 10
+    },
+    {
+        id: 2,
+        label: 'Ref No',
+        key: 'ref_no',
+        align: 'center',
+        search: true,
+        sort: true,
+        stick: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 3,
+        label: 'Status',
+        key: 'status',
+        search: false,
+        sort: true,
+        filter: true,
+        options: Object.values(OUTBOUND_STATUS).filter(item => item.type && item.type.includes('PICK')),
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 4,
+        label: 'Order Count',
+        key: 'order_count',
+        align: 'center',
+
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 5,
+        label: 'Pick Type',
+        key: 'pick_type',
+        align: 'center',
+        search: true,
+        sort: true,
+        filter: true,
+        options: [
+            { label: 'Order', value: 'DISCREET' },
+            { label: 'Batch', value: 'BATCH' }
+        ],
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 6,
+        label: 'Channel',
+        key: 'channel_codes',
+        align: 'center',
+
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 7,
+        label: 'Quantity',
+        key: 'quantity',
+        align: 'center',
+
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 8,
+        label: 'Picked Qty',
+        key: 'picked_quantity',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 9,
+        label: 'Pending Qty',
+        key: 'pending_quantity',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 10,
+        label: 'Created By',
+        key: 'created_by',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 11,
+        label: 'Created At',
+        key: 'created_at',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    }
+]

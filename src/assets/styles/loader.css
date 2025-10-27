@@ -1,0 +1,174 @@
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+}
+
+/* Light, modern splash screen background */
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.5s ease-in-out;
+
+    background: -webkit-linear-gradient(90deg, hsla(186, 33%, 94%, 1) 0%, rgba(179, 197, 223, 0.633) 100%);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* --- Truck Animation (Original styles preserved) --- */
+.loader {
+    width: fit-content;
+    height: fit-content;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.truckWrapper {
+    width: 200px;
+    height: 100px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    align-items: center;
+    justify-content: flex-end;
+    overflow-x: hidden;
+}
+
+.truckBody {
+    width: 130px;
+    height: fit-content;
+    margin-bottom: 6px;
+    animation: motion 1s linear infinite;
+}
+
+@keyframes motion {
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(3px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
+}
+
+.truckTires {
+    width: 104px;
+    height: fit-content;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0px 10px 0px 15px;
+    position: absolute;
+    bottom: 0;
+}
+
+.truckTires svg {
+    width: 24px;
+}
+
+.road {
+    width: 100%;
+    height: 1.5px;
+    background-color: #282828;
+    position: relative;
+    bottom: 0;
+    align-self: flex-end;
+    border-radius: 3px;
+}
+
+.road::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 100%;
+    background-color: #282828;
+    right: -50%;
+    border-radius: 3px;
+    animation: roadAnimation 1.4s linear infinite;
+    border-left: 10px solid #f8f9fa;
+    /* Match new background */
+}
+
+.road::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 100%;
+    background-color: #282828;
+    right: -65%;
+    border-radius: 3px;
+    animation: roadAnimation 1.4s linear infinite;
+    border-left: 4px solid #f8f9fa;
+    /* Match new background */
+}
+
+.lampPost {
+    position: absolute;
+    bottom: 0;
+    right: -90%;
+    height: 90px;
+    animation: roadAnimation 1.4s linear infinite;
+    fill: #282828;
+    /* Original color for contrast */
+}
+
+@keyframes roadAnimation {
+    0% {
+        transform: translateX(0px);
+    }
+
+    100% {
+        transform: translateX(-350px);
+    }
+}
+
+/* --- Modern & Subtle Title Styles --- */
+.title-container {
+    margin-top: 20px;
+    text-align: center;
+}
+
+h1.main-title {
+    font-size: 2.5rem;
+    /* Prominent but not overwhelming */
+    font-weight: 600;
+    /* Semi-bold for a sleek look */
+    color: #343a40;
+    /* Professional dark gray */
+    margin: 0;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-family: monospace;
+}
+
+p.sub-title {
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: #6c757d;
+    /* Lighter gray for subtitle */
+    margin-top: 4px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}

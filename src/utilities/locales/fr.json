@@ -1,0 +1,16 @@
+{
+    "account": "Compte",
+    "masterclient": "Compte Client",
+    "masterAccount": "Compte principal",
+    "location": "Maître de localisation",
+    "masterLocation": "Emplacement principal",
+    "member": "Membre",
+    "masterUser": "Utilisateur principal",
+    "inbound": "Entrant",
+    "processone": "Processus un",
+    "outbound": "Sortant",
+    "process": "Processus",
+    "processthree": "Troisième processus",
+    "processNew": "Processus Nouveau",
+    "processthreeNested": "Processus trois imbriqués"
+}

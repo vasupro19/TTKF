@@ -1,0 +1,356 @@
+export const locations = [
+    {
+        id: 1,
+        waveID: 'WV-0078 65',
+        status: 'Active',
+        createdBy: 'Rizwan',
+        createdAt: '03-04-2024 12:30',
+        orderType: ['B2B', 'B2C', 'RTV'],
+        orderMode: ['Normal', 'Exchange', 'Express'],
+        pickType: ['Order', 'Batch'],
+        channel: ['Myntra', 'Firstcry', 'Amazon'],
+        batchType: 'Single Item Order',
+        customer: 'All', // remains as "All"
+        courier: ['Delhivery', 'eKart'],
+        cutOffTime: '12:00 PM',
+        schedule: '12:00 PM'
+    },
+    {
+        id: 2,
+        waveID: 'WV-0081 65',
+        status: 'Disabled',
+        createdBy: 'Kaushik',
+        createdAt: '03-04-2024 14:45',
+        orderType: 'All', // from ['All'] to "All"
+        orderMode: ['Order'],
+        pickType: ['Order'],
+        channel: 'All', // from ['All'] to "All"
+        batchType: 'Multi Item Order',
+        customer: 'All',
+        courier: ['Ecom Express'],
+        cutOffTime: '5:00 PM',
+        schedule: '2:30 PM'
+    },
+    {
+        id: 3,
+        waveID: 'WV-0066 65',
+        status: 'Active',
+        createdBy: 'Pankaj',
+        createdAt: '03-04-2024 09:20',
+        orderType: 'All',
+        orderMode: ['Batch'],
+        pickType: ['Batch'],
+        channel: ['Amazon', 'Flipkart'],
+        batchType: 'Multi Item Order',
+        customer: 'All',
+        courier: 'All', // from ['All'] to "All"
+        cutOffTime: null,
+        schedule: null
+    },
+    {
+        id: 4,
+        waveID: 'WV-0042 65',
+        status: 'Active',
+        createdBy: 'Kaushik',
+        createdAt: '02-04-2024 17:10',
+        orderType: '',
+        orderMode: ['Batch'],
+        pickType: ['Batch'],
+        channel: 'All',
+        batchType: 'Multi Item Order',
+        customer: 'All', // empty string updated to "All"
+        courier: [],
+        cutOffTime: null,
+        schedule: null
+    },
+    {
+        id: 5,
+        waveID: 'WV-0050 65',
+        status: 'Active',
+        createdBy: 'Ravi',
+        createdAt: '01-04-2024 08:55',
+        orderType: ['B2B'],
+        orderMode: ['Order'],
+        pickType: ['Order'],
+        channel: ['Amazon'],
+        batchType: 'Single Item Order',
+        customer: ['Customer A', 'Customer B'],
+        courier: ['Blue Dart'],
+        cutOffTime: '3:00 PM',
+        schedule: '3:00 PM'
+    },
+    {
+        id: 6,
+        waveID: 'WV-0090 65',
+        status: 'Disabled',
+        createdBy: 'Ankit',
+        createdAt: '30-03-2024 16:40',
+        orderType: ['RTV'],
+        orderMode: ['Exchange'],
+        pickType: ['Batch'],
+        channel: ['Flipkart'],
+        batchType: 'Multi Item Order',
+        customer: 'All',
+        courier: ['DTDC'],
+        cutOffTime: '4:00 PM',
+        schedule: '4:30 PM'
+    },
+    {
+        id: 7,
+        waveID: 'WV-0033 65',
+        status: 'Active',
+        createdBy: 'Sonia',
+        createdAt: '28-03-2024 10:25',
+        orderType: ['B2C'],
+        orderMode: ['Normal'],
+        pickType: ['Order'],
+        channel: ['Myntra'],
+        batchType: 'Single Item Order',
+        customer: 'All',
+        courier: 'All',
+        cutOffTime: '2:00 PM',
+        schedule: '2:15 PM'
+    },
+    {
+        id: 8,
+        waveID: 'WV-0021 65',
+        status: 'Active',
+        createdBy: 'Vikas',
+        createdAt: '25-03-2024 13:05',
+        orderType: ['Exchange'],
+        orderMode: ['Batch'],
+        pickType: ['Batch'],
+        channel: ['Amazon'],
+        batchType: 'Multi Item Order',
+        customer: 'All',
+        courier: ['Ecom Express'],
+        cutOffTime: '5:30 PM',
+        schedule: '6:00 PM'
+    },
+    {
+        id: 9,
+        waveID: 'WV-0015 65',
+        status: 'Disabled',
+        createdBy: 'Priya',
+        createdAt: '20-03-2024 11:50',
+        orderType: 'All', // from ['All'] to "All"
+        orderMode: ['Order'],
+        pickType: ['Order'],
+        channel: 'All', // from ['All'] to "All"
+        batchType: 'Multi Item Order',
+        customer: ['Customer 1', 'Customer 2', 'Customer 3'],
+        courier: ['XpressBees'],
+        cutOffTime: '7:00 PM',
+        schedule: '7:30 PM'
+    },
+    {
+        id: 10,
+        waveID: 'WV-0005 65',
+        status: 'Active',
+        createdBy: 'Sumit',
+        createdAt: '15-03-2024 09:00',
+        orderType: [],
+        orderMode: ['Batch'],
+        pickType: ['Batch'],
+        channel: ['Flipkart'],
+        batchType: 'Multi Item Order',
+        customer: 'All',
+        courier: 'All', // from ['All'] to "All"
+        cutOffTime: null,
+        schedule: null
+    },
+    {
+        id: 11,
+        waveID: 'WV-0100 65',
+        status: 'Active',
+        createdBy: 'Rahul',
+        createdAt: '10-03-2024 14:20',
+        orderType: ['B2B'],
+        orderMode: ['Order'],
+        pickType: ['Order'],
+        channel: ['Amazon', 'Flipkart', 'Myntra'],
+        batchType: 'Single Item Order',
+        customer: 'All',
+        courier: ['Delhivery'],
+        cutOffTime: '1:00 PM',
+        schedule: '1:15 PM'
+    },
+    {
+        id: 12,
+        waveID: 'WV-0111 65',
+        status: 'Disabled',
+        createdBy: 'Neha',
+        createdAt: '05-03-2024 16:50',
+        orderType: ['RTV'],
+        orderMode: ['Exchange'],
+        pickType: ['Batch'],
+        channel: 'All',
+        batchType: 'Multi Item Order',
+        customer: 'All', // empty string updated to "All"
+        courier: [],
+        cutOffTime: null,
+        schedule: null
+    }
+]
+
+export const headers = [
+    {
+        id: 0,
+        label: 'Sr No',
+        key: 's_no',
+        search: false,
+        isFrontend: true,
+        sort: false,
+        stick: true,
+        visible: true,
+        minWidth: 3,
+        maxWidth: 3
+    },
+    {
+        id: 1,
+        label: 'Wave ID',
+        key: 'no',
+        search: true,
+        sort: true,
+        stick: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 2,
+        label: 'Status',
+        key: 'active',
+        search: true,
+        sort: true,
+        filter: true,
+        options: [
+            { label: 'Active', value: 1 },
+            { label: 'Disabled', value: 0 }
+        ],
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 3,
+        label: 'Order Type',
+        key: 'order_type',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 4,
+        label: 'Order Mode',
+        key: 'shipment_mode',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 5,
+        label: 'Pick Type',
+        key: 'pick_type',
+        align: 'center',
+        search: true,
+        sort: true,
+        filter: true,
+        options: ['Order', 'Batch'],
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 7,
+        label: 'Channel',
+        key: 'channel_code',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 99,
+        label: 'Batch Type',
+        key: 'batch_type',
+        align: 'center',
+        search: true,
+        sort: true,
+        filter: true,
+        options: ['Single Item Order', 'Multi Item Order'],
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 6,
+        label: 'Customer',
+        key: 'customer_no',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 8,
+        label: 'Courier',
+        key: 'courier_code',
+        align: 'center',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 12,
+        label: 'Cut off Time',
+        key: 'cut_off_time',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 13,
+        label: 'Schedule',
+        key: 'scheduled_time',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 14,
+        label: 'Created By',
+        key: 'created_by',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 15,
+        label: 'Created At',
+        key: 'created_at',
+        search: true,
+        sort: true,
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    }
+]

@@ -1,0 +1,316 @@
+export const locations = [
+    {
+        id: 1,
+        refNo: 'REF/001',
+        vendorName: 'Piyush & Sons',
+        invoiceNo: 'INV/001',
+        transporter: 'XYZ Logistics',
+        ExtPoNo: 'CRP/001',
+        status: true,
+        totalPO_Qty: 100,
+        receivedQty: 99,
+        createdBy: 'Rohit Singh',
+        createdAt: '12-08-2024 09:15',
+        modifiedBy: 'Sneha Verma',
+        modifiedAt: '14-10-2024 14:32'
+    },
+    {
+        id: 2,
+        refNo: 'REF/002',
+        vendorName: 'Kumar Traders',
+        invoiceNo: 'INV/002',
+        transporter: 'ABC Transport',
+        ExtPoNo: 'CRP/002',
+        status: false,
+        totalPO_Qty: 200,
+        receivedQty: 190,
+        createdBy: 'Amit Kumar',
+        createdAt: '15-08-2024 11:25',
+        modifiedBy: 'Nisha Sharma',
+        modifiedAt: '16-10-2024 10:00'
+    },
+    {
+        id: 3,
+        refNo: 'REF/003',
+        vendorName: 'Gupta Enterprises',
+        invoiceNo: 'INV/003',
+        transporter: 'Fast Movers',
+        ExtPoNo: 'CRP/003',
+        status: true,
+        totalPO_Qty: 150,
+        receivedQty: 150,
+        createdBy: 'Ravi Mehta',
+        createdAt: '20-08-2024 08:45',
+        modifiedBy: 'Sneha Verma',
+        modifiedAt: '21-10-2024 12:22'
+    },
+    {
+        id: 4,
+        refNo: 'REF/004',
+        vendorName: 'Sharma & Co.',
+        invoiceNo: 'INV/004',
+        transporter: 'Quick Transport',
+        ExtPoNo: 'CRP/004',
+        status: false,
+        totalPO_Qty: 250,
+        receivedQty: 200,
+        createdBy: 'Neha Singh',
+        createdAt: '25-08-2024 09:30',
+        modifiedBy: 'Amit Kumar',
+        modifiedAt: '26-10-2024 11:40'
+    },
+    {
+        id: 5,
+        refNo: 'REF/005',
+        vendorName: 'Mehta Logistics',
+        invoiceNo: 'INV/005',
+        transporter: 'SpeedX',
+        ExtPoNo: 'CRP/005',
+        status: true,
+        totalPO_Qty: 300,
+        receivedQty: 275,
+        createdBy: 'Pooja Mishra',
+        createdAt: '01-09-2024 10:15',
+        modifiedBy: 'Nisha Sharma',
+        modifiedAt: '03-11-2024 14:10'
+    },
+    {
+        id: 6,
+        refNo: 'REF/006',
+        vendorName: 'Rajesh Supplies',
+        invoiceNo: 'INV/006',
+        transporter: 'Blue Line Transport',
+        ExtPoNo: 'CRP/006',
+        status: true,
+        totalPO_Qty: 180,
+        receivedQty: 180,
+        createdBy: 'Anil Kapoor',
+        createdAt: '05-09-2024 08:10',
+        modifiedBy: 'Sneha Verma',
+        modifiedAt: '06-11-2024 13:30'
+    },
+    {
+        id: 7,
+        refNo: 'REF/007',
+        vendorName: 'Kapoor Agencies',
+        invoiceNo: 'INV/007',
+        transporter: 'CargoPro',
+        ExtPoNo: 'CRP/007',
+        status: false,
+        totalPO_Qty: 400,
+        receivedQty: 350,
+        createdBy: 'Rohit Singh',
+        createdAt: '10-09-2024 07:55',
+        modifiedBy: 'Amit Kumar',
+        modifiedAt: '12-11-2024 10:00'
+    },
+    {
+        id: 8,
+        refNo: 'REF/008',
+        vendorName: 'Verma Distributors',
+        invoiceNo: 'INV/008',
+        transporter: 'SafeShip',
+        ExtPoNo: 'CRP/008',
+        status: true,
+        totalPO_Qty: 500,
+        receivedQty: 450,
+        createdBy: 'Kavita Sharma',
+        createdAt: '15-09-2024 06:50',
+        modifiedBy: 'Nisha Sharma',
+        modifiedAt: '16-11-2024 09:25'
+    },
+    {
+        id: 9,
+        refNo: 'REF/009',
+        vendorName: 'Aggarwal & Sons',
+        invoiceNo: 'INV/009',
+        transporter: 'Prime Movers',
+        ExtPoNo: 'CRP/009',
+        status: false,
+        totalPO_Qty: 350,
+        receivedQty: 325,
+        createdBy: 'Piyush Jain',
+        createdAt: '20-09-2024 12:10',
+        modifiedBy: 'Sneha Verma',
+        modifiedAt: '22-11-2024 11:30'
+    },
+    {
+        id: 10,
+        refNo: 'REF/010',
+        vendorName: 'Chopra Goods',
+        invoiceNo: 'INV/010',
+        transporter: 'RoadLink',
+        ExtPoNo: 'CRP/010',
+        status: true,
+        totalPO_Qty: 600,
+        receivedQty: 550,
+        createdBy: 'Ravi Mehta',
+        createdAt: '25-09-2024 09:00',
+        modifiedBy: 'Amit Kumar',
+        modifiedAt: '26-11-2024 10:40'
+    }
+]
+
+export const headers = [
+    {
+        id: 0,
+        label: 'Sr. No',
+        search: false,
+        sort: false,
+        stick: true,
+        key: 's_no',
+        isFrontend: true,
+        visible: true,
+        minWidth: 3.1,
+        maxWidth: 3.1,
+        align: 'center'
+    },
+    {
+        id: 1,
+        label: 'Ref No',
+        search: true,
+        sort: true,
+        stick: true,
+        key: 'no',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 35,
+        label: 'Vendor Name',
+        search: false,
+        sort: false,
+        stick: true,
+        key: 'vendor_name',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 12,
+        label: 'Invoice No',
+        search: true,
+        sort: false,
+        stick: false,
+        key: 'invoice_no',
+        visible: true,
+        align: 'left',
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 22,
+        label: 'Status',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'status',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    // {
+    //     // id: 32, //ext_asn_id
+    //     id: 678,
+    //     label: 'Ext PO No', //! [ASN]verify ext po mentioned in story
+    //     search: false,
+    //     sort: false,
+    //     stick: false,
+    //     key: 'ext_po_no',
+    //     visible: true,
+    //     minWidth: 8,
+    //     maxWidth: 8
+    // },
+    {
+        id: 5,
+        label: 'Ext Po No', //! [ASN]verify
+        search: true,
+        sort: false,
+        stick: false,
+        key: 'po_no',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 33,
+        label: 'Transporter',
+        search: true,
+        sort: false,
+        stick: false,
+        key: 'transporter_name',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 7,
+        // label: 'total_invoice_quantity', //! [ASN]verify
+        label: 'Total PO Qty', //! [ASN]verify
+        search: false,
+        sort: false,
+        stick: false,
+        // key: 'total_invoice_quantity',
+        key: 'total_po_qty',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 10,
+        label: 'Received Qty', //! [ASN]verify need to change this data not in api
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'received_qty',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+
+    {
+        id: 25,
+        label: 'Created By',
+        search: true,
+        sort: false,
+        stick: false,
+        key: 'created_by',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 27,
+        label: 'Created At',
+        search: true,
+        sort: true,
+        stick: false,
+        key: 'created_at',
+        visible: true,
+        minWidth: 10,
+        maxWidth: 10
+    },
+    {
+        id: 26,
+        label: 'Modified By',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'modified_by',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 28,
+        label: 'Modified At',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'updated_at',
+        visible: true,
+        minWidth: 10,
+        maxWidth: 10
+    }
+]

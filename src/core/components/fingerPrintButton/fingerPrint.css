@@ -1,0 +1,112 @@
+:root {
+    --animation-duration: 1200ms;
+}
+
+.containerBtn {
+    align-items: center;
+    background: #2c2c2c;
+    border-radius: 12px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+    display: flex;
+    height: 50px;
+    justify-content: center;
+    position: relative;
+    animation-duration: var(--animation-duration);
+    animation-timing-function: ease-in-out;
+}
+
+.active.container {
+    animation: Container var(--animation-duration) forwards;
+}
+
+.text {
+    color: white;
+    position: absolute;
+    transition: opacity 100ms;
+    user-select: none;
+}
+
+.fingerprint {
+    left: 150px;
+    opacity: 0;
+    position: absolute;
+    stroke: #777;
+    top: -9px;
+    transition: opacity 100ms;
+}
+
+.fingerprint-active {
+    stroke: #fff;
+}
+
+.fingerprint-out {
+    opacity: 1;
+    transition: opacity 100ms 600ms;
+}
+
+.odd {
+    stroke-dasharray: 0px 50px;
+    stroke-dashoffset: 1px;
+    transition: stroke-dasharray 300ms 50ms;
+}
+
+.even {
+    stroke-dasharray: 50px 50px;
+    stroke-dashoffset: -41px;
+    transition: stroke-dashoffset 300ms;
+}
+
+.ok {
+    opacity: 0;
+}
+
+.active .text {
+    opacity: 0;
+    animation: Text var(--animation-duration) forwards;
+}
+
+.active .fingerprint {
+    opacity: 1;
+}
+
+.active .fingerprint-active .odd {
+    stroke-dasharray: 50px 50px;
+    transition: stroke-dasharray 400ms 200ms;
+}
+
+.active .fingerprint-active .even {
+    stroke-dashoffset: 0px;
+    transition: stroke-dashoffset 400ms 150ms;
+}
+
+.active .ok {
+    opacity: 1;
+    animation: Ok var(--animation-duration) forwards;
+}
+
+@keyframes Container {
+    0% { width: 200px; }
+    15% { width: 80px; }
+    71% { transform: scale(1); }
+    75% { transform: scale(1.2); }
+    77% { transform: scale(1); }
+    94% { width: 80px; }
+    100% { width: 200px; }
+}
+
+@keyframes Text {
+    0% { opacity: 1; transform: scale(1); }
+    15% { opacity: 0; transform: scale(0.5); }
+    94% { opacity: 0; transform: scale(0.5); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes Ok {
+    0% { opacity: 0; }
+    70% { opacity: 0; transform: scale(0); }
+    75% { opacity: 1; transform: scale(1.1); }
+    77% { opacity: 1; transform: scale(1); }
+    92% { opacity: 1; transform: scale(1); }
+    96% { opacity: 0; transform: scale(0.5); }
+    100% { opacity: 0; }
+}

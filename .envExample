@@ -1,0 +1,4 @@
+VITE_APP_NAME="WMS" # app name
+VITE_APP_BASE_URL='https://devcerebrumapi.holisol.in' # api base url
+VITE_APP_ENV='local' # use only for local development remove on dev/prod/live server or change value
+VITE_APP_URI='devcerebrum.holisol.in' # frontend app url

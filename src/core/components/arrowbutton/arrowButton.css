@@ -1,0 +1,61 @@
+/* Base styles for arrow button */
+.arrow-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 7rem;
+    height: 20px;
+    clip-path: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%, 4% 50%);
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    transition: transform 0.1s ease-in-out;
+}
+
+
+/* Variants */
+.arrow-button.blue {
+    background-color: #769FCD; /* Soft but noticeable Blue */
+}
+
+.arrow-button.green {
+    background-color: #4C9A69; /* Muted but visible Green */
+}
+
+.arrow-button.orange {
+    background-color: #E59A3F; /* Warm and pleasant Orange */
+}
+
+.arrow-button.red {
+    background-color: #D96666; /* Gentle but rich Red */
+}
+
+.arrow-button.purple {
+    background-color: #9B72CF; /* Balanced and calming Purple */
+}
+
+.arrow-button.gray {
+    background-color: #6E6E6E; /* A solid yet soft Gray */
+}
+
+
+
+/* Active state for clickable buttons */
+.arrow-button:active {
+    transform: scale(0.99);
+}
+
+/* Non-clickable button styles */
+.arrow-button.non-clickable {
+    cursor: default; /* Remove pointer cursor */
+    pointer-events: none; /* Prevent any interaction */
+}
+
+/* Remove active state for non-clickable buttons */
+.arrow-button.non-clickable:active {
+    transform: none; /* No scaling for non-clickable buttons */
+}

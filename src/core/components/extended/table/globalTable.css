@@ -1,0 +1,10 @@
+.regular-size{
+    max-height: 32px;
+    height: 32px;
+    padding: 4px 8px
+}
+
+.regular-height{
+    max-height: 32px;
+    height: 32px;
+}

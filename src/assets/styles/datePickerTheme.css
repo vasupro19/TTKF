@@ -1,0 +1,111 @@
+:root {
+  --rmdp-primary-black: #2c2c2c;
+  --rmdp-secondary-black: #45484c;
+  --rmdp-shadow-black: #45484c;
+  --rmdp-today-black: #a4a4a4;
+  --rmdp-hover-black: #d0d0d0;
+  --rmdp-deselect-black: #a4a4a4;
+  --rmdp-active-black: #ffffff;
+}
+
+.black .rmdp-wrapper {
+  border: 1px solid var(--rmdp-secondary-black);
+  box-shadow: 0 0 5px var(--rmdp-secondary-black);
+}
+
+.black .rmdp-panel-body li {
+  background-color: var(--rmdp-primary-black);
+  box-shadow: 0 0 2px var(--rmdp-secondary-black);
+}
+
+.black .rmdp-week-day {
+  color: var(--rmdp-primary-black);
+}
+
+.black .rmdp-day.rmdp-deactive {
+  color: var(--rmdp-secondary-black);
+}
+
+.black .rmdp-range {
+  background-color: var(--rmdp-primary-black);
+  box-shadow: 0 0 3px var(--rmdp-shadow-black);
+}
+
+.black .rmdp-arrow {
+  border: solid var(--rmdp-primary-black);
+  border-width: 0 2px 2px 0;
+}
+
+.black .rmdp-arrow-container {
+  padding: 2px;
+}
+
+.black .rmdp-arrow-container:hover {
+  background-color: var(--rmdp-primary-black);
+  box-shadow: 0 0 3px var(--rmdp-secondary-black);
+}
+
+.black .rmdp-panel-body::-webkit-scrollbar-thumb {
+  background: var(--rmdp-primary-black) !important;
+}
+
+.black .rmdp-day.rmdp-today span {
+  background-color: var(--rmdp-today-black);
+  color: white !important;
+}
+
+/* Selected Date */
+.black .rmdp-day.rmdp-selected span {
+  background-color: var(--rmdp-primary-black) !important;
+  box-shadow: 0 0 5px var(--rmdp-shadow-black);
+  color: var(--rmdp-active-black) !important;
+}
+
+/* Hover Effect on Dates */
+.black .rmdp-day:not(.rmdp-disabled, .rmdp-day-hidden):hover span {
+  background-color: var(--rmdp-hover-black) !important;
+  color: black !important;
+}
+
+/* Active Clicked Date */
+.black .rmdp-day:not(.rmdp-day-hidden).rmdp-selected span {
+  background-color: var(--rmdp-primary-black) !important;
+  color: white !important;
+}
+
+/* Range Selection */
+.black .rmdp-range span {
+  background-color: var(--rmdp-primary-black) !important;
+  color: white !important;
+  box-shadow: 0 0 4px var(--rmdp-shadow-black);
+}
+
+/* Deselect Button */
+.black .b-deselect {
+  color: var(--rmdp-deselect-black);
+  background-color: white;
+}
+
+.black .rmdp-action-button {
+  color: var(--rmdp-primary-black);
+}
+
+.black .rmdp-button:not(.rmdp-action-button) {
+  background-color: var(--rmdp-primary-black);
+}
+
+.black .rmdp-button:not(.rmdp-action-button):hover {
+  background-color: var(--rmdp-deselect-black);
+}
+
+/* Hover Effect on Range */
+.black .rmdp-range-hover {
+  background-color: #45484c;
+  background: #45484c;
+  color: white !important;
+}
+
+.black .rmdp-day:not(.rmdp-disabled, .rmdp-day-hidden) span:hover {
+  background-color: var(--rmdp-hover-black);
+  background: var(--rmdp-hover-black);
+}

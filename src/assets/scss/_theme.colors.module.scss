@@ -1,0 +1,128 @@
+// paper & background
+$paper: #ffffff;
+
+// primary
+// $primaryLight: #e3e8e8;
+// $primaryMain: #2f5080;
+// $primaryDark: #132033;
+// $primary200: #6d85a6;
+// $primary800: #2f5080;
+
+// $primaryMain: #234065;
+// $primaryLight: #006a90;
+// $primaryDark: #1a4687;
+// $primary200: #6d85a6;
+// $primary800: #2f5080;
+
+$primaryMain: #2c2c2c;
+$primaryLight: #d0d0d0;
+$primaryDark: #040404;
+$primary200: #a4a4a4;
+$primary800: #45484c;
+
+
+// secondary
+$secondaryLight: #daf0dd;
+$secondaryMain: #46b653;
+$secondaryDark: #389242;
+$secondary200: #6bc575;
+$secondary800: #59bd64;
+
+
+
+// success Colors
+$successLight: #b9f6ca;
+$success200: #69f0ae;
+$successMain: #00e676;
+$successDark: #00c853;
+
+// error
+$errorLight: #ef9a9a;
+$errorMain: #f44336;
+$errorDark: #c62828;
+
+// orange
+$orangeLight: #fbe9e7;
+$orangeMain: #ffab91;
+$orangeDark: #d84315;
+
+// warning
+$warningLight: #fff8e1;
+$warningMain: #ffe57f;
+$warningDark: #ffc107;
+
+// grey
+$grey50: #f8fafc;
+$grey100: #eef2f6;
+$grey200: #e3e8ef;
+$grey300: #cdd5df;
+$grey500: #697586;
+$grey600: #4b5565;
+$grey700: #364152;
+$grey900: #121926;
+$greyBgLight: #F3F4F6FF;
+$greyBgLighter: #F9FAFCFF;
+$greyBorderLight: #BCC1CAFF;
+
+// blue
+$bluePrimary: #2196f3;
+$bluePrimaryDark: #0056b3;
+// ==============================|| JAVASCRIPT ||============================== //
+
+:export {
+    // paper & background
+    paper: $paper;
+
+    // primary
+    primaryLight: $primaryLight;
+    primary200: $primary200;
+    primaryMain: $primaryMain;
+    primaryDark: $primaryDark;
+    primary800: $primary800;
+
+    // secondary
+    secondaryLight: $secondaryLight;
+    secondary200: $secondary200;
+    secondaryMain: $secondaryMain;
+    secondaryDark: $secondaryDark;
+    secondary800: $secondary800;
+
+    // success
+    successLight: $successLight;
+    success200: $success200;
+    successMain: $successMain;
+    successDark: $successDark;
+
+    // error
+    errorLight: $errorLight;
+    errorMain: $errorMain;
+    errorDark: $errorDark;
+
+    // orange
+    orangeLight: $orangeLight;
+    orangeMain: $orangeMain;
+    orangeDark: $orangeDark;
+
+    // warning
+    warningLight: $warningLight;
+    warningMain: $warningMain;
+    warningDark: $warningDark;
+
+    // grey
+    grey50: $grey50;
+    grey100: $grey100;
+    grey200: $grey200;
+    grey300: $grey300;
+    grey500: $grey500;
+    grey600: $grey600;
+    grey700: $grey700;
+    grey900: $grey900;
+    greyBgLight: $greyBgLight;
+    greyBorderLight: $greyBorderLight;
+    greyBgLighter: $greyBgLighter;
+
+
+    //
+    bluePrimary: $bluePrimary;
+    bluePrimaryDark: $bluePrimaryDark;
+}
