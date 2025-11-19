@@ -112,6 +112,10 @@ const MasterDestinationTable = lazy(() => import('@/app/views/masters/destinatio
 const DestinationForm = lazy(() => import('@views/masters/destinations/create'))
 const MasterItenaryTable = lazy(() => import('@/app/views/masters/itenary'))
 const ItenaryClientsForm = lazy(() => import('@views/masters/itenary/create'))
+const MasterPackagesTable = lazy(() => import('@/app/views/masters/packages'))
+const PackagesClientForm = lazy(() => import('@views/masters/packages/create'))
+const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
+const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
 
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
 
@@ -236,6 +240,38 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <ItenaryClientsForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/packages/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <MasterPackagesTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/packages/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <PackagesClientForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/package/activities/:campaignId/:packageId',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <PackageItenary />
+                </Suspense>
+            )
+        },
+        {
+            path: '/integration/gmail',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <GmailIntegrationForm />
                 </Suspense>
             )
         }

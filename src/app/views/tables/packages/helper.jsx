@@ -14,28 +14,17 @@ export const headers = [
     },
     {
         id: 1,
-        label: 'Title',
+        label: 'Package Name',
         search: true,
         sort: false,
         stick: true,
-        key: 'title',
+        key: 'name',
         visible: true,
         minWidth: 10,
         maxWidth: 15
     },
     {
         id: 2,
-        label: 'Description',
-        search: true,
-        sort: false,
-        stick: true,
-        key: 'description',
-        visible: true,
-        minWidth: 6,
-        maxWidth: 8
-    },
-    {
-        id: 3,
         label: 'Campaign',
         search: false,
         sort: false,

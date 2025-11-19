@@ -208,6 +208,7 @@ function MasterCampaignTable() {
     }
     const handlePackagesClick = () => {
         handleMenuClose()
+        navigate(`/master/packages/${currentRowId}`)
         console.log(`Navigating to Itinerary for Row ID: ${currentRowId}`)
         // Add your navigation or logic here
     }

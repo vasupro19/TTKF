@@ -16,7 +16,7 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getItenaryClients } from '@/app/store/slices/api/itenarySlice'
+import { getPackageClients } from '@/app/store/slices/api/packageSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -76,7 +76,7 @@ function MasterPackagesTable() {
         setTimeout(() => setExcelHandler(false), 1000)
     }
     const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getItenaryClients.initiate(queryString, false))
+        const { data: response } = await dispatch(getPackageClients.initiate(queryString, false))
         if (isExcelQuery(queryString)) {
             return true
         }
@@ -144,7 +144,7 @@ function MasterPackagesTable() {
     }
 
     const handleAdd = () => {
-        navigate('/master/itenary/add')
+        navigate('/master/packages/add')
     }
 
     const menuOptions = useMemo(
@@ -178,12 +178,15 @@ function MasterPackagesTable() {
         }
     })
 
+    const addActivityHandler = (id, row) => {
+        navigate(`/package/activities/${id}/${row.id}`)
+    }
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box>
-                        <Typography variant='h3'>All Locations</Typography>
+                        <Typography variant='h3'>All Packages</Typography>
                     </Box>
                     <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
                         {/* add your custom filters here */}
@@ -307,6 +310,21 @@ function MasterPackagesTable() {
                     totalRecords={recordsCount}
                     renderAction={row => (
                         <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                            {/* NEW: Add Activity Button */}
+                            <UiAccessGuard type='edit'>
+                                <IconButton
+                                    sx={{ color: 'info.main' }}
+                                    size='small'
+                                    aria-label='add activity'
+                                    // You will need to define addActivityHandler in your component
+                                    onClick={() => addActivityHandler(params.id, row)}
+                                >
+                                    <Tooltip title='Add Activity'>
+                                        {/* Assuming you have the 'Add' icon imported from @mui/icons-material or similar */}
+                                        <Add fontSize='small' sx={{ fill: '#60498a' }} />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
                             <UiAccessGuard type='edit'>
                                 <IconButton
                                     sx={{ color: 'success.main' }}

@@ -16,11 +16,17 @@ import MainCard from '@core/components/extended/MainCard'
 import { useDispatch, useSelector } from 'react-redux'
 import {
     // Assuming you will create these new hooks for DestinationClients
-    useCreateDestinationClientMutation,
-    useUpdateDestinationClientMutation,
-    getDestinationClientById
+    // useCreateDestinationClientMutation,
+    // useUpdateDestinationClientMutation,
+    useCreateGmailConfigMutation,
+    useGetGmailConfigsQuery,
+    // updateGmailClient,
+    useUpdateGmailConfigMutation,
+    // getDestinationClientById
+    useConnectGmailQuery,
+    connectGmail
     // useGetAllCampaignsQuery // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/destinationSlice' // Adjust the slice name if needed
+} from '@/app/store/slices/api/gmailSlice' // Adjust the slice name if needed
 
 import {
     // Assuming you will create these new hooks for DestinationClients
@@ -34,14 +40,14 @@ import IdentityCard from '@/core/components/IdentityCard'
 
 // CONSTANTS - assuming you have a way to import Select component data
 
-function DestinationClientsForm() {
+function GmailIntegrationForm() {
     // Note: Assuming `id` in useParams is the DestinationClients ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
 
     // Hooks for creating/updating destinations
-    const [createDestinationClient] = useCreateDestinationClientMutation()
-    const [updateDestinationClient] = useUpdateDestinationClientMutation()
+    const [createGmailClient] = useCreateGmailConfigMutation()
+    const [updateGmailClient] = useUpdateGmailConfigMutation()
 
     // Hook to fetch all campaigns for the dropdown list
     // const { data: campaignsData, isLoading: campaignsLoading } = useGetAllCampaignsQuery()
@@ -53,26 +59,25 @@ function DestinationClientsForm() {
     const { createDestinationLKey, updateDestinationLKey } = useSelector(state => state.loading || {})
 
     const dispatch = useDispatch()
+    const { data: connectData, refetch: refetchConnectGmail } = useConnectGmailQuery(null, { skip: true })
 
     // --- Initial Values and Validation Schema ---
 
     const initialValues = {
-        name: '', // Destination name
-        campaignId: '', // Foreign key to CampaignClient
-        delux_hotel: '',
-        super_delux_hotel: '',
-        luxury_hotel: '',
-        premium_hotel: ''
+        clientId: '',
+        clientSecret: '',
+        redirectUri: '',
+        pubsubTopic: '',
+        pushEndpoint: ''
     }
 
     // Validation schema for DestinationClient fields
     const validationSchema = z.object({
-        name: z.string().min(3, 'Destination Name must be at least 3 characters'),
-        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
-        delux_hotel: z.string().optional(),
-        super_delux_hotel: z.string().optional(),
-        luxury_hotel: z.string().optional(),
-        premium_hotel: z.string().optional()
+        clientId: z.string().min(5, 'Client ID required'),
+        clientSecret: z.string().min(5, 'Client Secret required'),
+        redirectUri: z.string().url('Invalid Redirect URI'),
+        pubsubTopic: z.string().optional(),
+        pushEndpoint: z.string().optional()
     })
 
     const validate = values => {
@@ -109,10 +114,10 @@ function DestinationClientsForm() {
                 let response
                 if (formId) {
                     // Update existing destination
-                    response = await updateDestinationClient({ id: formId, ...payload }).unwrap()
+                    response = await updateGmailClient({ id: formId, ...payload }).unwrap()
                 } else {
                     // Create new destination
-                    response = await createDestinationClient(payload).unwrap()
+                    response = await createGmailClient(payload).unwrap()
                 }
                 console.log(response)
                 if (response.success || response.status_code === 200) {
@@ -157,25 +162,25 @@ function DestinationClientsForm() {
 
     // --- Data Fetching and Edit Logic ---
 
-    const getDestinationData = async id => {
-        const { data, error } = await dispatch(getDestinationClientById.initiate(id))
-        if (error) return
+    // const getDestinationData = async id => {
+    //     const { data, error } = await dispatch(getDestinationClientById.initiate(id))
+    //     if (error) return
 
-        if (data && data?.data && objectLength(data.data)) {
-            setEditData(data.data)
+    //     if (data && data?.data && objectLength(data.data)) {
+    //         setEditData(data.data)
 
-            // Set form values for editing
-            const destinationData = data.data
-            formik.setValues({
-                ...destinationData,
-                campaignId: destinationData.campaignId.toString() // Convert number to string for Select component
-            })
-        }
-    }
+    //         // Set form values for editing
+    //         const destinationData = data.data
+    //         formik.setValues({
+    //             ...destinationData,
+    //             campaignId: destinationData.campaignId.toString() // Convert number to string for Select component
+    //         })
+    //     }
+    // }
 
-    useEffect(() => {
-        if (formId) getDestinationData(formId)
-    }, [formId])
+    // useEffect(() => {
+    //     if (formId) getDestinationData(formId)
+    // }, [formId])
 
     // --- Form Fields Definition ---
 
@@ -208,11 +213,11 @@ function DestinationClientsForm() {
     }
     const tabsFields = [
         {
-            label: 'Destination Information',
+            label: 'Gmail Integration',
             fields: [
                 {
-                    name: 'name',
-                    label: 'Destination Name',
+                    name: 'clientId',
+                    label: 'Client ID',
                     type: 'text',
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
@@ -220,51 +225,36 @@ function DestinationClientsForm() {
                     customSx
                 },
                 {
-                    name: 'campaignId',
-                    label: 'Associated Campaign',
-                    type: 'select', // Use select for the foreign key
-                    options: campaignOptions,
+                    name: 'clientSecret',
+                    label: 'Client Secret',
+                    type: 'password',
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx
-                    // disabled: campaignsLoading // Disable while loading campaign options
                 },
                 {
-                    name: 'delux_hotel',
-                    label: 'Delux Hotel Details',
-                    type: 'textarea', // Use multiline-text for better input area
-                    minRows: 3,
+                    name: 'redirectUri',
+                    label: 'Redirect URI',
+                    type: 'text',
+                    required: true,
+                    grid: { xs: 12, sm: 6, md: 6 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'pubsubTopic',
+                    label: 'Pub/Sub Topic',
+                    type: 'text',
                     required: false,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx
                 },
                 {
-                    name: 'super_delux_hotel',
-                    label: 'Super Delux Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'luxury_hotel',
-                    label: 'Luxury Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'premium_hotel',
-                    label: 'Premium Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
+                    name: 'pushEndpoint',
+                    label: 'Push Endpoint',
+                    type: 'text',
                     required: false,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
@@ -331,6 +321,36 @@ function DestinationClientsForm() {
                                 showSeparaterBorder={false}
                             />
                         </Box>
+                        <Box sx={{ mt: 2, textAlign: 'right' }}>
+                            <button
+                                type='button'
+                                onClick={async () => {
+                                    const response = await dispatch(connectGmail.initiate())
+                                    console.log(response)
+
+                                    const authUrl =
+                                        response?.data?.data?.authUrl || response?.data?.authUrl || response?.data?.data
+
+                                    if (authUrl) {
+                                        window.location.href = authUrl.url
+                                        console.log(authUrl)
+                                    } else {
+                                        console.error('Auth URL not received from backend')
+                                    }
+                                }}
+                                style={{
+                                    backgroundColor: '#4285F4',
+                                    color: 'white',
+                                    padding: '10px 16px',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    fontWeight: 600
+                                }}
+                            >
+                                Connect Gmail
+                            </button>
+                        </Box>
                     </Box>
                 </Grid>
 
@@ -349,4 +369,4 @@ function DestinationClientsForm() {
     )
 }
 
-export default DestinationClientsForm
+export default GmailIntegrationForm

@@ -14,19 +14,20 @@ import MainCard from '@core/components/extended/MainCard'
 
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
+
+// 🚨 -----------------------------------------------------------
+// 🚨 NEW/UPDATED IMPORTS FOR PACKAGES
+// 🚨 Adjust the file paths as necessary for your project structure
+// 🚨 -----------------------------------------------------------
 import {
-    // Assuming you will create these new hooks for DestinationClients
-    useCreateDestinationClientMutation,
-    useUpdateDestinationClientMutation,
-    getDestinationClientById
-    // useGetAllCampaignsQuery // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/destinationSlice' // Adjust the slice name if needed
+    useCreatePackageClientMutation,
+    useUpdatePackageClientMutation,
+    getPackageClientById
+} from '@/app/store/slices/api/packageSlice' // 👈 **NEW Package Slice**
 
 import {
-    // Assuming you will create these new hooks for DestinationClients
-
-    getCampaigns // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/campaignSlice' // Adjust the slice name if needed
+    getCampaigns // Hook to fetch campaigns for dropdown
+} from '@/app/store/slices/api/campaignSlice' // Existing Campaign Slice
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
@@ -34,45 +35,35 @@ import IdentityCard from '@/core/components/IdentityCard'
 
 // CONSTANTS - assuming you have a way to import Select component data
 
-function DestinationClientsForm() {
-    // Note: Assuming `id` in useParams is the DestinationClients ID for editing
+function PackagesClientForm() {
+    // 👈 **Renamed Component**
+    // Note: Assuming `id` in useParams is the PackageClients ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
 
-    // Hooks for creating/updating destinations
-    const [createDestinationClient] = useCreateDestinationClientMutation()
-    const [updateDestinationClient] = useUpdateDestinationClientMutation()
-
-    // Hook to fetch all campaigns for the dropdown list
-    // const { data: campaignsData, isLoading: campaignsLoading } = useGetAllCampaignsQuery()
+    // 👈 Hooks for creating/updating Packages
+    const [createPackageClient] = useCreatePackageClientMutation()
+    const [updatePackageClient] = useUpdatePackageClientMutation()
 
     const [editData, setEditData] = useState({})
     const [campaignsData, setcampaignsData] = useState([])
 
-    // Assuming you will use appropriate loading keys for destination operations
-    const { createDestinationLKey, updateDestinationLKey } = useSelector(state => state.loading || {})
+    // 👈 Assuming you will use appropriate loading keys for package operations
+    const { createPackageLKey, updatePackageLKey } = useSelector(state => state.loading || {})
 
     const dispatch = useDispatch()
 
     // --- Initial Values and Validation Schema ---
 
     const initialValues = {
-        name: '', // Destination name
-        campaignId: '', // Foreign key to CampaignClient
-        delux_hotel: '',
-        super_delux_hotel: '',
-        luxury_hotel: '',
-        premium_hotel: ''
+        name: '', // Package name
+        campaignId: '' // Foreign key to CampaignClient
     }
 
-    // Validation schema for DestinationClient fields
+    // 👈 Validation schema for PackageClient fields
     const validationSchema = z.object({
-        name: z.string().min(3, 'Destination Name must be at least 3 characters'),
-        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
-        delux_hotel: z.string().optional(),
-        super_delux_hotel: z.string().optional(),
-        luxury_hotel: z.string().optional(),
-        premium_hotel: z.string().optional()
+        name: z.string().min(3, 'Package Name must be at least 3 characters'), // 👈 Updated text
+        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive()
     })
 
     const validate = values => {
@@ -108,25 +99,25 @@ function DestinationClientsForm() {
 
                 let response
                 if (formId) {
-                    // Update existing destination
-                    response = await updateDestinationClient({ id: formId, ...payload }).unwrap()
+                    // 👈 Update existing package
+                    response = await updatePackageClient({ id: formId, ...payload }).unwrap()
                 } else {
-                    // Create new destination
-                    response = await createDestinationClient(payload).unwrap()
+                    // 👈 Create new package
+                    response = await createPackageClient(payload).unwrap()
                 }
                 console.log(response)
                 if (response.success || response.status_code === 200) {
                     dispatch(
                         openSnackbar({
                             open: true,
-                            message: response.message || 'Destination saved successfully!',
+                            message: response.message || 'Package saved successfully!', // 👈 Updated text
                             variant: 'alert',
                             alert: { color: 'success' },
                             anchorOrigin: { vertical: 'top', horizontal: 'right' }
                         })
                     )
-                    // Navigate to the list view after submission
-                    navigate(-1)
+                    // 👈 Navigate to the list view after submission
+                    navigate(-1) // 👈 Updated navigation path
                 }
             } catch (error) {
                 // ... (Error handling remains similar to your original code)
@@ -157,24 +148,25 @@ function DestinationClientsForm() {
 
     // --- Data Fetching and Edit Logic ---
 
-    const getDestinationData = async id => {
-        const { data, error } = await dispatch(getDestinationClientById.initiate(id))
+    const getPackageData = async id => {
+        // 👈 Updated function name
+        const { data, error } = await dispatch(getPackageClientById.initiate(id)) // 👈 Updated RTK query
         if (error) return
 
         if (data && data?.data && objectLength(data.data)) {
             setEditData(data.data)
 
             // Set form values for editing
-            const destinationData = data.data
+            const packageData = data.data // 👈 Updated variable name
             formik.setValues({
-                ...destinationData,
-                campaignId: destinationData.campaignId.toString() // Convert number to string for Select component
+                ...packageData,
+                campaignId: packageData.campaignId.toString() // Convert number to string for Select component
             })
         }
     }
 
     useEffect(() => {
-        if (formId) getDestinationData(formId)
+        if (formId) getPackageData(formId) // 👈 Updated function call
     }, [formId])
 
     // --- Form Fields Definition ---
@@ -206,13 +198,14 @@ function DestinationClientsForm() {
 
         formik.handleChange(e)
     }
+    // 👈 Updated field label/name
     const tabsFields = [
         {
-            label: 'Destination Information',
+            label: 'Package Information',
             fields: [
                 {
                     name: 'name',
-                    label: 'Destination Name',
+                    label: 'Package Name', // 👈 Updated label
                     type: 'text',
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
@@ -222,50 +215,9 @@ function DestinationClientsForm() {
                 {
                     name: 'campaignId',
                     label: 'Associated Campaign',
-                    type: 'select', // Use select for the foreign key
+                    type: 'select',
                     options: campaignOptions,
                     required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                    // disabled: campaignsLoading // Disable while loading campaign options
-                },
-                {
-                    name: 'delux_hotel',
-                    label: 'Delux Hotel Details',
-                    type: 'textarea', // Use multiline-text for better input area
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'super_delux_hotel',
-                    label: 'Super Delux Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'luxury_hotel',
-                    label: 'Luxury Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'premium_hotel',
-                    label: 'Premium Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx
@@ -274,10 +226,11 @@ function DestinationClientsForm() {
         }
     ]
 
+    // 👈 Updated IdentityCard labels/values
     const identityCardData = [
-        { label: 'Destination', value: formik.values?.name ?? 'N/A' },
+        { label: 'Package Name', value: formik.values?.name ?? 'N/A' },
         { label: 'Campaign ID', value: formik.values?.campaignId ?? 'N/A' },
-        { label: 'Delux Hotel', value: formik.values?.delux_hotel ? 'Provided' : 'N/A' }
+        { label: 'Hotel Type', value: formik.values?.delux_hotel ? 'Delux' : 'Standard' } // Example update
     ]
     const getCampaignsFunc = async () => {
         const { data: response } = await dispatch(getCampaigns.initiate())
@@ -286,13 +239,12 @@ function DestinationClientsForm() {
     useEffect(() => {
         getCampaignsFunc()
     }, [])
-    // const campaigns = campaignsData?.data || []
 
     return (
         <MainCard
             sx={{ py: '1px' }}
             contentSX={{ px: '2px', py: 1.5 }}
-            title={formId ? 'Edit Destination' : 'Create New Destination'}
+            title={formId ? 'Edit Package' : 'Create New Package'} // 👈 Updated title
         >
             <Grid
                 container
@@ -312,14 +264,12 @@ function DestinationClientsForm() {
 
                 <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        {/* We use the first (and only) tab's fields */}
                         <Box sx={{ padding: 2 }}>
                             <FormComponent
-                                fields={tabsFields[0].fields} // Use fields from the single tab
+                                fields={tabsFields[0].fields}
                                 formik={formik}
                                 handleCustomChange={handleCustomChange}
-                                // handleCustomChange is not needed here as there's no postcode logic
-                                submitting={createDestinationLKey || updateDestinationLKey}
+                                submitting={createPackageLKey || updatePackageLKey} // 👈 Updated loading keys
                                 customStyle={{
                                     backgroundColor: 'none'
                                 }}
@@ -349,4 +299,4 @@ function DestinationClientsForm() {
     )
 }
 
-export default DestinationClientsForm
+export default PackagesClientForm
