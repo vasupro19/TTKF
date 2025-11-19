@@ -18,6 +18,7 @@ const MasterAccount = lazy(() => import('@views/masters/account'))
 const MasterAccountForm = lazy(() => import('@views/masters/account/create'))
 const MasterLocationForm = lazy(() => import('@/app/views/masters/campaign/create'))
 const MasterLocation = lazy(() => import('@/app/views/masters/campaign'))
+
 const AccountsTable = lazy(() => import('@views/tables/accounts/AccountsTable'))
 const PinCodeMasterTable = lazy(() => import('@/app/views/masters/pincode/PinCodeMasterTable'))
 const CountryMasterTable = lazy(() => import('@/app/views/masters/country/CountryMasterTable'))
@@ -117,6 +118,10 @@ const PackagesClientForm = lazy(() => import('@views/masters/packages/create'))
 const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
 const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
 
+const SupplierForm = lazy(() => import('@/app/views/masters/supplier/create'))
+const MasterSupplierTable = lazy(() => import('@/app/views/masters/supplier'))
+const AgentForm = lazy(() => import('@/app/views/masters/agent/create'))
+const MasterAgentTable = lazy(() => import('@app/views/masters/agent'))
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
 
 const protectedRoutes = {
@@ -252,10 +257,26 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/master/supplier',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <MasterSupplierTable />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/packages/add',
             element: (
                 <Suspense fallback={<Loader />}>
                     <PackagesClientForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/supplier/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <SupplierForm />
                 </Suspense>
             )
         },
@@ -268,10 +289,34 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/master/supplier/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <SupplierForm />
+                </Suspense>
+            )
+        },
+        {
             path: '/integration/gmail',
             element: (
                 <Suspense fallback={<Loader />}>
                     <GmailIntegrationForm />
+                </Suspense>
+            )
+        }
+        {
+            path: '/master/agent',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <MasterAgentTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/agent/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <AgentForm />
                 </Suspense>
             )
         }
