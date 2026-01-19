@@ -76,7 +76,7 @@ function MasterDestinationTable() {
         campaignId: params.id
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/setup/location/${id}`), [])
+    const editHandler = useCallback(async id => navigate(`/master/destinations/edit/${id}`), [])
 
     const handleExcelClick = () => {
         setExcelHandler(true)

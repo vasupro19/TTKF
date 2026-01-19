@@ -16,10 +16,10 @@ import MainCard from '@core/components/extended/MainCard'
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
 import {
-    useCreateCampaignMutation,
-    useUpdateLocationMasterMutation,
-    getLocationMasterById
-} from '@/app/store/slices/api/campaignSlice'
+    useCreateSuppliersMutation,
+    getSupplierById,
+    useUpdateSupplierMutation
+} from '@/app/store/slices/api/supplierSlice'
 import { useFetchPincodeDetailsMutation } from '@app/store/slices/api/clientSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -41,17 +41,25 @@ function SupplierForm() {
     const [activeTab, setActiveTab] = useState(0)
     const [tabsEnabled, setTabsEnabled] = useState([true, false, false])
     const [clientId, setClientId] = useState(null)
-    const [createCampaignMaster] = useCreateCampaignMutation()
-    const [updateLocationMaster] = useUpdateLocationMasterMutation()
+    const [createSupplierMaster] = useCreateSuppliersMutation()
+    const [updateSupplierMaster] = useUpdateSupplierMutation()
     const [fetchPincodeDetails] = useFetchPincodeDetailsMutation()
     const dispatch = useDispatch()
     const tabLabels = ['basicInformation', 'addressInformation', 'otherDetails']
 
     // Initial form values
     const initialValues = {
-        tabId: 'basicInformation',
+        businessname: '',
+        constactperson: '',
+        phone: '',
+        email: '',
         title: '',
-        description: ''
+        address: '',
+        city: '',
+        remarks: '',
+        description: '',
+        type: ''
+        // tabId: ''
     }
 
     // Validation schema
@@ -108,31 +116,34 @@ function SupplierForm() {
 
     const formik = useFormik({
         initialValues,
-        validate,
+        enableReinitialize: true,
+        // validate,
         onSubmit: async values => {
             try {
                 let response
-                if (activeTab === 0 && !clientId) {
-                    response = await createCampaignMaster(values).unwrap()
+                if (!formId) {
+                    response = await createSupplierMaster(values).unwrap()
                     setClientId(response.data.id)
-                    formik.setFieldValue('tabId', tabLabels[1])
-                    enableTabsAfterValidation(1)
-                    setActiveTab(1)
-                } else if (clientId) {
-                    if (activeTab < tabLabels.length - 1) {
-                        response = await updateLocationMaster({ id: clientId, ...values }).unwrap()
-                        const nextTab = activeTab + 1
-                        formik.setFieldValue('tabId', tabLabels[nextTab])
-                        enableTabsAfterValidation(nextTab)
-                        setActiveTab(nextTab)
-                    } else {
-                        response = await updateLocationMaster({ id: clientId, ...values, action: 'submit' }).unwrap()
-                        formik.resetForm()
-                        setActiveTab(0)
-                        setTabsEnabled([true, false, false])
-                        navigate('/setup/location')
-                    }
+                    // formik.setFieldValue('tabId', tabLabels[1])
+                    // enableTabsAfterValidation(1)
+                    // setActiveTab(1)
                 }
+                // else if (clientId) {
+                // if (activeTab < tabLabels.length - 1) {
+                //     response = await updateLocationMaster({ id: clientId, ...values }).unwrap()
+                //     const nextTab = activeTab + 1
+                //     formik.setFieldValue('tabId', tabLabels[nextTab])
+                //     enableTabsAfterValidation(nextTab)
+                //     setActiveTab(nextTab)
+                // }
+                else {
+                    response = await updateSupplierMaster({ ...values }).unwrap()
+                    formik.resetForm()
+                    setActiveTab(0)
+                    setTabsEnabled([true, false, false])
+                    navigate(-1)
+                }
+                // }
                 if (response.success && response.status_code === 200) {
                     dispatch(
                         openSnackbar({
@@ -176,12 +187,12 @@ function SupplierForm() {
     const handleTabChange = (event, newValue) => {
         if (tabsEnabled[newValue]) {
             setActiveTab(newValue)
-            formik.setFieldValue('tabId', tabLabels[newValue])
+            // formik.setFieldValue('tabId', tabLabels[newValue])
         }
     }
 
     const getLocation = async id => {
-        const { data, error } = await dispatch(getLocationMasterById.initiate(id))
+        const { data, error } = await dispatch(getSupplierById.initiate(id))
         if (error) return true
         if (!data || !data?.data || !objectLength(data.data)) {
             dispatch(
@@ -193,7 +204,7 @@ function SupplierForm() {
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
                 })
             )
-            // navigate(-1)
+            navigate(-1)
         }
         setEditData(data.data)
         return true
@@ -367,164 +378,11 @@ function SupplierForm() {
                     size: 'small',
                     customSx
                 }
-
-                // {
-                //     name: 'cost_center',
-                //     label: 'Cost Center',
-                //     type: 'text',
-                //     required: false,
-                //     grid: { xs: 12, sm: 4, md: 4 },
-                //     size: 'small',
-                //     customSx
-                // },
-                // {
-                //     name: 'Wh_manager_name',
-                //     label: 'WH Manager Name',
-                //     type: 'text',
-                //     required: false,
-                //     grid: { xs: 12, sm: 4, md: 4 },
-                //     size: 'small',
-                //     customSx
-                // }
             ]
         }
-        // {
-        //     label: 'Address Information',
-        //     fields: [
-        //         {
-        //             name: 'address',
-        //             label: 'Address',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'postcode',
-        //             label: 'Postcode',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'country',
-        //             label: 'Country',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'zone',
-        //             label: 'Zone',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'state',
-        //             label: 'State',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'city',
-        //             label: 'City',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'phone',
-        //             label: 'Phone',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'email',
-        //             label: 'Email',
-        //             type: 'email',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // },
-        // {
-        //     label: 'Other Details',
-        //     fields: [
-        //         {
-        //             name: 'latitude',
-        //             label: 'Latitude',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'longitude',
-        //             label: 'Longitude',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'gst_no',
-        //             label: 'GST No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'tin_no',
-        //             label: 'TIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'cin_no',
-        //             label: 'CIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'pan_no',
-        //             label: 'PAN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // }
     ]
+
+    // ]
 
     const editHandler = async (id, row) => {
         const newRow = {}
@@ -538,7 +396,7 @@ function SupplierForm() {
             } else newRow[rowKey] = row[rowKey] || ''
             return rowKey
         })
-        formik.setValues({ ...newRow, tabId: 'basicInformation' })
+        formik.setValues({ ...newRow })
 
         // TODO:
         // ? scroll the page to top
@@ -551,17 +409,17 @@ function SupplierForm() {
     }
 
     // this useEffect handles edit data
-    // useEffect(() => {
-    //     const path = window.location.pathname
-    //     if (editData && objectLength(editData)) editHandler(formId, editData)
-    //     if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // }, [editData])
+    useEffect(() => {
+        const path = window.location.pathname
+        if (editData && objectLength(editData)) editHandler(formId, editData)
+        // if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editData])
 
-    // useEffect(() => {
-    //     if (formId) getLocation(formId)
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // }, [formId])
+    useEffect(() => {
+        if (formId) getLocation(formId)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formId])
 
     const identityCardData = [
         { label: 'Location Name', value: formik.values?.name ?? 'N/A' },
@@ -632,7 +490,7 @@ function SupplierForm() {
                                 customStyle={{
                                     backgroundColor: 'none'
                                 }}
-                                submitButtonText={activeTab < 2 ? 'Save & Next' : 'Submit'}
+                                submitButtonText='Submit'
                                 submitButtonSx={{
                                     textAlign: 'right',
                                     marginTop: 2

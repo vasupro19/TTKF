@@ -21,7 +21,7 @@ export const packageItenarySlice = apiSliceConfig.injectEndpoints({
         getPackageClientItenaryById: build.query({
             query: id => ({
                 // 🚨 Path updated
-                url: `/package-client/${id}`,
+                url: `/campaign/package/itenary/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             // 🚨 Tag updated
@@ -65,7 +65,7 @@ export const packageItenarySlice = apiSliceConfig.injectEndpoints({
 // Export hooks only for Package Client endpoints
 export const {
     useGetPackageItenaryClientsQuery,
-    useGetPackageItenaryClientByIdQuery,
+    useGetPackageClientItenaryByIdQuery,
     useCreatePackageItenaryClientMutation,
     useUpdatePackageClientMutation,
 

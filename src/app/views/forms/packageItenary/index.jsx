@@ -91,7 +91,8 @@ function PackagesItenary() {
     const validationSchema = z.object({
         campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
         itenaryId: z.number({ invalid_type_error: 'Itenary is required' }).int().positive(),
-        destinationId: z.number({ invalid_type_error: 'Destination is required' }).int().positive()
+        destinationId: z.number().optional().nullable(),
+        image: z.string().optional()
     })
 
     const validate = values => {
@@ -101,7 +102,7 @@ function PackagesItenary() {
                 ...values,
                 campaignId: values.campaignId ? parseInt(values?.campaignId, 10) : '',
                 itenaryId: values.itenaryId ? parseInt(values?.itenaryId, 10) : '',
-                destinationId: values.destinationId ? parseInt(values?.destinationId, 10) : ''
+                destinationId: values.destinationId ? parseInt(values?.destinationId, 10) : null
             }
             validationSchema.parse(parsedValues)
             return {}
@@ -270,6 +271,15 @@ function PackagesItenary() {
                     type: 'select',
                     options: destinationOptions,
                     required: true,
+                    grid: { xs: 12, sm: 6, md: 6 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'image',
+                    label: 'Image URL',
+                    type: 'text',
+                    required: false,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx

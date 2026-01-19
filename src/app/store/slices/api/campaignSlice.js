@@ -15,9 +15,9 @@ export const locationSlice = apiSliceConfig.injectEndpoints({
             },
             providesTags: ['locationMaster']
         }),
-        getLocationMasterById: build.query({
+        getCampaignById: build.query({
             query: id => ({
-                url: `admin/locationMaster/${id}`,
+                url: `/campaign/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['locationMasterById']
@@ -35,12 +35,12 @@ export const locationSlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['locationMaster', 'locationMasterById']
         }),
-        updateLocationMaster: build.mutation({
+        updateCampaign: build.mutation({
             query: ({ id, ...updateData }) => {
                 const KEY = 'updateLocationMasterLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/admin/locationMaster/${id}`,
+                    url: `/campaign/update/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
@@ -64,9 +64,9 @@ export const locationSlice = apiSliceConfig.injectEndpoints({
 })
 
 export const {
-    useGetLocationMasterQuery,
-    useGetLocationMasterByIdQuery,
-    endpoints: { getCampaigns, removeLocationMaster, getLocationMasterById },
+    useGetCampaignsQuery,
+    useGetCampaignByIdQuery,
+    endpoints: { getCampaigns, removeLocationMaster, getCampaignById },
     useCreateCampaignMutation,
-    useUpdateLocationMasterMutation
+    useUpdateCampaignMutation
 } = locationSlice

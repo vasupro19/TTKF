@@ -19,6 +19,7 @@ import { CSVExport } from '@/core/components/extended/CreateCSV'
 import CustomSearchTextField from '@/core/components/extended/CustomSearchTextField'
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
+import CustomSwitch from '@core/components/extended/CustomSwitch'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -56,6 +57,8 @@ function MasterClientTable() {
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
     const [removeId, setRemoveId] = useState(null)
+    const [isActive, setIsActive] = useState(true)
+
     const [excelHandler, setExcelHandler] = useState(false)
     const [search, setSearch] = useState({
         value: '',
@@ -81,7 +84,7 @@ function MasterClientTable() {
         setTotalRecords(result?.data?.recordsTotal || 0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(id => navigate(`/setup/clientAccount/location/edit/${id}`), [])
+    const editHandler = useCallback(id => navigate(`/master/client/edit/${id}`), [])
 
     const clearFilters = () => {
         setSearch({
@@ -91,8 +94,9 @@ function MasterClientTable() {
         setFilters({ created_at: { from: '', to: '' } })
     }
 
-    const deleteHandler = useCallback(async id => {
+    const deleteHandler = useCallback(async (id, active) => {
         setRemoveId(id)
+        setIsActive(!active)
         dispatch(
             openModal({
                 type: 'confirm_modal'
@@ -101,32 +105,40 @@ function MasterClientTable() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const deleteActionHandler = async () => {
+    // Add this inside MasterClientTable
+    const handleUpdateStatus = async row => {
         try {
-            await dispatch(removeClient.initiate(removeId))
+            // Toggle the current value (if active, send false; if inactive, send true)
+            const newStatus = !row.isActive
+
+            await dispatch(
+                removeClient.initiate({
+                    removeId: row.id,
+                    isActive: newStatus
+                })
+            ).unwrap()
+
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'removed client successfully!',
+                    message: `Client ${newStatus ? 'Activated' : 'Deactivated'} successfully!`,
                     variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    alert: { color: 'success' }
                 })
             )
+
+            // Refetch or manually update local state if needed
             setRefetch(true)
             setTimeout(() => setRefetch(false), 500)
-        } catch (reqError) {
+        } catch (err) {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'unable to remove client!',
+                    message: 'Failed to update status',
                     variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    alert: { color: 'error' }
                 })
             )
-        } finally {
-            dispatch(closeModal())
         }
     }
 
@@ -257,7 +269,7 @@ function MasterClientTable() {
                         )}
                         <CustomSearchTextField search={search} setSearch={setSearch} placeholder='Search clients...' />
                         {/* // Example for "From" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='from'
                             filters={filters}
                             setFilters={setFilters}
@@ -267,16 +279,16 @@ function MasterClientTable() {
                         {/* </Box> */}
 
                         {/* // Example for "To" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='to'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='To date'
                             label='To'
-                        />
-                        <UiAccessGuard>
+                        /> */}
+                        {/* <UiAccessGuard>
                             <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
+                        </UiAccessGuard> */}
                         <UiAccessGuard type='create'>
                             <CustomButton variant='clickable' onClick={handleAdd}>
                                 Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
@@ -322,7 +334,6 @@ function MasterClientTable() {
                                     size='small'
                                     aria-label='settings row'
                                     onClick={() => {
-                                        console.log(row)
                                         navigate(`/master/client/permissions/${row.id}/${row.email}`)
                                     }}
                                 >
@@ -334,16 +345,15 @@ function MasterClientTable() {
 
                             {/* Delete Button */}
                             <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='delete row'
-                                    onClick={() => deleteHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Delete'>
-                                        <Delete fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
+                                <Tooltip title={row.isActive ? 'Deactivate' : 'Activate'}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <CustomSwitch
+                                            // Using row.active (ensure this matches your API response key)
+                                            isChecked={Boolean(row.isActive)}
+                                            handleChange={() => handleUpdateStatus(row)}
+                                        />
+                                    </Box>
+                                </Tooltip>
                             </UiAccessGuard>
                         </Box>
                     )}
@@ -353,8 +363,8 @@ function MasterClientTable() {
                     enableContextMenu
                 />
 
-                <PopperContextMenu options={menuOptions} />
-                <ConfirmModal
+                {/* <PopperContextMenu options={menuOptions} /> */}
+                {/* <ConfirmModal
                     title='Delete Client'
                     message={
                         <>
@@ -365,9 +375,9 @@ function MasterClientTable() {
                     icon='warning'
                     confirmText='Yes, Delete'
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={deleteActionHandler}
+                    onConfirm={handle}
                     isLoading={removeClientLKey}
-                />
+                /> */}
             </MainCard>
         </ContextMenuProvider>
     )

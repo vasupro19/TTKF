@@ -18,7 +18,7 @@ export default function ThemeCustomization({ children }) {
     const fontFamily = `'Bookerly', sans-serif`
     const outlinedFilled = true
 
-    const theme = useMemo(() => Palette(), [])
+    const theme = Palette()
 
     const themeTypography = useMemo(
         () => Typography(theme, borderRadius, fontFamily),

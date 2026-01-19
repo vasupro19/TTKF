@@ -5,10 +5,10 @@ import { z } from 'zod'
 import { useDispatch } from 'react-redux'
 import { Grid, Box, Card, CardContent, useTheme, useMediaQuery } from '@mui/material'
 import cerebrumLogo from '@assets/images/auth/Cerebrum_logo_final_white.png'
-import { useLoginMutation } from '@app/store/slices/api/authApiSlice'
+import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import LoginForm from '@core/components/forms/LoginForm'
 import { openSnackbar } from '@app/store/slices/snackbar'
-import { setUserDetails } from '@app/store/slices/auth'
+import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
 import { useNavigate } from 'react-router-dom'
 import { setSessionData } from '@app/store/slices/sessionSlice'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
@@ -29,6 +29,7 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false)
     const theme = useTheme()
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'))
+    const [triggerMenu] = useLazyGetMenuQuery()
 
     const handleClickShowPassword = () => setShowPassword(prev => !prev)
 
@@ -51,14 +52,25 @@ export default function Login() {
         onSubmit: async (values, { setSubmitting }) => {
             try {
                 const res = await login(values).unwrap()
-                console.log(res.data.accessToken)
+                const userData = res.data.user
                 dispatch(setUserDetails(res.data.user))
                 // dispatch(setSessionData(res.session))
-                setToken(res.data.accessToken)
+                await setToken(res.data.accessToken)
+                const menus = await triggerMenu(userData.id).unwrap()
+                dispatch(setMenuItems(menus.data))
+
                 // removeClientLocation()
-                navigate('/dashboard')
+                // navigate('/dashboard')
             } catch (err) {
-                dispatch(openSnackbar({ message: err?.data?.message || 'Login failed', severity: 'error' }))
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: err.data?.message || 'An error occurred, please try again',
+                        variant: 'alert',
+                        alert: { color: 'error' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
             } finally {
                 setSubmitting(false)
             }

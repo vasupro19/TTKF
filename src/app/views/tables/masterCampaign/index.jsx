@@ -72,7 +72,7 @@ function MasterCampaignTable() {
         created_at: { from: '', to: '' }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/setup/location/${id}`), [])
+    const editHandler = useCallback(async id => navigate(`/master/campaigns/edit/${id}`), [])
 
     const handleExcelClick = () => {
         setExcelHandler(true)
@@ -318,7 +318,7 @@ function MasterCampaignTable() {
                             <CSVExport handleExcelClick={handleExcelClick} />
                         </UiAccessGuard>
                         <UiAccessGuard type='create'>
-                            <CustomButton variant='clickable' onClick={handleAdd}>
+                            <CustomButton variant='clickable' onClick={() => handleAdd()}>
                                 Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
                             </CustomButton>
                         </UiAccessGuard>

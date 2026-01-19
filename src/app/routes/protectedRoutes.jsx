@@ -116,12 +116,20 @@ const ItenaryClientsForm = lazy(() => import('@views/masters/itenary/create'))
 const MasterPackagesTable = lazy(() => import('@/app/views/masters/packages'))
 const PackagesClientForm = lazy(() => import('@views/masters/packages/create'))
 const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
+const PackageItenaryView = lazy(() => import('@views/forms/packageItenary/actitvityPackage'))
+
 const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
 
 const SupplierForm = lazy(() => import('@/app/views/masters/supplier/create'))
 const MasterSupplierTable = lazy(() => import('@/app/views/masters/supplier'))
 const AgentForm = lazy(() => import('@/app/views/masters/agent/create'))
 const MasterAgentTable = lazy(() => import('@app/views/masters/agent'))
+const MasterLeadsTable = lazy(() => import('@app/views/masters/leads'))
+const LeadsForm = lazy(() => import('@/app/views/masters/leads/create'))
+
+const GuestForm = lazy(() => import('@views/forms/guestDetailsForm'))
+const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
+
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
 
 const protectedRoutes = {
@@ -169,6 +177,14 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/master/client/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <MasterClientForm />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/client/permissions/:id/:email',
             element: (
                 <Suspense fallback={<Loader />}>
@@ -201,6 +217,14 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/master/user/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <SetupUserForm />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/campaigns',
             element: (
                 <Suspense fallback={<Loader />}>
@@ -210,6 +234,14 @@ const protectedRoutes = {
         },
         {
             path: '/master/campaigns/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <CampaignsForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/campaigns/edit/:id',
             element: (
                 <Suspense fallback={<Loader />}>
                     <CampaignsForm />
@@ -233,6 +265,14 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/master/destinations/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <DestinationForm />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/itenary/:id',
             element: (
                 <Suspense fallback={<Loader />}>
@@ -242,6 +282,14 @@ const protectedRoutes = {
         },
         {
             path: '/master/itenary/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <ItenaryClientsForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/itenary/edit/:id',
             element: (
                 <Suspense fallback={<Loader />}>
                     <ItenaryClientsForm />
@@ -289,6 +337,14 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/package/activities/:packageId',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <PackageItenaryView />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/supplier/edit/:id',
             element: (
                 <Suspense fallback={<Loader />}>
@@ -303,7 +359,7 @@ const protectedRoutes = {
                     <GmailIntegrationForm />
                 </Suspense>
             )
-        }
+        },
         {
             path: '/master/agent',
             element: (
@@ -317,6 +373,54 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <AgentForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/agent/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <AgentForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/leads',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <MasterLeadsTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/leads/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <LeadsForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/leads/edit/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <LeadsForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/guest/add/:leadId',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <GuestForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/packages',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <FinalPackageTable />
                 </Suspense>
             )
         }

@@ -133,7 +133,7 @@ function SetupUserTable() {
     // open add new user modal
     const handleAdd = () => navigate('/userManagement/user/create')
 
-    const editHandler = id => navigate(`/userManagement/user/${id}`)
+    const editHandler = id => navigate(`/master/user/edit/${id}`)
 
     const deleteHandler = (id, active = false) => {
         setIsActive(!!active)

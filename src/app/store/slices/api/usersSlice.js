@@ -50,7 +50,7 @@ export const usersSlice = apiSliceConfig.injectEndpoints({
         }),
         getDataForUpdate: build.query({
             query: id => ({
-                url: `/admin/userManagement/${id}`,
+                url: `/user/clientUser/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['userManagementById']

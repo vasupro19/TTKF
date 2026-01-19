@@ -16,16 +16,18 @@ export const authApi = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['getClientAccounts', 'getAuthUser']
         }),
-        getMenu: build.mutation({
-            query: query => {
+        getMenu: build.query({
+            query: userId => {
                 const KEY = 'menuKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/menu${query}`,
+                    url: `/menu?userId=${userId}`, // Pass the ID directly
                     method: 'GET',
                     responseHandler: result => customResponseHandler({ result, requestKey: KEY })
                 }
-            }
+            },
+            // This allows you to manually trigger a refresh if needed
+            providesTags: ['Menu']
         }),
 
         getAuthUser: build.query({
@@ -38,9 +40,9 @@ export const authApi = apiSliceConfig.injectEndpoints({
         }),
         logout: build.mutation({
             query: () => ({
-                url: '/logout'
+                url: '/auth/logout'
             }),
-            invalidatesTags: ['getAuthUser', 'csrf', 'getClientAccounts']
+            invalidatesTags: ['getAuthUser']
         }),
         forcedLogout: build.mutation({
             query: userId => ({
@@ -87,7 +89,8 @@ export const {
     useLoginMutation,
     useLogoutMutation,
     // useGetAuthUserMutation,
-    useGetMenuMutation,
+    useGetMenuQuery,
+    useLazyGetMenuQuery,
     // useGetMenuConfigMutation,
     useForcedLogoutMutation,
     useLogOutSessionMutation,

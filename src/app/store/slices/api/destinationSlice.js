@@ -18,7 +18,7 @@ export const destinationSlice = apiSliceConfig.injectEndpoints({
         }),
         getDestinationClientById: build.query({
             query: id => ({
-                url: `/destination-client/${id}`,
+                url: `/campaign/destination/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['DestinationClientById']
@@ -41,7 +41,7 @@ export const destinationSlice = apiSliceConfig.injectEndpoints({
                 const KEY = 'updateDestinationClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/destination-client/${id}`,
+                    url: `/campaign/update/destination/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })

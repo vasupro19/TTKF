@@ -16,7 +16,7 @@ export const clientSlice = apiSliceConfig.injectEndpoints({
         }),
         getClientById: build.query({
             query: id => ({
-                url: `/admin/client/${id}`,
+                url: `/client/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['clientById']
@@ -39,7 +39,7 @@ export const clientSlice = apiSliceConfig.injectEndpoints({
                 const KEY = 'updateClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/admin/client/${id}`,
+                    url: `/client/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
@@ -48,12 +48,14 @@ export const clientSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['client', 'clientById', 'clientData']
         }),
         removeClient: build.mutation({
-            query: id => {
+            // Destructure the object passed from initiate
+            query: ({ removeId, isActive }) => {
                 const KEY = `removeClientLKey`
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/admin/client/${id}`,
-                    method: 'DELETE',
+                    url: `/client/${removeId}`, // ID goes in URL
+                    method: 'PATCH',
+                    body: { isActive }, // Status goes in Body
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },

@@ -8,8 +8,6 @@ import MainCard from '@core/components/extended/MainCard'
 import {
     useCreateClientMutation,
     useUpdateClientMutation,
-    useFetchLocationsMutation,
-    useFetchPincodeDetailsMutation,
     useFetchClientsMutation,
     getClientById
 } from '@app/store/slices/api/clientSlice'
@@ -38,14 +36,8 @@ function ClientMasterForm() {
     const [clientId, setClientId] = useState(null)
     const [createClient] = useCreateClientMutation()
     const [updateClient] = useUpdateClientMutation()
-    const [fetchLocation] = useFetchLocationsMutation()
     const [fetchClient] = useFetchClientsMutation()
-    const [fetchPincodeDetails] = useFetchPincodeDetailsMutation()
     // const [csrf] = useCsrfMutation()
-    const [bavailableCities, setBAvailableCities] = useState([])
-    const [bavailableStates, setBAvailableStates] = useState([])
-    const [savailableCities, setSAvailableCities] = useState([])
-    const [savailableStates, setSAvailableStates] = useState([])
 
     const tabLabels = ['businessInformation']
 
@@ -178,82 +170,22 @@ function ClientMasterForm() {
     }
 
     // Pre-fetch countries and locations
-    useEffect(() => {
-        const fetchInitialData = async () => {
-            try {
-                const clients = await fetchClient().unwrap()
-                setClientsData(clients.data.masterClients)
+    // useEffect(() => {
+    //     const fetchInitialData = async () => {
+    //         try {
+    //             const clients = await fetchClient().unwrap()
+    //             setClientsData(clients.data.masterClients)
 
-                const locationData = await fetchLocation().unwrap()
-                setLocations(locationData.data)
-            } catch (error) {
-                // eslint-disable-next-line no-console
-                console.error('Failed to fetch initial data:', error)
-            }
-        }
+    //             // const locationData = await fetchLocation().unwrap()
+    //             // setLocations(locationData.data)
+    //         } catch (error) {
+    //             // eslint-disable-next-line no-console
+    //             console.error('Failed to fetch initial data:', error)
+    //         }
+    //     }
 
-        fetchInitialData()
-    }, [fetchClient, fetchLocation])
-
-    const handlePincodeChange = useCallback(
-        async (pincode, formik, prefix = '') => {
-            const pincodeField = prefix ? `${prefix}postcode` : 'postcode'
-            formik.setFieldValue(pincodeField, pincode)
-
-            if (pincode.length >= 6) {
-                try {
-                    const response = await fetchPincodeDetails(pincode).unwrap()
-
-                    if (response?.data) {
-                        const { country, state, city } = response.data
-
-                        const countryField = prefix ? `${prefix}country` : 'country'
-                        const stateField = prefix ? `${prefix}state` : 'state'
-                        const cityField = prefix ? `${prefix}city` : 'city'
-
-                        const updatedValues = {
-                            ...formik.values,
-                            [pincodeField]: pincode,
-                            [countryField]: country || '',
-                            [stateField]: state || '',
-                            [cityField]: city || ''
-                        }
-                        formik.setValues(updatedValues)
-
-                        const touchedFields = {
-                            ...formik.touched,
-                            [countryField]: true,
-                            [stateField]: true,
-                            [cityField]: true
-                        }
-                        formik.setTouched(touchedFields, false)
-
-                        if (prefix === 'b') {
-                            setBAvailableCities([{ value: city, label: city }])
-                            setBAvailableStates([{ value: state, label: state }])
-                        } else if (prefix === 's') {
-                            setSAvailableCities([{ value: city, label: city }])
-                            setSAvailableStates([{ value: state, label: state }])
-                        }
-
-                        setTimeout(() => {
-                            formik.setFieldValue(pincodeField, pincode)
-                            formik.validateForm()
-                        }, 100)
-                    } else {
-                        formik.setFieldValue(prefix ? `${prefix}country` : 'country', '')
-                        formik.setFieldValue(prefix ? `${prefix}state` : 'state', '')
-                        formik.setFieldValue(prefix ? `${prefix}city` : 'city', '')
-                    }
-                } catch (error) {
-                    formik.setFieldValue(prefix ? `${prefix}country` : 'country', '')
-                    formik.setFieldValue(prefix ? `${prefix}state` : 'state', '')
-                    formik.setFieldValue(prefix ? `${prefix}city` : 'city', '')
-                }
-            }
-        },
-        [fetchPincodeDetails, setBAvailableCities, setBAvailableStates, setSAvailableCities, setSAvailableStates]
-    )
+    //     fetchInitialData()
+    // }, [fetchClient])
 
     const validate = values => {
         try {
@@ -293,7 +225,7 @@ function ClientMasterForm() {
                         formik.resetForm()
                         setActiveTab(0)
                         setTabsEnabled([true, false, false, false])
-                        navigate('/setup/clientAccount/location')
+                        navigate(-1)
                     }
                 }
                 if (response.success && response.status_code === 200) {
@@ -407,243 +339,14 @@ function ClientMasterForm() {
                     size: 'small',
                     customSx
                 }
-
-                // {
-                //     name: 'location_id',
-                //     label: 'Location*',
-                //     type: 'select',
-                //     options: locations.map(location => ({
-                //         value: location.id.toString(),
-                //         label: location.code
-                //     })),
-                //     required: true,
-                //     grid: { xs: 12, sm: 4, md: 4 },
-                //     size: 'small',
-                //     customSx
-                // }
             ]
         }
-        // {
-        //     label: 'Bill From Address',
-        //     fields: [
-        //         {
-        //             name: 'bContactPerson',
-        //             label: 'Contact Person',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bphone',
-        //             label: 'Phone No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'baddress',
-        //             label: 'Address',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bpostcode',
-        //             label: 'Pincode',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             // onChange: e => handlePincodeBlur(e, formik, 'b'),
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bcountry',
-        //             label: 'Country',
-        //             type: 'text',
-        //             disabled: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bstate',
-        //             label: 'State',
-        //             type: 'text',
-        //             options: bavailableStates,
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bcity',
-        //             label: 'City',
-        //             type: 'text',
-        //             options: bavailableCities,
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'bemail',
-        //             label: 'Email ID',
-        //             type: 'email',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // },
-        // {
-        //     label: 'Ship From Address',
-        //     fields: [
-        //         {
-        //             name: 'sContactPerson',
-        //             label: 'Contact Person',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'sphone',
-        //             label: 'Phone No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'saddress',
-        //             label: 'Address',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'spostcode',
-        //             label: 'Pincode',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             // onChange: e => handlePincodeBlur(e, formik, 's'),
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'scountry',
-        //             label: 'Country',
-        //             type: 'text',
-        //             disabled: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'sstate',
-        //             label: 'State',
-        //             type: 'text',
-        //             options: savailableStates,
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'scity',
-        //             label: 'City',
-        //             type: 'text',
-        //             options: savailableCities,
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'semail',
-        //             label: 'Email ID',
-        //             type: 'email',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // },
-        // {
-        //     label: 'Other Details',
-        //     fields: [
-        //         {
-        //             name: 'partner',
-        //             label: '3PL Partner',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'gst_no',
-        //             label: 'GST No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'fssai_no',
-        //             label: 'FSSAI No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'tin_no',
-        //             label: 'TIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small'
-        //         },
-        //         {
-        //             name: 'cin_no',
-        //             label: 'CIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small'
-        //         },
-        //         {
-        //             name: 'pan_no',
-        //             label: 'PAN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small'
-        //         }
-        //     ]
-        // }
     ]
     const getClient = async id => {
         const { data, error } = await dispatch(getClientById.initiate(id))
+        console.log(data)
         if (error) return true
-        if (!data || !data?.data?.client || !objectLength(data.data.client)) {
+        if (!data || !data?.data || !objectLength(data.data)) {
             dispatch(
                 openSnackbar({
                     open: true,
@@ -655,14 +358,12 @@ function ClientMasterForm() {
             )
             navigate(-1)
         }
-        setEditData(data.data.client)
+        setEditData(data.data)
         return true
     }
     const editHandler = async (id, row) => {
         const newRow = {}
         if ('id' in row) setClientId(row.id)
-        if ('bpostcode' in row && row.bpostcode) await handlePincodeChange(row.bpostcode.toString(), formik, 'b')
-        if ('spostcode' in row && row.spostcode) await handlePincodeChange(row.spostcode.toString(), formik, 's')
 
         Object.keys(row).map(rowKey => {
             if (row[rowKey]) {
@@ -697,15 +398,8 @@ function ClientMasterForm() {
     const handleCustomChange = (e, formik) => {
         const { name, value } = e.target
         // Trigger handlePincodeChange only for pincode fields
-        if (name === 'bpostcode') {
-            formik.setFieldValue(`bpostcode`, value)
-            handlePincodeChange(value, formik, 'b')
-        } else if (name === 'spostcode') {
-            formik.setFieldValue(`spostcode`, value)
-            handlePincodeChange(value, formik, 's')
-        } else {
-            formik.handleChange(e) // For other fields, use normal formik.handleChange
-        }
+
+        formik.handleChange(e) // For other fields, use normal formik.handleChange
     }
 
     // this useEffect handles edit data

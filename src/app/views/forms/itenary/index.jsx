@@ -119,7 +119,7 @@ function ItenaryClientsForm() {
                         })
                     )
                     // Navigate to the list view after submission
-                    navigate('/master/itenary') // Assuming the list route is '/master/itineraries'
+                    navigate(-1) // Assuming the list route is '/master/itineraries'
                 }
             } catch (error) {
                 // Error handling (keeping original structure)

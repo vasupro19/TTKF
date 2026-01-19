@@ -16,16 +16,20 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
                 }
             },
             // 🚨 Tag updated
-            providesTags: ['PackageClient']
-        }),
-        getPackageClientById: build.query({
-            query: id => ({
-                // 🚨 Path updated
-                url: `/package-client/${id}`,
-                responseHandler: async result => customResponseHandler({ result })
-            }),
-            // 🚨 Tag updated
             providesTags: ['PackageClientById']
+        }),
+        getAllPackagesClient: build.query({
+            query: (query, removeLoader = true) => {
+                const KEY = 'getPackageAllClientsLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    // 🚨 Path updated for packages
+                    url: `/campaign/package-all${query || ''}`,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY, removeLoader })
+                }
+            },
+            // 🚨 Tag updated
+            providesTags: ['PackageClient']
         }),
         createPackageClient: build.mutation({
             query: payload => {
@@ -65,7 +69,7 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
 // Export hooks only for Package Client endpoints
 export const {
     useGetPackageClientsQuery,
-    useGetPackageClientByIdQuery,
+    useGetAllPackagesClientQuery,
     useCreatePackageClientMutation,
     useUpdatePackageClientMutation,
 

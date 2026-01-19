@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
+import { Box, IconButton, Tooltip, Menu, MenuItem, Typography, getAccordionActionsUtilityClass } from '@mui/material'
 import Stack from '@mui/material/Stack'
 // import Box from '@mui/material/Box'
 // import Tooltip from '@mui/material/Tooltip'
@@ -19,7 +19,7 @@ import CustomSearchTextField from '@/core/components/extended/CustomSearchTextFi
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
+import { getAgents } from '@/app/store/slices/api/agentSlice'
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
 // import { getObjectKeys, toCapitalizedWords } from '@/utilities'
@@ -72,14 +72,14 @@ function MasterAgentTable() {
         created_at: { from: '', to: '' }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/setup/location/${id}`), [])
+    const editHandler = useCallback(async id => navigate(`/master/agent/edit/${id}`), [])
 
     const handleExcelClick = () => {
         setExcelHandler(true)
         setTimeout(() => setExcelHandler(false), 1000)
     }
     const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getCampaigns.initiate(queryString, false))
+        const { data: response } = await dispatch(getAgents.initiate(queryString, false))
         if (isExcelQuery(queryString)) {
             return true
         }
@@ -106,34 +106,34 @@ function MasterAgentTable() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const deleteActionHandler = async () => {
-        try {
-            await dispatch(removeLocationMaster.initiate(removeId))
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'removed location successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
-        } catch (reqError) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'unable to remove location!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        } finally {
-            dispatch(closeModal())
-        }
-    }
+    // const deleteActionHandler = async () => {
+    //     try {
+    //         await dispatch(removeLocationMaster.initiate(removeId))
+    //         dispatch(
+    //             openSnackbar({
+    //                 open: true,
+    //                 message: 'removed location successfully!',
+    //                 variant: 'alert',
+    //                 alert: { color: 'success' },
+    //                 anchorOrigin: { vertical: 'top', horizontal: 'right' }
+    //             })
+    //         )
+    //         setRefetch(true)
+    //         setTimeout(() => setRefetch(false), 500)
+    //     } catch (reqError) {
+    //         dispatch(
+    //             openSnackbar({
+    //                 open: true,
+    //                 message: 'unable to remove location!',
+    //                 variant: 'alert',
+    //                 alert: { color: 'success' },
+    //                 anchorOrigin: { vertical: 'top', horizontal: 'right' }
+    //             })
+    //         )
+    //     } finally {
+    //         dispatch(closeModal())
+    //     }
+    // }
 
     // column toggler
     const handleCheckToggle = key => {
@@ -191,26 +191,6 @@ function MasterAgentTable() {
         setCurrentRowId(null)
     }
 
-    // Handlers for the dropdown options (use currentRowId)
-    const handleDestinationsClick = () => {
-        handleMenuClose()
-        navigate(`/master/destinations/${currentRowId}`)
-        console.log(`Navigating to Destinations for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
-    }
-
-    const handleItineraryClick = () => {
-        handleMenuClose()
-        navigate(`/master/itenary/${currentRowId}`)
-
-        console.log(`Navigating to Itinerary for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
-    }
-    const handlePackagesClick = () => {
-        handleMenuClose()
-        console.log(`Navigating to Itinerary for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
-    }
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -362,7 +342,7 @@ function MasterAgentTable() {
                                 </IconButton>
                             </UiAccessGuard>
 
-                            <Tooltip title='Options'>
+                            {/* <Tooltip title='Options'>
                                 <IconButton
                                     sx={{ color: 'primary.main' }}
                                     size='small'
@@ -372,10 +352,10 @@ function MasterAgentTable() {
                                 >
                                     <MoreVert fontSize='small' />
                                 </IconButton>
-                            </Tooltip>
+                            </Tooltip> */}
 
                             {/* The Menu component for the dropdown */}
-                            <Menu
+                            {/* <Menu
                                 id='options-menu'
                                 anchorEl={anchorEl}
                                 open={open}
@@ -396,7 +376,7 @@ function MasterAgentTable() {
                                 <MenuItem onClick={() => handleDestinationsClick(row.id)}>Destinations</MenuItem>
                                 <MenuItem onClick={() => handleItineraryClick(row.id)}>Itinerary</MenuItem>
                                 <MenuItem onClick={() => handlePackagesClick(row.id)}>Packages</MenuItem>
-                            </Menu>
+                            </Menu> */}
                         </Box>
                     )}
                     setIsShowClearButton={setIsShowClearButton}
@@ -416,7 +396,7 @@ function MasterAgentTable() {
                     icon='warning'
                     confirmText='Yes, Delete'
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={deleteActionHandler}
+                    // onConfirm={deleteActionHandler}
                     isLoading={removeLocationMasterLKey}
                 />
             </MainCard>

@@ -18,7 +18,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'title',
+        key: 'businessname',
         visible: true,
         minWidth: 8,
         maxWidth: 8
@@ -29,7 +29,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'description',
+        key: 'constactperson',
         visible: true,
         minWidth: 8,
         maxWidth: 8
@@ -40,7 +40,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'description',
+        key: 'email',
         visible: true,
         minWidth: 8,
         maxWidth: 8
@@ -51,7 +51,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'description',
+        key: 'phone',
         visible: true,
         minWidth: 8,
         maxWidth: 8
@@ -62,7 +62,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'description',
+        key: 'city',
         visible: true,
         minWidth: 8,
         maxWidth: 8
@@ -73,7 +73,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'description',
+        key: 'type',
         visible: true,
         minWidth: 8,
         maxWidth: 8

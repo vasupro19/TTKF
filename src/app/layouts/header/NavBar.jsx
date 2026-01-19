@@ -7,11 +7,7 @@ import { AppBar, Toolbar, Button, Grid, Box, Avatar, IconButton, Stack, styled, 
 import Backdrop from '@mui/material/Backdrop'
 import { AnimatePresence, motion } from 'framer-motion'
 
-import {
-    useLogoutMutation,
-    useChangeClientAccountMutation,
-    useGetMenuMutation
-} from '@app/store/slices/api/authApiSlice'
+import { useLogoutMutation, useChangeClientAccountMutation, useGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 
 // ** import assets & icons
 import cerebrumLogo from '@assets/images/auth/Cerebrum_logo_final_white.png'
@@ -93,13 +89,14 @@ function NavBar() {
     // eslint-disable-next-line no-unused-vars
     const [_, __, removeToken] = useLocalStorage(LOCAL_STORAGE_KEYS.token, null)
     // eslint-disable-next-line no-unused-vars
-    const [clientLocation, setClientLocation, removeClientLocation] = useLocalStorage(
-        LOCAL_STORAGE_KEYS.clientLocation,
-        null,
-        true
-    )
+    // const [clientLocation, setClientLocation, removeClientLocation] = useLocalStorage(
+    //     LOCAL_STORAGE_KEYS.clientLocation,
+    //     null,
+    //     true
+    // )
     const { drawerOpen, navBackDropOpen } = useSelector(state => state.navbar)
     const { user } = useSelector(state => state.auth)
+    const { menuItems } = useSelector(state => state.auth)
 
     const [changeClientAccount] = useChangeClientAccountMutation()
 
@@ -110,23 +107,22 @@ function NavBar() {
     const [isRotated, setIsRotated] = useState(false)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [showFloatingTab, setShowFloatingTab] = useState(false)
-    const [menuItems, setMenuItems] = useState([])
-    const [getMenu] = useGetMenuMutation()
+    // const [menuItems, setMenuItems] = useState([])
+    // const [getMenu] = useGetMenuMutation()
+    // const { data: menuData, isLoading } = useGetMenuQuery(user?.id, {
+    //     skip: !user?.id, // Logic: Don't run this query if user.id is missing
+    //     refetchOnMountOrArgChange: true
+    // })
 
-    const handleMenu = async () => {
-        try {
-            const res = await getMenu(`?userId=${user?.id}`).unwrap()
-            console.log(res.data)
-            setMenuItems(res.data)
-        } catch (error) {
-            console.log(error)
-        }
-    }
-    useEffect(() => {
-        if (user?.id) {
-            handleMenu()
-        }
-    }, [user])
+    // const handleMenu = async () => {
+    //     try {
+    //         const res = await getMenu(`?userId=${user?.id}`).unwrap()
+    //         setMenuItems(res.data)
+    //     } catch (error) {
+    //         console.log(error)
+    //     }
+    // }
+    // const menuItems = menuData?.data || []
     // ::Note notification related sate and functions starts here
     const [notifications, setNotifications] = useState([
         {
@@ -268,57 +264,58 @@ function NavBar() {
     }, [])
 
     const handleLogout = async () => {
-        await logout()
-        removeClientLocation()
-        dispatch(setLocation(null))
+        await logout().unwrap()
         dispatch(logoutAction())
         removeToken()
+        navigate('/login')
+
+        // removeToken()
     }
 
-    const handleSelectLocation = useCallback(async (data, userData) => {
-        let isError = false
-        let message
-        if (!data.id) return
-        try {
-            let clientObj = {}
-            const response = await changeClientAccount({ client_id: data.id }).unwrap()
-            message = response.message
-            dispatch(setLocation(data.id))
-            if (clientLocation && typeof clientLocation === 'object') {
-                if (objectLength(clientObj) >= 2) {
-                    delete clientObj[getObjectKeys(clientObj)[objectLength(clientObj) - 1]]
-                } else if (userData.id in clientLocation) {
-                    clientObj = { [userData.id]: { previous: clientObj[userData.id]?.current || {} } }
-                }
-            }
-            clientObj = {
-                [userData.id]: {
-                    current: {
-                        id: data.id,
-                        name: data.name,
-                        master_client_name: data.master_client_name,
-                        code: data.code
-                    }
-                }
-            }
-            setClientLocation(clientObj)
-        } catch (error) {
-            isError = true
-            message = error?.data?.message || error?.message || ''
-        } finally {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message,
-                    variant: 'alert',
-                    alert: { color: isError ? 'error' : 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'center' }
-                })
-            )
-            if (!isError) navigate('/dashboard')
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    // const handleSelectLocation = useCallback(async (data, userData) => {
+    //     let isError = false
+    //     let message
+    //     if (!data.id) return
+    //     try {
+    //         let clientObj = {}
+    //         const response = await changeClientAccount({ client_id: data.id }).unwrap()
+    //         message = response.message
+    //         dispatch(setLocation(data.id))
+    //         if (clientLocation && typeof clientLocation === 'object') {
+    //             if (objectLength(clientObj) >= 2) {
+    //                 delete clientObj[getObjectKeys(clientObj)[objectLength(clientObj) - 1]]
+    //             } else if (userData.id in clientLocation) {
+    //                 clientObj = { [userData.id]: { previous: clientObj[userData.id]?.current || {} } }
+    //             }
+    //         }
+    //         clientObj = {
+    //             [userData.id]: {
+    //                 current: {
+    //                     id: data.id,
+    //                     name: data.name,
+    //                     master_client_name: data.master_client_name,
+    //                     code: data.code
+    //                 }
+    //             }
+    //         }
+    //         setClientLocation(clientObj)
+    //     } catch (error) {
+    //         isError = true
+    //         message = error?.data?.message || error?.message || ''
+    //     } finally {
+    //         dispatch(
+    //             openSnackbar({
+    //                 open: true,
+    //                 message,
+    //                 variant: 'alert',
+    //                 alert: { color: isError ? 'error' : 'success' },
+    //                 anchorOrigin: { vertical: 'top', horizontal: 'center' }
+    //             })
+    //         )
+    //         if (!isError) navigate('/dashboard')
+    //     }
+    //     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [])
 
     const handleToggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen)
@@ -503,7 +500,7 @@ function NavBar() {
                 position='static'
                 sx={{
                     height: 'max-content',
-                    background: 'linear-gradient(135deg, #2c2c2c 0%, #45484c 100%)'
+                    background: 'linear-gradient(135deg,rgb(0, 0, 0) 0%, #45484c 100%)'
                 }}
             >
                 <Toolbar
@@ -549,7 +546,7 @@ function NavBar() {
                                             width: '11.5rem'
                                         }}
                                     /> */}
-                                    TTK
+                                    {user?.clientName}
                                 </Button>
                             </Box>
                             <NavigateBreadcrumbs breadcrumbData={breadcrumbData} />
@@ -596,9 +593,7 @@ function NavBar() {
                         openMenu={openMenu}
                         handleMenuClose={handleMenuClose}
                         user={user}
-                        clientLocation={clientLocation}
                         handleLogout={handleLogout}
-                        handleSelectLocationFunc={handleSelectLocation}
                     />
                 </Toolbar>
             </AppBar>

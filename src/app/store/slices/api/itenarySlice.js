@@ -18,7 +18,7 @@ export const itenarySlice = apiSliceConfig.injectEndpoints({
         }),
         getItenaryClientById: build.query({
             query: id => ({
-                url: `/itinerary-client/${id}`,
+                url: `campaign/itenary/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['ItenaryClientById']
@@ -41,7 +41,7 @@ export const itenarySlice = apiSliceConfig.injectEndpoints({
                 const KEY = 'updateItenaryClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/itinerary-client/${id}`,
+                    url: `/campaign/update/itenary/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })

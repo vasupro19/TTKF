@@ -19,7 +19,7 @@ import CustomSearchTextField from '@/core/components/extended/CustomSearchTextFi
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
+import { getSuppliers } from '@/app/store/slices/api/supplierSlice'
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
 // import { getObjectKeys, toCapitalizedWords } from '@/utilities'
@@ -72,14 +72,14 @@ function MasterSupplierTable() {
         created_at: { from: '', to: '' }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/setup/location/${id}`), [])
+    const editHandler = useCallback(async id => navigate(`/master/supplier/edit/${id}`), [])
 
     const handleExcelClick = () => {
         setExcelHandler(true)
         setTimeout(() => setExcelHandler(false), 1000)
     }
     const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getCampaigns.initiate(queryString, false))
+        const { data: response } = await dispatch(getSuppliers.initiate(queryString, false))
         if (isExcelQuery(queryString)) {
             return true
         }
@@ -108,7 +108,7 @@ function MasterSupplierTable() {
 
     const deleteActionHandler = async () => {
         try {
-            await dispatch(removeLocationMaster.initiate(removeId))
+            // await dispatch(removeLocationMaster.initiate(removeId))
             dispatch(
                 openSnackbar({
                     open: true,

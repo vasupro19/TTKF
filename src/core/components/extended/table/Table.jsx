@@ -131,7 +131,7 @@ function DataTable({
     const isMobile = useMediaQuery('(max-width:600px)')
 
     // const dispatch = useDispatch()
-
+    console.log(columns, 'cols')
     const queryColumnItem = {
         data: '', // string
         name: '', // string

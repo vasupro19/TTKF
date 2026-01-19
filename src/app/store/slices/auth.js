@@ -55,6 +55,10 @@ const AuthSlice = createSlice({
         logout: state => {
             state.user = null
             state.isLoggedIn = false
+            state.menuItems = []
+            state.selectedLocation = null
+            state.permissionExpired = false
+            state.error = null // Clear errors too
         },
         testLogin: state => {
             state.isLoggedIn = true
@@ -73,38 +77,15 @@ const AuthSlice = createSlice({
         setLocation: (state, action) => {
             state.selectedLocation = action.payload
         },
+        setMenuItems: (state, action) => {
+            state.menuItems = action.payload
+        },
         setUserDetails: (state, action) => {
+            console.log(action.payload, 'action')
             state.user = { ...action.payload.user }
             state.isLoggedIn = true
             state.error = null
             state.permissionExpired = false
-            const staticMenu = {
-                '/select-client-location': {
-                    path: '/select-client-location',
-                    key: 'select_client_location',
-                    label: 'Select Client Location'
-                },
-                '/': {
-                    path: '/',
-                    key: 'dashboard',
-                    label: 'Dashboard'
-                },
-                '/components-view': {
-                    path: '/components-view',
-                    key: 'component_view',
-                    label: 'Component View'
-                },
-                '/manageUploadsDownloads': {
-                    path: '/manageUploadsDownloads',
-                    key: 'manage_upload_downloads',
-                    label: 'Manage Upload Downloads'
-                },
-                '/account': {
-                    path: '/account',
-                    key: 'account',
-                    label: 'Account'
-                }
-            }
 
             // if (action.payload.permission.access) {
             //     const tempMenus = new Set()
@@ -155,6 +136,15 @@ const AuthSlice = createSlice({
     }
 })
 
-export const { logout, testLogin, setLoading, setError, setUser, setLocation, setUserDetails, setPermissionExpired } =
-    AuthSlice.actions
+export const {
+    logout,
+    testLogin,
+    setLoading,
+    setError,
+    setUser,
+    setLocation,
+    setMenuItems,
+    setUserDetails,
+    setPermissionExpired
+} = AuthSlice.actions
 export default AuthSlice.reducer

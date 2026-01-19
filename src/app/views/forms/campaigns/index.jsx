@@ -17,8 +17,8 @@ import MainCard from '@core/components/extended/MainCard'
 import { useDispatch, useSelector } from 'react-redux'
 import {
     useCreateCampaignMutation,
-    useUpdateLocationMasterMutation,
-    getLocationMasterById
+    useUpdateCampaignMutation,
+    getCampaignById
 } from '@/app/store/slices/api/campaignSlice'
 import { useFetchPincodeDetailsMutation } from '@app/store/slices/api/clientSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
@@ -42,14 +42,13 @@ function CampaignsForm() {
     const [tabsEnabled, setTabsEnabled] = useState([true, false, false])
     const [clientId, setClientId] = useState(null)
     const [createCampaignMaster] = useCreateCampaignMutation()
-    const [updateLocationMaster] = useUpdateLocationMasterMutation()
+    const [updateCampaign] = useUpdateCampaignMutation()
     const [fetchPincodeDetails] = useFetchPincodeDetailsMutation()
     const dispatch = useDispatch()
     const tabLabels = ['basicInformation', 'addressInformation', 'otherDetails']
 
     // Initial form values
     const initialValues = {
-        tabId: 'basicInformation',
         title: '',
         description: ''
     }
@@ -115,25 +114,25 @@ function CampaignsForm() {
                 if (activeTab === 0 && !clientId) {
                     response = await createCampaignMaster(values).unwrap()
                     setClientId(response.data.id)
-                    formik.setFieldValue('tabId', tabLabels[1])
-                    enableTabsAfterValidation(1)
-                    setActiveTab(1)
+                    // formik.setFieldValue('tabId', tabLabels[1])
+                    // enableTabsAfterValidation(1)
+                    // setActiveTab(1)
                 } else if (clientId) {
-                    if (activeTab < tabLabels.length - 1) {
-                        response = await updateLocationMaster({ id: clientId, ...values }).unwrap()
-                        const nextTab = activeTab + 1
-                        formik.setFieldValue('tabId', tabLabels[nextTab])
-                        enableTabsAfterValidation(nextTab)
-                        setActiveTab(nextTab)
-                    } else {
-                        response = await updateLocationMaster({ id: clientId, ...values, action: 'submit' }).unwrap()
-                        formik.resetForm()
-                        setActiveTab(0)
-                        setTabsEnabled([true, false, false])
-                        navigate('/setup/location')
-                    }
+                    // if (activeTab < tabLabels.length - 1) {
+                    //     response = await updateLocationMaster({ id: clientId, ...values }).unwrap()
+                    //     const nextTab = activeTab + 1
+                    //     formik.setFieldValue('tabId', tabLabels[nextTab])
+                    //     enableTabsAfterValidation(nextTab)
+                    //     setActiveTab(nextTab)
+                    // } else {
+                    response = await updateCampaign({ id: clientId, ...values }).unwrap()
+                    formik.resetForm()
+                    setActiveTab(0)
+                    setTabsEnabled([true, false, false])
+                    navigate('/master/campaigns')
+                    // }
                 }
-                if (response.success && response.status_code === 200) {
+                if (response.success) {
                     dispatch(
                         openSnackbar({
                             open: true,
@@ -143,6 +142,7 @@ function CampaignsForm() {
                             anchorOrigin: { vertical: 'top', horizontal: 'right' }
                         })
                     )
+                    navigate('/master/campaigns')
                 }
             } catch (error) {
                 if (error.data?.data?.errors) {
@@ -176,12 +176,12 @@ function CampaignsForm() {
     const handleTabChange = (event, newValue) => {
         if (tabsEnabled[newValue]) {
             setActiveTab(newValue)
-            formik.setFieldValue('tabId', tabLabels[newValue])
+            // formik.setFieldValue('tabId', tabLabels[newValue])
         }
     }
 
     const getLocation = async id => {
-        const { data, error } = await dispatch(getLocationMasterById.initiate(id))
+        const { data, error } = await dispatch(getCampaignById.initiate(id))
         if (error) return true
         if (!data || !data?.data || !objectLength(data.data)) {
             dispatch(
@@ -291,6 +291,24 @@ function CampaignsForm() {
                     type: 'text',
                     required: true,
                     grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'inclusions',
+                    label: 'Inclusions',
+                    type: 'textarea',
+                    required: true,
+                    grid: { xs: 12, sm: 4, md: 6 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'exclusions',
+                    label: 'Exclusions',
+                    type: 'textarea',
+                    required: true,
+                    grid: { xs: 12, sm: 4, md: 6 },
                     size: 'small',
                     customSx
                 }
@@ -464,7 +482,7 @@ function CampaignsForm() {
             } else newRow[rowKey] = row[rowKey] || ''
             return rowKey
         })
-        formik.setValues({ ...newRow, tabId: 'basicInformation' })
+        formik.setValues({ ...newRow })
 
         // TODO:
         // ? scroll the page to top
@@ -477,12 +495,12 @@ function CampaignsForm() {
     }
 
     // this useEffect handles edit data
-    // useEffect(() => {
-    //     const path = window.location.pathname
-    //     if (editData && objectLength(editData)) editHandler(formId, editData)
-    //     if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
-    //     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // }, [editData])
+    useEffect(() => {
+        const path = window.location.pathname
+        if (editData && objectLength(editData)) editHandler(formId, editData)
+        // if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editData])
 
     useEffect(() => {
         if (formId) getLocation(formId)
@@ -524,11 +542,11 @@ function CampaignsForm() {
                     borderRadius: '8px'
                 }}
             >
-                <Grid container xs={12} md={3.6} spacing={2}>
+                {/* <Grid container xs={12} md={3.6} spacing={2}>
                     <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
                         <IdentityCard data={identityCardData} />
                     </Grid>
-                </Grid>
+                </Grid> */}
                 <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         {/* <Tabs

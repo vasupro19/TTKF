@@ -80,6 +80,10 @@ function MasterPackagesTable() {
         if (isExcelQuery(queryString)) {
             return true
         }
+        console.log(response.data)
+        // const result = response.data.map(item => {
+        //     return { ...response.data, url: `/package/activities/:${item.id}` };
+        // })
         setUsers(response?.data || [])
         setRecordsCount(response?.recordsTotal || 0)
         return true
@@ -92,7 +96,10 @@ function MasterPackagesTable() {
         })
         setFilters({ created_at: { from: '', to: '' } })
     }
-
+    const viewPackageItenary = row => {
+        console.log(row, 'row')
+        navigate(`/package/activities/${row.id}`)
+    }
     const deleteHandler = useCallback(async id => {
         setRemoveId(id)
         dispatch(
@@ -143,6 +150,20 @@ function MasterPackagesTable() {
         ])
     }
 
+    const enhancedColumns = useMemo(
+        () =>
+            columns.map(col =>
+                col.key === 'name'
+                    ? {
+                          ...col,
+                          isClickable: true,
+                          onClick: row => viewPackageItenary(row)
+                      }
+                    : col
+            ),
+        [columns]
+    )
+
     const handleAdd = () => {
         navigate('/master/packages/add')
     }
@@ -181,6 +202,7 @@ function MasterPackagesTable() {
     const addActivityHandler = (id, row) => {
         navigate(`/package/activities/${id}/${row.id}`)
     }
+
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -299,7 +321,7 @@ function MasterPackagesTable() {
                 <DataTable
                     isCheckbox
                     data={users || []}
-                    columns={columns}
+                    columns={enhancedColumns}
                     queryHandler={queryHandler}
                     reqKey='getLocationMasterLKey'
                     refetch={refetch}
