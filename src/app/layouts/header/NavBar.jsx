@@ -25,7 +25,7 @@ import FloatingTab from '@/core/components/navbar/FloatingTab'
 
 import MenuIcon from '@mui/icons-material/Menu'
 // ** import from redux
-import { logout as logoutAction, setLocation } from '@app/store/slices/auth'
+import { logout as logoutAction, setLocation, setMenuItems } from '@app/store/slices/auth'
 import { toggleNavBar } from '@app/store/slices/navBarSlice'
 import { useSelector, useDispatch } from 'react-redux'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
@@ -114,15 +114,8 @@ function NavBar() {
     //     refetchOnMountOrArgChange: true
     // })
 
-    // const handleMenu = async () => {
-    //     try {
-    //         const res = await getMenu(`?userId=${user?.id}`).unwrap()
-    //         setMenuItems(res.data)
-    //     } catch (error) {
-    //         console.log(error)
-    //     }
-    // }
-    // const menuItems = menuData?.data || []
+    // dispatch(setMenuItems(menuData?.data))
+
     // ::Note notification related sate and functions starts here
     const [notifications, setNotifications] = useState([
         {

@@ -339,24 +339,36 @@ function MasterLeadsTable() {
                         <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
                             <UiAccessGuard type='edit'>
                                 <IconButton
+                                    sx={{ color: 'success.main' }}
+                                    size='small'
+                                    aria-label='edit row'
+                                    onClick={() => editHandler(row.id, row)}
+                                >
+                                    <Tooltip title='Edit'>
+                                        <Edit fontSize='small' sx={{ fill: '#60498a' }} />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
+                            <UiAccessGuard type='edit'>
+                                <IconButton
                                     sx={{ color: 'error.main' }}
                                     size='small'
                                     aria-label='edit row'
                                     onClick={() => deleteHandler(row.id, row.status)}
                                 >
-                                    {row.status !== 'verified' ? (
+                                    {row.status !== 'verified' && row.status !== 'Confirmed' ? (
                                         <Tooltip title='Verify'>
-                                            <VerifiedOutlinedIcon fontSize='small' />
+                                            <VerifiedOutlinedIcon fontSize='small' color='action' />
                                         </Tooltip>
                                     ) : (
                                         <Tooltip title='Verified Lead'>
-                                            <VerifiedIcon fontSize='small' />
+                                            <VerifiedIcon fontSize='small' color='success' />
                                         </Tooltip>
                                     )}
                                 </IconButton>
                             </UiAccessGuard>
 
-                            {row.status === 'verified' && (
+                            {(row.status === 'verified' || row.status === 'Confirmed') && (
                                 <IconButton
                                     sx={{ color: 'error.main' }}
                                     size='small'

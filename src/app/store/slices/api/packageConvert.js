@@ -100,6 +100,30 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
+        }),
+        addGuestPayment: build.mutation({
+            query: payload => ({
+                url: '/package/guest-payment',
+                method: 'POST',
+                body: payload // packageId, amount, paymentMethod, transactionId, remarks
+            }),
+            // This invalidates the Package list so the 'guestPaidAmount' and 'status' refresh automatically
+            invalidatesTags: ['ConfirmedPackage', 'PaymentHistory']
+        }),
+        sendVoucherEmail: build.mutation({
+            query: packageId => ({
+                url: `/package/send-email/${packageId}`,
+                method: 'POST'
+            })
+            // No need to invalidate tags unless the status changes to "Voucher Sent"
+        }),
+        getGuestPaymentHistory: build.query({
+            query: packageId => ({
+                url: `/package/guest-payment-history/${packageId}`,
+                method: 'GET'
+            }),
+            // Provides tags so the list refreshes if a new payment is added
+            providesTags: (result, error, packageId) => [{ type: 'GuestPayment', id: packageId }]
         })
     })
 })
@@ -112,5 +136,8 @@ export const {
     useGetServicesByPackageQuery,
     useDeleteServiceMutation,
     useSendSupplierEmailMutation,
+    useAddGuestPaymentMutation,
+    useSendVoucherEmailMutation,
+    useGetGuestPaymentHistoryQuery,
     endpoints: { getConfirmedBooking, convertPackage, getAllConfirmedPackages }
 } = bookingSlice

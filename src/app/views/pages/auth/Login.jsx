@@ -53,7 +53,7 @@ export default function Login() {
             try {
                 const res = await login(values).unwrap()
                 const userData = res.data.user
-                dispatch(setUserDetails(res.data.user))
+                dispatch(setUserDetails(userData))
                 // dispatch(setSessionData(res.session))
                 await setToken(res.data.accessToken)
                 const menus = await triggerMenu(userData.id).unwrap()

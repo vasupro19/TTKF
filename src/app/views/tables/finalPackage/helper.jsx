@@ -45,7 +45,9 @@ export const headers = [
         visible: true,
         minWidth: 8,
         maxWidth: 10
-    }
+    },
+    { key: 'guestPaidAmount', label: 'Guest Paid', visible: true, minWidth: 8, maxWidth: 10 },
+    { key: 'guestPaymentStatus', label: 'Pay Status', visible: true, minWidth: 8, maxWidth: 10 }
 ]
 
 export default headers

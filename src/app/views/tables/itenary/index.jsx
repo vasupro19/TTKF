@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
+import { Box, IconButton, Button, Tooltip, Menu, MenuItem, Typography, CircularProgress } from '@mui/material'
+import * as XLSX from 'xlsx'
 import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
+import { Add, Edit, Delete, FilterAltOff, MoreVert, CloudUpload } from '@mui/icons-material'
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
@@ -16,7 +17,7 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getItenaryClients } from '@/app/store/slices/api/itenarySlice'
+import { getItenaryClients, useUploadItinerariesMutation } from '@/app/store/slices/api/itenarySlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -48,7 +49,7 @@ function MasterItenaryTable() {
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
     const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
-
+    const [uploadTrigger, { isLoading }] = useUploadItinerariesMutation()
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
     const [recordsCount, setRecordsCount] = useState(0)
@@ -81,7 +82,7 @@ function MasterItenaryTable() {
             return true
         }
         setUsers(response?.data || [])
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
         return true
     }
 
@@ -177,7 +178,37 @@ function MasterItenaryTable() {
             handleAdd()
         }
     })
+    const handleFileUpload = e => {
+        const file = e.target.files[0]
+        if (!file) return
 
+        const reader = new FileReader()
+        reader.onload = async event => {
+            const workbook = XLSX.read(event.target.result, { type: 'binary' })
+            const sheet = workbook.Sheets[workbook.SheetNames[0]]
+            const parsedData = XLSX.utils.sheet_to_json(sheet)
+
+            // Logic for formatting data (based on your specific model)
+            const formattedData = parsedData.map(row => ({
+                title: row.Title || row.title,
+                description: row.Description || row.description
+            }))
+
+            try {
+                // The loading state 'isLoading' becomes true once this is called
+                await uploadTrigger({
+                    itineraries: formattedData, // or destinations
+                    campaignId: params.id
+                }).unwrap()
+
+                // Reset input value so same file can be uploaded again if needed
+                e.target.value = ''
+            } catch (err) {
+                console.error('Upload failed:', err)
+            }
+        }
+        reader.readAsBinaryString(file)
+    }
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -208,7 +239,7 @@ function MasterItenaryTable() {
                             placeholder='Search locations...'
                         />
                         {/* // Example for "From" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='from'
                             filters={filters}
                             setFilters={setFilters}
@@ -218,13 +249,13 @@ function MasterItenaryTable() {
                         {/* </Box> */}
 
                         {/* // Example for "To" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='to'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='To date'
                             label='To'
-                        />
+                        />  */}
                         {/* <TextField
                         placeholder='search data'
                         size='small'
@@ -280,9 +311,38 @@ function MasterItenaryTable() {
                             })
                         }
                     /> */}
-                        <UiAccessGuard>
+                        {/* <UiAccessGuard>
                             <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
+                        </UiAccessGuard> */}
+                        <Box sx={{ m: 1, position: 'relative' }}>
+                            <Button
+                                variant='contained'
+                                component='label'
+                                // Disable button during loading to prevent multiple clicks
+                                disabled={isLoading}
+                                startIcon={!isLoading && <CloudUpload />}
+                            >
+                                {isLoading ? 'Uploading...' : `Upload Excel`}
+
+                                {/* Hidden File Input */}
+                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+
+                                {/* Circular Progress Overlay */}
+                                {isLoading && (
+                                    <CircularProgress
+                                        size={24}
+                                        sx={{
+                                            color: 'primary.main',
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: '50%',
+                                            marginTop: '-12px',
+                                            marginLeft: '-12px'
+                                        }}
+                                    />
+                                )}
+                            </Button>
+                        </Box>
                         <UiAccessGuard type='create'>
                             <CustomButton variant='clickable' onClick={handleAdd}>
                                 Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />

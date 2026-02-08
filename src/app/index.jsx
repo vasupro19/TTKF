@@ -13,6 +13,7 @@ import Snackbar from '@core/components/extended/Snackbar'
 import ThemeCustomization from '@core/theme'
 import Localization from '@app/context/LocalizationContext'
 import Routes from './routes'
+import MenuInitializer from './MenuConfig'
 
 function App() {
     return (
@@ -25,7 +26,9 @@ function App() {
                         {/* <BrowserRouter> */}
                         <BrowserRouter>
                             <Suspense fallback={<Loader />}>
-                                <Routes />
+                                <MenuInitializer>
+                                    <Routes />
+                                </MenuInitializer>
                             </Suspense>
                         </BrowserRouter>
                     </ThemeCustomization>

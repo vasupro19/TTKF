@@ -62,7 +62,7 @@ function LeadsForm() {
         leadStatus: '',
         remarks: '',
         assignedTo: '',
-        campaignName: ''
+        campaignId: ''
     }
 
     // Validation schema per tab
@@ -170,6 +170,7 @@ function LeadsForm() {
     const editHandler = (id, row) => {
         setLeadId(row.id)
         const formatted = {}
+        console.log(row, 'row')
         Object.keys(row).forEach(key => {
             formatted[key] = row[key] ? row[key].toString() : ''
         })
@@ -259,10 +260,17 @@ function LeadsForm() {
                     name: 'leadStatus',
                     label: 'Status',
                     type: 'select',
-                    options: [{ label: 'pending', value: 'Pending' }],
+                    options:
+                        formik.values.leadStatus === 'Confirmed' || formik.values.leadStatus === 'verified'
+                            ? [
+                                  { label: 'Confirmed', value: 'Confirmed' },
+                                  { label: 'Verified', value: 'verified' }
+                              ]
+                            : [{ label: 'Pending', value: 'Pending' }],
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
-                    customSx
+                    customSx,
+                    isDisabled: !!formId
                 },
                 {
                     name: 'campaignId',

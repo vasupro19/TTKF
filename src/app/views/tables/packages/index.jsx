@@ -85,7 +85,7 @@ function MasterPackagesTable() {
         //     return { ...response.data, url: `/package/activities/:${item.id}` };
         // })
         setUsers(response?.data || [])
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
         return true
     }
 

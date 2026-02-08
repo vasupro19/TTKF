@@ -47,8 +47,17 @@ export default function UserMenuAccess() {
             setMenus(data.data)
         }
     }, [data])
+    // Add this useEffect to sync the initial state
+    useEffect(() => {
+        if (menus && menus.length > 0) {
+            // Find all menus that already have access and set their IDs as the initial state
+            const alreadyHasAccess = menus
+                .filter(menu => menu.access === true || menu.access === 1)
+                .map(menu => menu.id)
 
-    // ✅ Toggle access and update backend
+            setPermission(alreadyHasAccess)
+        }
+    }, [menus]) // Only runs when the menus list is loaded/changed
     const handleMenuAccessChange = async menuId => {
         try {
             setPermission(

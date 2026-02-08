@@ -48,6 +48,19 @@ export const itenarySlice = apiSliceConfig.injectEndpoints({
                 }
             },
             invalidatesTags: ['ItenaryClient', 'ItenaryClientById']
+        }),
+        uploadItineraries: build.mutation({
+            query: payload => {
+                const KEY = 'uploadItinerariesKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: '/campaign/itenary/upload-excel',
+                    method: 'POST',
+                    body: payload,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['getItineraries']
         })
     })
 })
@@ -58,6 +71,7 @@ export const {
     useGetItenaryClientByIdQuery,
     useCreateItenaryClientMutation,
     useUpdateItenaryClientMutation,
+    useUploadItinerariesMutation,
 
     // Export the endpoint reference itself
     endpoints: { getItenaryClientById, getItenaryClients }

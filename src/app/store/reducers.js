@@ -24,7 +24,7 @@ import PickData from './slices/pickDataSlice'
 import breadcrumbsSlice from './slices/breadcrumbsSlice'
 
 const persistConfig = {
-    key: 'cerebrum',
+    key: 'ttk',
     storage
 }
 

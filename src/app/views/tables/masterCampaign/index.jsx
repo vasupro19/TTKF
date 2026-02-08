@@ -84,7 +84,7 @@ function MasterCampaignTable() {
             return true
         }
         setUsers(response?.data || [])
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
         return true
     }
 

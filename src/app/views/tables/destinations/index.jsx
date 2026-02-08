@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
+import { Box, Button, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
 import Stack from '@mui/material/Stack'
 // import Box from '@mui/material/Box'
 // import Tooltip from '@mui/material/Tooltip'
 // import IconButton from '@mui/material/IconButton'
 // import TextField from '@mui/material/TextField'
 import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
+import * as XLSX from 'xlsx'
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
@@ -20,7 +21,7 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
+import { getDestinationClients, useUploadDestinationsMutation } from '@/app/store/slices/api/destinationSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -65,6 +66,7 @@ function MasterDestinationTable() {
     const [isShowClearButton, setIsShowClearButton] = useState(false)
     const [clearAllFilters, setClearAllFilters] = useState(false)
     const [refetch, setRefetch] = useState(false)
+    const [uploadDestinations, { isLoading }] = useUploadDestinationsMutation()
     // const [getDestinationClient] = useGetDestinationClientsQuery()
 
     const [search, setSearch] = useState({
@@ -88,7 +90,7 @@ function MasterDestinationTable() {
             return true
         }
         setUsers(response?.data || [])
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
         return true
     }
 
@@ -184,7 +186,38 @@ function MasterDestinationTable() {
             handleAdd()
         }
     })
+    const handleFileUpload = e => {
+        const file = e.target.files[0]
+        const reader = new FileReader()
 
+        reader.onload = async event => {
+            const workbook = XLSX.read(event.target.result, { type: 'binary' })
+            const sheetName = workbook.SheetNames[0]
+            const sheet = workbook.Sheets[sheetName]
+            const parsedData = XLSX.utils.sheet_to_json(sheet)
+
+            // Map Excel headers to Database columns
+            const formattedData = parsedData.map(row => ({
+                name: row['Destination Name'] || row.name,
+                delux_hotel: row['Deluxe Hotel'] || row.delux_hotel,
+                super_delux_hotel: row['Super Deluxe Hotel'] || row.super_delux_hotel,
+                luxury_hotel: row['Luxury Hotel'] || row.luxury_hotel,
+                premium_hotel: row['Premium Hotel'] || row.premium_hotel
+            }))
+
+            try {
+                await uploadDestinations({
+                    destinations: formattedData,
+                    campaignId: params.id
+                }).unwrap()
+                alert('Upload Successful!')
+            } catch (err) {
+                console.error('Upload failed', err)
+            }
+        }
+
+        reader.readAsBinaryString(file)
+    }
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -215,7 +248,7 @@ function MasterDestinationTable() {
                             placeholder='Search locations...'
                         />
                         {/* // Example for "From" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='from'
                             filters={filters}
                             setFilters={setFilters}
@@ -225,71 +258,31 @@ function MasterDestinationTable() {
                         {/* </Box> */}
 
                         {/* // Example for "To" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='to'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='To date'
                             label='To'
-                        />
-                        {/* <TextField
-                        placeholder='search data'
-                        size='small'
-                        type='search'
-                        sx={{
-                            '& .MuiInputBase-input': {
-                                fontSize: 12
-                            },
-                            '& .MuiOutlinedInput-root': {
-                                '& fieldset': {
-                                    borderColor: 'primary.800',
-                                    borderWidth: '1.2px'
-                                },
-                                '&:hover fieldset': {
-                                    borderColor: 'primary.main'
-                                },
-                                '&.Mui-focused fieldset': {
-                                    borderColor: 'primary.main'
-                                }
-                                // padding: '0px 4px'
-                            },
-                            '& .MuiInputBase-inputSizeSmall': {
-                                padding: '3px 6px !important'
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') setSearch({ ...search, value: e.target.value })
-                        }}
-                    /> */}
-                        {/* <TextField
-                        placeholder='from date'
-                        size='small'
-                        type='date'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.from}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, from: `${e.target.value} 00:00:00` }
-                            })
-                        }
-                    /> */}
-                        {/* <TextField
-                        placeholder='To Date'
-                        type='date'
-                        size='small'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.to}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, to: `${e.target.value} 23:59:59` }
-                            })
-                        }
-                    /> */}
-                        <UiAccessGuard>
+                        /> */}
+
+                        {/* <UiAccessGuard>
                             <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
+                        </UiAccessGuard> */}
+                        <Box>
+                            <input
+                                accept='.xlsx, .xls'
+                                style={{ display: 'none' }}
+                                id='excel-upload'
+                                type='file'
+                                onChange={handleFileUpload}
+                            />
+                            <label htmlFor='excel-upload'>
+                                <Button variant='contained' component='span' disabled={isLoading}>
+                                    {isLoading ? 'Uploading...' : 'Upload Excel'}
+                                </Button>
+                            </label>
+                        </Box>
                         <UiAccessGuard type='create'>
                             <CustomButton variant='clickable' onClick={handleAdd}>
                                 Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />

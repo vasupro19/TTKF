@@ -127,7 +127,7 @@ function SetupUserTable() {
                 return newItem
             }) || []
         )
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
     }
 
     // open add new user modal
@@ -313,11 +313,11 @@ function SetupUserTable() {
                                     Clear All Filters
                                 </CustomButton>
                             )}
-                            <SearchFilterDropdown
+                            {/* <SearchFilterDropdown
                                 buttonText='Select Location'
                                 optionsProp={['INR', 'USD', 'JPY', 'AUD', 'EUR', 'GBP', 'CAD']}
                                 // onApply={selected => console.log('Selected options:', selected)}
-                            />
+                            /> */}
                             <UiAccessGuard>
                                 <CSVExport handleExcelClick={handleCurrentView} exportAllFunc={handleExportAllExcel} />
                             </UiAccessGuard>

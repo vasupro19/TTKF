@@ -327,33 +327,63 @@ export default function SetupUserForm() {
         })
     }
 
+    // useEffect(() => {
+    //     const getUserData = async id => {
+    //         const response = await dispatch(getDataForUpdate.initiate(id))
+    //         console.log(response)
+    //         if (response?.data?.success) {
+    //             const { selectedUser, mappedAccounts, roles: rolesList } = response.data.data
+    //             if (formikRef.current) {
+    //                 const formData = {
+    //                     firstName: selectedUser?.name || '',
+
+    //                     phone: `91${selectedUser?.contact_no || ''}`,
+    //                     email: selectedUser?.email || '',
+    //                     password: selectedUser?.password || '',
+    //                     confirmPassword: selectedUser?.password || '',
+    //                     role: {
+    //                         label: Object.keys(rolesList).filter(
+    //                             key => rolesList[`${key}`] === selectedUser.role_id
+    //                         )[0],
+    //                         value: selectedUser.role_id
+    //                     }
+    //                 }
+    //                 formikRef.current.setValues(formData) // to call formik setValues
+    //             }
+    //         }
+    //     }
+    //     if (editId && parseInt(editId, 10)) getUserData(editId)
+    //     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // }, [editId])
     useEffect(() => {
         const getUserData = async id => {
             const response = await dispatch(getDataForUpdate.initiate(id))
-            if (response?.data?.success) {
-                const { selectedUser, mappedAccounts, roles: rolesList } = response.data.data
-                if (formikRef.current) {
-                    const formData = {
-                        firstName: selectedUser?.name || '',
+            console.log(response, 'API Response')
 
-                        phone: `91${selectedUser?.contact_no || ''}`,
-                        email: selectedUser?.email || '',
-                        password: selectedUser?.password || '',
-                        confirmPassword: selectedUser?.password || '',
-                        role: {
-                            label: Object.keys(rolesList).filter(
-                                key => rolesList[`${key}`] === selectedUser.role_id
-                            )[0],
-                            value: selectedUser.role_id
-                        }
+            if (response?.data?.success) {
+                // The API returns the user object directly in response.data.data
+                const userData = response.data.data
+
+                if (formikRef.current && userData) {
+                    const formData = {
+                        firstName: userData?.name || '',
+                        // Note: Your response uses 'phoneNumber', not 'contact_no'
+                        phone: userData?.phoneNumber || '',
+                        email: userData?.email || '',
+                        // password: userData?.password || '',
+                        // confirmPassword: userData?.password || '',
+                        // The label is directly available in userData.role.name
+                        role: userData?.role
                     }
-                    formikRef.current.setValues(formData) // to call formik setValues
+                    formikRef.current.setValues(formData)
                 }
             }
         }
-        if (editId && parseInt(editId, 10)) getUserData(editId)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editId])
+
+        if (editId && parseInt(editId, 10)) {
+            getUserData(editId)
+        }
+    }, [editId, dispatch])
 
     return (
         <Box sx={{ py: 2 }}>
@@ -377,7 +407,30 @@ export default function SetupUserForm() {
                     let isError = false
                     let message
 
-                    if (editId && parseInt(editId, 10)) payload.id = editId
+                    if (editId && parseInt(editId, 10)) {
+                        payload.id = editId
+                        try {
+                            const response = await createUser(payload).unwrap()
+                            message = response?.message || response?.data?.message || 'user created successfully!'
+                            if (response?.data?.user_id && !parseInt(editId, 10)) {
+                                navigate(`/userManagement/user/menu/${response?.data?.user_id}`)
+                            } else {
+                                setValues({ ...initialValues })
+                                resetForm()
+                                navigate(-1)
+                            }
+                        } catch (error) {
+                            isError = true
+                            if (error?.data?.data?.errors && Object.keys(error?.data?.data?.errors).length)
+                                handleBackendErrors(error.data.data.errors, setFieldError)
+                            message =
+                                error?.response?.message ||
+                                error?.response?.data?.message ||
+                                error?.data?.message ||
+                                error?.message ||
+                                'unable to create user!'
+                        }
+                    }
                     try {
                         const response = await createUser(payload).unwrap()
                         message = response?.message || response?.data?.message || 'user created successfully!'

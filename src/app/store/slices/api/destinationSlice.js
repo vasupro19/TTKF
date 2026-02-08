@@ -48,6 +48,26 @@ export const destinationSlice = apiSliceConfig.injectEndpoints({
                 }
             },
             invalidatesTags: ['DestinationClient', 'DestinationClientById']
+        }),
+        uploadDestinations: build.mutation({
+            query: payload => {
+                const KEY = 'uploadDestinationsKey'
+                // Trigger global loader event based on your project's loading pattern
+                dispatchLoaderEvent(KEY)
+
+                return {
+                    url: 'campaign/destination/upload-excel', // Ensure this matches your backend route
+                    method: 'POST',
+                    body: payload,
+                    responseHandler: async result =>
+                        customResponseHandler({
+                            result,
+                            requestKey: KEY
+                        })
+                }
+            },
+            // This tells RTK Query to refetch the destination list automatically
+            invalidatesTags: ['getDestinations']
         })
     })
 })
@@ -58,6 +78,7 @@ export const {
     useGetDestinationClientByIdQuery,
     useCreateDestinationClientMutation,
     useUpdateDestinationClientMutation,
+    useUploadDestinationsMutation,
 
     // Export the endpoint reference itself if needed elsewhere
     endpoints: { getDestinationClientById, getDestinationClients }

@@ -1,22 +1,35 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography, Divider } from '@mui/material'
+import { Box, IconButton, Tooltip, Menu, MenuItem, Typography, Divider, CircularProgress } from '@mui/material'
 import Stack from '@mui/material/Stack'
 // import Box from '@mui/material/Box'
 // import Tooltip from '@mui/material/Tooltip'
 // import IconButton from '@mui/material/IconButton'
 // import TextField from '@mui/material/TextField'
-import { Apartment, DirectionsCar, Edit, Delete, FilterAltOff, Add, Visibility } from '@mui/icons-material'
+import {
+    Apartment,
+    DirectionsCar,
+    Edit,
+    Delete,
+    FilterAltOff,
+    Add,
+    Visibility,
+    Email as EmailIcon
+} from '@mui/icons-material'
 import {
     getAllConfirmedPackages,
     useUpdateConfirmedBookingMutation,
     useAddServiceToPackageMutation,
     useGetServicesByPackageQuery,
     useDeleteServiceMutation,
-    useSendSupplierEmailMutation
+    useSendSupplierEmailMutation,
+    useAddGuestPaymentMutation,
+    useSendVoucherEmailMutation
 } from '@/app/store/slices/api/packageConvert' // Use your new slice
 import AssignmentModal from '@/core/components/modals/AssignmentModal'
 import ServiceListModal from '@/core/components/modals/ServiceListModal'
+import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal' // Create this next
+import GuestLedgerModal from '@/core/components/modals/GuestLedgerModal' // Create this next
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
@@ -31,6 +44,7 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
 import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -73,6 +87,7 @@ function FinalPackageTable() {
     const [recordsCount, setRecordsCount] = useState(0)
     const [excelHandler, setExcelHandler] = useState(false)
     const [removeId, setRemoveId] = useState(null)
+    const [paymentModal, setPaymentModal] = useState({ open: false, row: null })
 
     const [isShowClearButton, setIsShowClearButton] = useState(false)
     const [clearAllFilters, setClearAllFilters] = useState(false)
@@ -85,7 +100,29 @@ function FinalPackageTable() {
         { packageId: activeRow?.id, type: listModal.type },
         { skip: !listModal.open || !activeRow?.id }
     )
+    const [addGuestPayment, { isLoading: isPayingGuest }] = useAddGuestPaymentMutation()
     // const [getDestinationClient] = useGetDestinationClientsQuery()
+    const [sendVoucher, { isLoading: isSendingVoucher }] = useSendVoucherEmailMutation()
+    const [sendingId, setSendingId] = useState(null) // Track which specific row is sending
+    const [ledgerModal, setLedgerModal] = useState({ open: false, packageId: null, guestName: '', data: [] })
+
+    const handleSendVoucher = async row => {
+        setSendingId(row.id)
+        try {
+            await sendVoucher(row.id).unwrap()
+            dispatch(
+                openSnackbar({
+                    message: `Voucher sent to ${row.lead.fullName} successfully!`,
+                    variant: 'alert',
+                    alert: { color: 'success' }
+                })
+            )
+        } catch (err) {
+            // Error handled by customResponseHandler
+        } finally {
+            setSendingId(null)
+        }
+    }
 
     const [search, setSearch] = useState({
         // value: '',
@@ -215,9 +252,42 @@ function FinalPackageTable() {
         setActiveRow(row)
         setListModal({ open: true, type: 'Taxi', services: [] })
     }
+    const handleViewPaymentLedger = async row => {
+        // If you have an API to fetch history:
+        // const { data } = await dispatch(getGuestPaymentHistory.initiate(row.id));
+        // setLedgerModal({ open: true, packageId: row.id, guestName: row.lead?.fullName, data: data });
+
+        // For now, let's assume you'll pass the ID to a modal that fetches its own data
+        setLedgerModal({
+            open: true,
+            packageId: row.id,
+            guestName: row.lead?.fullName || 'Guest'
+        })
+    }
     const enhancedColumns = useMemo(
         () =>
             columns.map(col => {
+                if (col.key === 'guestPaidAmount') {
+                    return {
+                        ...col,
+                        isClickable: true,
+                        // Style it so users know it's a link/action
+                        render: row => (
+                            <Typography
+                                variant='body2'
+                                sx={{
+                                    color: 'primary.main',
+                                    fontWeight: 'bold',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ₹{row.guestPaidAmount || 0}
+                            </Typography>
+                        ),
+                        onClick: row => handleViewPaymentLedger(row)
+                    }
+                }
                 if (col.key === 'guestName') {
                     return {
                         ...col,
@@ -364,6 +434,27 @@ function FinalPackageTable() {
             dispatch(openSnackbar({ message: 'Failed to send email', variant: 'alert', alert: { color: 'error' } }))
         }
     }
+    const handleSaveGuestPayment = async formData => {
+        try {
+            await addGuestPayment({
+                packageId: paymentModal.row.id,
+                ...formData // amount, paymentMethod, transactionId, remarks
+            }).unwrap()
+
+            setPaymentModal({ open: false, row: null })
+            setRefetch(true) // Refresh the table to show updated guestPaidAmount
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Guest payment recorded successfully!',
+                    variant: 'alert',
+                    alert: { color: 'success' }
+                })
+            )
+        } catch (err) {
+            console.error('Payment failed:', err)
+        }
+    }
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -382,7 +473,35 @@ function FinalPackageTable() {
                     totalRecords={recordsCount}
                     renderAction={row => (
                         <Stack direction='row' spacing={1} justifyContent='center'>
+                            <Tooltip title='Send Confirmation Voucher to Guest'>
+                                <IconButton
+                                    size='small'
+                                    sx={{ color: 'info.main', border: '1px solid', borderColor: 'info.light' }}
+                                    onClick={() => handleSendVoucher(row)}
+                                    disabled={sendingId === row.id} // Disable while loading
+                                >
+                                    {sendingId === row.id ? (
+                                        <CircularProgress size={20} color='inherit' />
+                                    ) : (
+                                        <EmailIcon fontSize='small' />
+                                    )}
+                                </IconButton>
+                            </Tooltip>
+
+                            {/* Existing Guest Payment Button */}
+                            <Tooltip title='Record Guest Payment'>{/* ... existing code */}</Tooltip>
+                            {/* Guest Payment Button (New) */}
+                            <Tooltip title='Record Guest Payment'>
+                                <IconButton
+                                    size='small'
+                                    sx={{ color: 'success.main', border: '1px solid', borderColor: 'success.light' }}
+                                    onClick={() => setPaymentModal({ open: true, row })}
+                                >
+                                    <AccountBalanceWalletIcon fontSize='small' />
+                                </IconButton>
+                            </Tooltip>
                             {/* Add Hotel Button */}
+
                             <Tooltip title='Assign Hotel'>
                                 <IconButton
                                     size='small'
@@ -449,6 +568,19 @@ function FinalPackageTable() {
                 onEdit={handleEditService}
                 onDelete={id => handleDeleteService(id)} // Function to call your delete mutation
                 onSendEmail={id => handleSendEmail(id)} // Function to call your email mutation
+            />
+            <GuestPaymentModal
+                open={paymentModal.open}
+                row={paymentModal.row} // Pass the package row to show balance info
+                isLoading={isPayingGuest}
+                onClose={() => setPaymentModal({ open: false, row: null })}
+                onSave={handleSaveGuestPayment}
+            />
+            <GuestLedgerModal
+                open={ledgerModal.open}
+                packageId={ledgerModal.packageId}
+                guestName={ledgerModal.guestName}
+                onClose={() => setLedgerModal({ ...ledgerModal, open: false })}
             />
         </ContextMenuProvider>
     )

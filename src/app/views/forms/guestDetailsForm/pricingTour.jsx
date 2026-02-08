@@ -4,6 +4,7 @@ import { useFormik } from 'formik'
 
 // router
 import { useParams, useNavigate } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
 
 // theme components
 import {
@@ -30,7 +31,6 @@ import {
 import { motion } from 'framer-motion'
 
 // redux imports
-import { useDispatch, useSelector } from 'react-redux'
 
 import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 
@@ -38,6 +38,8 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 
 function GuestTourPriceForm({ tourId }) {
     const [createPrice] = useUpsertGuestTourPriceMutation()
+    const dispatch = useDispatch()
+
     const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(tourId)
     console.log(price, 'price')
     const [packagePrices, setPackagePrices] = useState({
@@ -66,10 +68,37 @@ function GuestTourPriceForm({ tourId }) {
         }))
     }
     const handleSavePrices = async () => {
-        console.log('Saving prices:', packagePrices)
-        await createPrice(packagePrices).unwrap()
-        // TODO: Add API call here to save these four price values
-        // dispatch(savePackagePrices.initiate(packagePrices)).unwrap();
+        try {
+            console.log('Saving prices:', packagePrices)
+
+            // 1. Trigger the mutation and wait for result
+            await createPrice(packagePrices).unwrap()
+
+            // 2. Dispatch Success Snackbar
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Package prices saved successfully!',
+                    variant: 'alert',
+                    alert: { color: 'success' },
+                    close: false
+                })
+            )
+
+            // Optional: Refresh data or redirect
+        } catch (err) {
+            // 3. Dispatch Error Snackbar
+            console.error('Failed to save prices:', err)
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: err?.data?.message || 'Failed to save prices. Please try again.',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    close: false
+                })
+            )
+        }
     }
 
     return (

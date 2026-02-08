@@ -29,6 +29,7 @@ import {
     Share,
     CheckCircle
 } from '@mui/icons-material'
+import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { motion } from 'framer-motion'
 
 // components
@@ -50,10 +51,11 @@ import {
     getGuestTourById,
     useRemoveGuestTourItenaryMutation
 } from '@/app/store/slices/api/guestTourSlice'
-import { useShareLeadDetailsMutation } from '@/app/store/slices/api/leadSlice'
+import { useShareLeadDetailsMutation, useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
 import { getItenaryClientById, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
 import { useGetDestinationClientsQuery } from '@/app/store/slices/api/destinationSlice'
+import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -92,6 +94,9 @@ function GuestForm() {
     const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery()
     const { data: itenaries = [], isLoading: loadingItenary } = useGetItenaryClientsQuery()
     const { data: destinations = [], isLoading: loadingDestinations } = useGetDestinationClientsQuery()
+    const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(params.leadId)
+
+    const { data: leadData } = useGetLeadByIdQuery(params.leadId)
 
     const [selectedPackage, setSelectedPackage] = useState([])
 
@@ -397,7 +402,14 @@ function GuestForm() {
                 {
                     name: 'tourType',
                     label: 'Tour Type',
-                    type: 'text',
+                    type: 'select', // Changed to select
+                    options: [
+                        { label: 'Honeymoon', value: 'Honeymoon' },
+                        { label: 'Family', value: 'Family' },
+                        { label: 'Friends / Group', value: 'Friends' },
+                        { label: 'Corporate / MICE', value: 'Corporate' },
+                        { label: 'Solo Traveler', value: 'Solo' }
+                    ],
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
                     customSx
@@ -405,7 +417,14 @@ function GuestForm() {
                 {
                     name: 'taxiType',
                     label: 'Taxi Type',
-                    type: 'text',
+                    type: 'select',
+                    options: [
+                        { label: 'Sedan (Dzire/Etios)', value: 'Sedan' },
+                        { label: 'SUV (Innova/Ertiga)', value: 'SUV' },
+                        { label: 'Tempo Traveller', value: 'Tempo Traveller' },
+                        { label: 'Hatchback', value: 'Hatchback' },
+                        { label: 'None (Self Drive)', value: 'None' }
+                    ],
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
                     customSx
@@ -413,7 +432,13 @@ function GuestForm() {
                 {
                     name: 'packageType',
                     label: 'Package Type',
-                    type: 'text',
+                    type: 'select',
+                    options: [
+                        { label: 'Deluxe', value: 'Deluxe' },
+                        { label: 'Super Deluxe', value: 'Super Deluxe' },
+                        { label: 'Luxury', value: 'Luxury' },
+                        { label: 'Premium', value: 'Premium' }
+                    ],
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
                     customSx
@@ -421,7 +446,13 @@ function GuestForm() {
                 {
                     name: 'foodPlan',
                     label: 'Food Plan',
-                    type: 'text',
+                    type: 'select',
+                    options: [
+                        { label: 'EP (Room Only)', value: 'EP' },
+                        { label: 'CP (Breakfast Only)', value: 'CP' },
+                        { label: 'MAP (Breakfast & Dinner)', value: 'MAP' },
+                        { label: 'AP (All Meals)', value: 'AP' }
+                    ],
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
                     customSx
@@ -796,6 +827,45 @@ function GuestForm() {
             )
         }
     }
+
+    const handleWhatsAppClick = () => {
+        // 1. Safety check for Lead Data
+        if (!leadData) {
+            alert('Lead details not found. Please wait for data to load.')
+            return
+        }
+        console.log(leadData, 'leadData')
+        // 2. Clean the phone number
+        const phoneNumber = leadData.data.phone.replace(/\D/g, '')
+
+        // 3. Get the Route (e.g., Shimla ➔ Manali ➔ Jibhi)
+        const route = selectedPackage
+            .map(item => item.destination)
+            .filter(name => name !== 'OVERNIGHT JOURNEY' && name !== 'FRESH UP')
+            .join(' ➔ ')
+
+        // 4. Build the Pricing Text
+        // Assuming packagePrices has these keys from your 'handleSavePrices' logic
+        let pricingInfo = `*💰 Package Options:* \n`
+        if (price.data.deluxePrice) pricingInfo += `• Deluxe: ₹${price.data.deluxePrice}\n`
+        if (price.data.superDeluxePrice) pricingInfo += `• Super Deluxe: ₹${price.data.superDeluxePrice}\n`
+        if (price.data.luxuryPrice) pricingInfo += `• Luxury: ₹${price.data.luxuryPrice}\n`
+        if (price.data.premiumPrice) pricingInfo += `• Premium: ₹${price.data.premiumPrice}\n`
+
+        // 5. Create the Message
+        const message = encodeURIComponent(
+            `*TRAVEL QUOTATION - The Travel Kart*\n\n` +
+                `Hi ${leadData.data.fullName},\n` +
+                `Here are the quotation details for your upcoming trip:\n\n` +
+                `*📍 Route:* ${route || 'Himalayan Tour'}\n\n${
+                    pricingInfo
+                }\n_Detailed day-wise itinerary has been sent to your email._\n\n` +
+                `Please let us know which option works best for you!`
+        )
+
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`
+        window.open(whatsappUrl, '_blank')
+    }
     const handleConvertPackage = async () => {
         setIsConvertModalOpen(true)
         // 1. Check if price is already generated
@@ -931,6 +1001,14 @@ function GuestForm() {
                                                         }}
                                                     >
                                                         Share Details
+                                                    </Button>
+                                                    <Button
+                                                        variant='outlined'
+                                                        color='success'
+                                                        startIcon={<WhatsAppIcon />}
+                                                        onClick={handleWhatsAppClick}
+                                                    >
+                                                        Share Quotation on WhatsApp
                                                     </Button>
 
                                                     <Button
