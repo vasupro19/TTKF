@@ -6,11 +6,12 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate } from 'react-router-dom'
 
 // theme components
-import { Box, Divider, Grid } from '@mui/material'
+import { Box, Divider, Grid, Button } from '@mui/material'
 
 // components
 import FormComponent from '@core/components/forms/FormComponent'
 import MainCard from '@core/components/extended/MainCard'
+import DownloadIcon from '@mui/icons-material/Download'
 
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
@@ -307,6 +308,21 @@ function PackagesItenary() {
             sx={{ py: '1px' }}
             contentSX={{ px: '2px', py: 1.5 }}
             title={formId ? 'Edit Package' : 'Create New Package'} // 👈 Updated title
+            // secondary={
+            // <Grid item xs={12}>
+            //     <Button
+            //         variant='outlined'
+            //         color='secondary'
+            //         fullWidth
+            //         startIcon={<DownloadIcon />}
+            //         onClick={handleDownload}
+            //         disabled={isDownloading} // 👈 Disable while generating
+            //         sx={{ mt: 2 }}
+            //     >
+            //         {isDownloading ? 'Generating...' : 'Download Sample Excel'}
+            //     </Button>
+            // </Grid>
+            // }
         >
             <Grid
                 container

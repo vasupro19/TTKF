@@ -58,6 +58,13 @@ export const packageItenarySlice = apiSliceConfig.injectEndpoints({
             },
             // 🚨 Tags updated
             invalidatesTags: ['PackageClient', 'PackageClientById']
+        }),
+        downloadItineraryTemplate: build.query({
+            query: () => ({
+                url: '/itinerary/download-template',
+                method: 'GET',
+                responseHandler: response => response.blob() // 👈 Critical for binary files
+            })
         })
     })
 })
