@@ -53,12 +53,21 @@ export const locationSlice = apiSliceConfig.injectEndpoints({
                 const KEY = `removeLocationMasterLKey`
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/admin/locationMaster/${id}`,
+                    url: `/campaign/${id}`,
                     method: 'DELETE',
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
             invalidatesTags: ['locationMaster', 'locationMasterById']
+        }),
+        uploadCampaignsExcel: build.mutation({
+            query: campaignsArray => ({
+                url: '/campaign/upload-excel',
+                method: 'POST',
+                body: { campaigns: campaignsArray }
+            }),
+            // This forces the "Campaign List" to refresh automatically
+            invalidatesTags: ['Campaigns']
         })
     })
 })
@@ -68,5 +77,6 @@ export const {
     useGetCampaignByIdQuery,
     endpoints: { getCampaigns, removeLocationMaster, getCampaignById },
     useCreateCampaignMutation,
-    useUpdateCampaignMutation
+    useUpdateCampaignMutation,
+    useUploadCampaignsExcelMutation
 } = locationSlice

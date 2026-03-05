@@ -311,6 +311,24 @@ function CampaignsForm() {
                     grid: { xs: 12, sm: 4, md: 6 },
                     size: 'small',
                     customSx
+                },
+                {
+                    name: 'importantNote',
+                    label: 'Important Note',
+                    type: 'textarea', // 🚀 Added
+                    required: false,
+                    grid: { xs: 12, md: 12 },
+                    size: 'small',
+                    customSx: { ...customSx, '& textarea': { minHeight: '80px' } }
+                },
+                {
+                    name: 'bankDetails',
+                    label: 'Bank Details',
+                    type: 'textarea', // 🚀 Added
+                    required: false,
+                    grid: { xs: 12, md: 12 },
+                    size: 'small',
+                    customSx: { ...customSx, '& textarea': { minHeight: '100px' } }
                 }
                 // {
                 //     name: 'cost_center',

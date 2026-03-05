@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
-import Stack from '@mui/material/Stack'
+import { Box, IconButton, Tooltip, Menu, MenuItem, Typography, Button, Stack, CircularProgress } from '@mui/material'
+
 // import Box from '@mui/material/Box'
 // import Tooltip from '@mui/material/Tooltip'
 // import IconButton from '@mui/material/IconButton'
 // import TextField from '@mui/material/TextField'
-import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
+import { Add, Edit, Delete, FilterAltOff, MoreVert, CloudUpload, Download } from '@mui/icons-material'
+import * as XLSX from 'xlsx'
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -19,7 +20,11 @@ import CustomSearchTextField from '@/core/components/extended/CustomSearchTextFi
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
+import {
+    getCampaigns,
+    removeLocationMaster,
+    useUploadCampaignsExcelMutation
+} from '@/app/store/slices/api/campaignSlice'
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
 // import { getObjectKeys, toCapitalizedWords } from '@/utilities'
@@ -63,6 +68,8 @@ function MasterCampaignTable() {
     const [isShowClearButton, setIsShowClearButton] = useState(false)
     const [clearAllFilters, setClearAllFilters] = useState(false)
     const [refetch, setRefetch] = useState(false)
+    const [uploadCampaigns, { isLoading }] = useUploadCampaignsExcelMutation()
+    const [fileName, setFileName] = useState('')
 
     const [search, setSearch] = useState({
         value: '',
@@ -73,6 +80,92 @@ function MasterCampaignTable() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const editHandler = useCallback(async id => navigate(`/master/campaigns/edit/${id}`), [])
+    // 1. Function to create a sample Excel file for the Admin
+    const downloadSample = () => {
+        const sampleData = [
+            {
+                title: 'Manali Summer 2026',
+                description: '6 Days in Hills',
+                inclusions: 'Hotel | Cab | Breakfast',
+                exclusions: 'Flight | Personal Expenses',
+                // 🚀 Added new fields
+                importantNote: 'Check-in is at 12 PM. Carry valid ID proof.',
+                bankDetails: 'Bank: SBI | A/C: 123456789 | IFSC: SBIN0001'
+            }
+        ]
+
+        const worksheet = XLSX.utils.json_to_sheet(sampleData)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Campaigns')
+
+        // Auto-adjust column width so it's easier to read
+        const wscols = [
+            { wch: 20 }, // title
+            { wch: 30 }, // description
+            { wch: 30 }, // inclusions
+            { wch: 30 }, // exclusions
+            { wch: 40 }, // importantNote
+            { wch: 40 } // bankDetails
+        ]
+        worksheet['!cols'] = wscols
+
+        XLSX.writeFile(workbook, 'Campaign_Upload_Sample.xlsx')
+    }
+
+    // 2. Function to read Excel and convert to JSON
+    const handleFileUpload = e => {
+        const file = e.target.files[0]
+        if (!file) return
+        setFileName(file.name)
+
+        const reader = new FileReader()
+        reader.onload = async evt => {
+            try {
+                const bstr = evt.target.result
+                const wb = XLSX.read(bstr, { type: 'binary' })
+                const wsname = wb.SheetNames[0]
+                const ws = wb.Sheets[wsname]
+
+                // Convert to JSON
+                const rawData = XLSX.utils.sheet_to_json(ws)
+
+                if (rawData.length === 0) throw new Error('Excel file is empty')
+
+                // 🚀 Format data to match your new Prisma Model fields
+                const formattedData = rawData.map(row => ({
+                    title: row.title || '',
+                    description: row.description || '',
+                    inclusions: row.inclusions || '',
+                    exclusions: row.exclusions || '',
+                    importantNote: row.importantNote || '', // Matches schema
+                    bankDetails: row.bankDetails || '' // Matches schema
+                }))
+
+                // Send to Backend
+                const response = await uploadCampaigns(formattedData).unwrap()
+
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: `${response.data.count} Campaigns imported!`,
+                        variant: 'alert',
+                        alert: { color: 'success' }
+                    })
+                )
+            } catch (error) {
+                console.error('Upload error:', error)
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: error.data?.message || error.message || 'Invalid Excel Format',
+                        variant: 'alert',
+                        alert: { color: 'error' }
+                    })
+                )
+            }
+        }
+        reader.readAsBinaryString(file)
+    }
 
     const handleExcelClick = () => {
         setExcelHandler(true)
@@ -242,23 +335,23 @@ function MasterCampaignTable() {
                             placeholder='Search locations...'
                         />
                         {/* // Example for "From" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='from'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='From date'
                             label='From'
-                        />
+                        /> */}
                         {/* </Box> */}
 
                         {/* // Example for "To" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='to'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='To date'
                             label='To'
-                        />
+                        /> */}
                         {/* <TextField
                         placeholder='search data'
                         size='small'
@@ -314,9 +407,43 @@ function MasterCampaignTable() {
                             })
                         }
                     /> */}
-                        <UiAccessGuard>
-                            <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
+                        <Box
+                            sx={{
+                                p: 3,
+                                border: '1px dashed #ccc',
+                                borderRadius: 2,
+                                textAlign: 'center',
+                                bgcolor: '#f9f9f9'
+                            }}
+                        >
+                            <Typography variant='h6' gutterBottom>
+                                Bulk Campaign Upload
+                            </Typography>
+
+                            <Stack direction='row' spacing={2} justifyContent='center' sx={{ mt: 2 }}>
+                                <Button variant='outlined' startIcon={<Download />} onClick={downloadSample}>
+                                    Download Sample
+                                </Button>
+
+                                <Button
+                                    variant='contained'
+                                    component='label'
+                                    startIcon={
+                                        isLoading ? <CircularProgress size={20} color='inherit' /> : <CloudUpload />
+                                    }
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? 'Uploading...' : 'Upload Excel'}
+                                    <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                                </Button>
+                            </Stack>
+
+                            {fileName && (
+                                <Typography variant='caption' display='block' sx={{ mt: 1 }}>
+                                    Selected: {fileName}
+                                </Typography>
+                            )}
+                        </Box>
                         <UiAccessGuard type='create'>
                             <CustomButton variant='clickable' onClick={() => handleAdd()}>
                                 Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
