@@ -4,11 +4,12 @@ import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert
 
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
 
-function PackageConversion({ isOpen, setIsOpen, leadId, priceData }) {
+function PackageConversion({ isOpen, setIsOpen, leadId, priceData, quotationNo }) {
     const [convertPackage, { isLoading }] = useConvertPackageMutation()
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
         leadId,
+        quotationNo,
         selectedPackage: '',
         sellingPrice: ''
     })

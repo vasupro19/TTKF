@@ -69,7 +69,7 @@ function LeadsForm() {
     const validationSchema = [
         z.object({
             fullName: z.string().nonempty('Full name is required').min(3, 'Must be at least 3 characters'),
-            phone: z.number().min(10, 'Must be 10 digits'),
+            phone: z.string().min(10, 'Must be 10 digits'),
             senderEmail: z.string().email('Invalid email').optional()
         }),
         z.object({
@@ -216,7 +216,7 @@ function LeadsForm() {
                 {
                     name: 'phone',
                     label: 'Phone Number',
-                    type: 'number',
+                    type: 'text',
                     placeholder: 'Enter phone number',
                     grid: { xs: 12, sm: 4 },
                     size: 'small',

@@ -145,14 +145,14 @@ const protectedRoutes = {
         </AuthGuard>
     ),
     children: [
-        {
-            path: '/',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <AdminDashboard />
-                </Suspense>
-            )
-        },
+        // {
+        //     path: '/',
+        //     element: (
+        //         <Suspense fallback={<Loader />}>
+        //             <AdminDashboard />
+        //         </Suspense>
+        //     )
+        // },
         {
             path: '/dashboard',
             element: (

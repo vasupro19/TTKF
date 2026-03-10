@@ -69,10 +69,10 @@ function DestinationClientsForm() {
     const validationSchema = z.object({
         name: z.string().min(3, 'Destination Name must be at least 3 characters'),
         campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
-        delux_hotel: z.string().optional(),
-        super_delux_hotel: z.string().optional(),
-        luxury_hotel: z.string().optional(),
-        premium_hotel: z.string().optional()
+        delux_hotel: z.string().optional().nullable(),
+        super_delux_hotel: z.string().optional().nullable(),
+        luxury_hotel: z.string().optional().nullable(),
+        premium_hotel: z.string().optional().nullable()
     })
 
     const validate = values => {

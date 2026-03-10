@@ -7,11 +7,19 @@ export const guestSlice = apiSliceConfig.injectEndpoints({
 
         // === GET PRICING BY GUEST TOUR ID ===
         getGuestTourPrice: build.query({
-            query: guestTourId => ({
-                url: `/guest-tour-price/${guestTourId}`,
-                responseHandler: async result => customResponseHandler({ result })
-            }),
-            providesTags: ['guestTourPrice']
+            query: ({ leadId, quotationNo }) => {
+                // Double-check inside the query builder
+                if (!leadId || !quotationNo) {
+                    return '' // RTK Query will not execute if the query string is empty
+                }
+                return {
+                    url: `/guest-tour-price/${leadId}?quotationNo=${quotationNo}`,
+                    responseHandler: async result => customResponseHandler({ result })
+                }
+            },
+            providesTags: (result, error, { leadId, quotationNo }) => [
+                { type: 'guestTourPrice', id: `${leadId}-${quotationNo}` }
+            ]
         }),
 
         // === UPSERT PRICING (Create/Update logic) ===
@@ -26,7 +34,9 @@ export const guestSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['guestTourPrice']
+            invalidatesTags: (result, error, payload) => [
+                { type: 'guestTourPrice', id: `${payload.leadId}-${payload.quotationNo}` }
+            ]
         }),
 
         // === UPDATE PRICING BY ID ===
@@ -41,7 +51,9 @@ export const guestSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['guestTourPrice']
+            invalidatesTags: (result, error, payload) => [
+                { type: 'guestTourPrice', id: `${payload.leadId}-${payload.quotationNo}` }
+            ]
         })
     })
 })

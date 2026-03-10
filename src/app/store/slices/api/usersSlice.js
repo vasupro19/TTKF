@@ -48,6 +48,19 @@ export const usersSlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['userManagement', 'userManagementData']
         }),
+        updateUser: build.mutation({
+            query: payload => {
+                const KEY = `updateUserKey`
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/user/clientUser/${payload.id}`,
+                    method: 'PUT',
+                    body: payload,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['userManagement', 'userManagementData']
+        }),
         getDataForUpdate: build.query({
             query: id => ({
                 url: `/user/clientUser/${id}`,
@@ -106,6 +119,7 @@ export const {
     useGetUsersQuery,
     useGetDataForCreateQuery,
     useCreateUserMutation,
+    useUpdateUserMutation,
     useGetDataForUpdateQuery,
     useGetUserMappedMenusQuery,
     useStoreUserMenuMappingMutation,

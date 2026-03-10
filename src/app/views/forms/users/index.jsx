@@ -31,6 +31,7 @@ import IdentityCard from '@core/components/IdentityCard'
 import {
     useGetDataForCreateQuery,
     useCreateUserMutation,
+    useUpdateUserMutation,
     getDataForUpdate,
     useGetUserRolesQuery
 } from '@/app/store/slices/api/usersSlice'
@@ -93,6 +94,8 @@ export default function SetupUserForm() {
     const dispatch = useDispatch()
     const formikRef = useRef()
     const [createUser] = useCreateUserMutation()
+    const [updateUser] = useUpdateUserMutation()
+
     const { user } = useSelector(state => state.auth)
 
     // const { data: creationData } = useGetDataForCreateQuery()
@@ -410,7 +413,7 @@ export default function SetupUserForm() {
                     if (editId && parseInt(editId, 10)) {
                         payload.id = editId
                         try {
-                            const response = await createUser(payload).unwrap()
+                            const response = await updateUser(payload).unwrap()
                             message = response?.message || response?.data?.message || 'user created successfully!'
                             if (response?.data?.user_id && !parseInt(editId, 10)) {
                                 navigate(`/userManagement/user/menu/${response?.data?.user_id}`)
@@ -430,37 +433,38 @@ export default function SetupUserForm() {
                                 error?.message ||
                                 'unable to create user!'
                         }
-                    }
-                    try {
-                        const response = await createUser(payload).unwrap()
-                        message = response?.message || response?.data?.message || 'user created successfully!'
-                        if (response?.data?.user_id && !parseInt(editId, 10)) {
-                            navigate(`/userManagement/user/menu/${response?.data?.user_id}`)
-                        } else {
-                            setValues({ ...initialValues })
-                            resetForm()
-                            navigate(-1)
+                    } else {
+                        try {
+                            const response = await createUser(payload).unwrap()
+                            message = response?.message || response?.data?.message || 'user created successfully!'
+                            if (response?.data?.user_id && !parseInt(editId, 10)) {
+                                navigate(`/userManagement/user/menu/${response?.data?.user_id}`)
+                            } else {
+                                setValues({ ...initialValues })
+                                resetForm()
+                                navigate(-1)
+                            }
+                        } catch (error) {
+                            isError = true
+                            if (error?.data?.data?.errors && Object.keys(error?.data?.data?.errors).length)
+                                handleBackendErrors(error.data.data.errors, setFieldError)
+                            message =
+                                error?.response?.message ||
+                                error?.response?.data?.message ||
+                                error?.data?.message ||
+                                error?.message ||
+                                'unable to create user!'
+                        } finally {
+                            dispatch(
+                                openSnackbar({
+                                    open: true,
+                                    message,
+                                    variant: 'alert',
+                                    alert: { color: isError ? 'error' : 'success' },
+                                    anchorOrigin: { vertical: 'top', horizontal: 'center' }
+                                })
+                            )
                         }
-                    } catch (error) {
-                        isError = true
-                        if (error?.data?.data?.errors && Object.keys(error?.data?.data?.errors).length)
-                            handleBackendErrors(error.data.data.errors, setFieldError)
-                        message =
-                            error?.response?.message ||
-                            error?.response?.data?.message ||
-                            error?.data?.message ||
-                            error?.message ||
-                            'unable to create user!'
-                    } finally {
-                        dispatch(
-                            openSnackbar({
-                                open: true,
-                                message,
-                                variant: 'alert',
-                                alert: { color: isError ? 'error' : 'success' },
-                                anchorOrigin: { vertical: 'top', horizontal: 'center' }
-                            })
-                        )
                     }
                 }}
             >

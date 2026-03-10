@@ -75,7 +75,7 @@ function SidebarMenu({ open, onClose }) {
             <Sidebar width={'340px'} themeColor={'#2c2c2c'} themeSecondaryColor={'#45484c'} showProfile={false}>
                 <CustomImage
                     src={cerebrumLogo}
-                    alt='Cerebrum Logo'
+                    alt=' Logo'
                     styles={{
                         width: '340px',
                         backgroundColor: 'primary.main'

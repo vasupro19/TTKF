@@ -36,63 +36,69 @@ import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/ap
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-function GuestTourPriceForm({ tourId }) {
+function GuestTourPriceForm({ tourId, quotationNo, activeTab }) {
     const [createPrice] = useUpsertGuestTourPriceMutation()
     const dispatch = useDispatch()
 
-    const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(tourId)
-    console.log(price, 'price')
+    // 🚀 Pass both tourId and quotationNo to the query
+    // (Ensure your RTK Query slice is updated to accept an object/params)
+    const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(
+        {
+            leadId: tourId,
+            quotationNo
+        },
+        { skip: activeTab !== 1 || !tourId || !quotationNo }
+    )
+
     const [packagePrices, setPackagePrices] = useState({
         leadId: tourId,
+        quotationNo, // 🚀 Store it in local state
         deluxePrice: '0',
         superDeluxePrice: '0',
         luxuryPrice: '0',
         premiumPrice: '0'
     })
+
+    // 🚀 Update local state whenever the fetched data OR the quote number changes
     useEffect(() => {
         setPackagePrices({
-            ...packagePrices,
+            leadId: tourId,
+            quotationNo, // 🚀 Ensure state reflects the active quote
             deluxePrice: price.data?.deluxePrice || '0',
             superDeluxePrice: price.data?.superDeluxePrice || '0',
             luxuryPrice: price.data?.luxuryPrice || '0',
             premiumPrice: price.data?.premiumPrice || '0'
         })
-    }, [price])
+    }, [price, quotationNo, tourId])
 
     const handlePriceChange = e => {
         const { name, value } = e.target
-        // Ensure the value is a number (or convert it)
         setPackagePrices(prev => ({
             ...prev,
-            [name]: value.replace(/[^0-9]/g, '') // Removes non-numeric characters
+            [name]: value.replace(/[^0-9]/g, '')
         }))
     }
+
     const handleSavePrices = async () => {
         try {
-            console.log('Saving prices:', packagePrices)
-
-            // 1. Trigger the mutation and wait for result
+            // 🚀 The payload now includes quotationNo
             await createPrice(packagePrices).unwrap()
 
-            // 2. Dispatch Success Snackbar
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'Package prices saved successfully!',
+                    message: `Prices for Quotation #${quotationNo} saved successfully!`,
                     variant: 'alert',
                     alert: { color: 'success' },
                     close: false
                 })
             )
-
-            // Optional: Refresh data or redirect
         } catch (err) {
-            // 3. Dispatch Error Snackbar
             console.error('Failed to save prices:', err)
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: err?.data?.message || 'Failed to save prices. Please try again.',
+                    message: err?.data?.message || 'Failed to save prices.',
                     variant: 'alert',
                     alert: { color: 'error' },
                     close: false
@@ -100,7 +106,6 @@ function GuestTourPriceForm({ tourId }) {
             )
         }
     }
-
     return (
         <Box
             sx={{
@@ -121,7 +126,7 @@ function GuestTourPriceForm({ tourId }) {
                 }}
             >
                 <AttachMoney sx={{ mr: 1, fontSize: 26 }} />
-                Package Pricing Setup
+                Pricing for Quotation #{quotationNo} {/* 🚀 Visual Indicator */}
             </h3>
 
             <Grid container spacing={3} alignItems='flex-end'>
@@ -154,7 +159,19 @@ function GuestTourPriceForm({ tourId }) {
                         }}
                     />
                 </Grid>
-
+                <Grid item xs={6} sm={3}>
+                    <TextField
+                        fullWidth
+                        type='text'
+                        label='Luxury Price'
+                        name='luxuryPrice'
+                        value={packagePrices.luxuryPrice} // Assumed state
+                        onChange={handlePriceChange}
+                        InputProps={{
+                            startAdornment: <InputAdornment position='start'>$</InputAdornment>
+                        }}
+                    />
+                </Grid>
                 {/* Premium Input */}
                 <Grid item xs={6} sm={3}>
                     <TextField
@@ -171,19 +188,6 @@ function GuestTourPriceForm({ tourId }) {
                 </Grid>
 
                 {/* Luxury Input */}
-                <Grid item xs={6} sm={3}>
-                    <TextField
-                        fullWidth
-                        type='text'
-                        label='Luxury Price'
-                        name='luxuryPrice'
-                        value={packagePrices.luxuryPrice} // Assumed state
-                        onChange={handlePriceChange}
-                        InputProps={{
-                            startAdornment: <InputAdornment position='start'>$</InputAdornment>
-                        }}
-                    />
-                </Grid>
 
                 {/* Save Button */}
                 <Grid item xs={12} sx={{ pt: 3 }}>
@@ -192,10 +196,10 @@ function GuestTourPriceForm({ tourId }) {
                         color='warning'
                         fullWidth
                         size='large'
-                        onClick={handleSavePrices} // Assumed handler
+                        onClick={handleSavePrices}
                         startIcon={<Save />}
                     >
-                        Save/Update Package Prices
+                        Save Prices for Quote {quotationNo}
                     </Button>
                 </Grid>
             </Grid>

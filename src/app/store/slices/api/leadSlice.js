@@ -57,12 +57,15 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['getLeads', 'leadMasterById']
         }),
         shareLeadDetails: build.mutation({
-            query: leadId => {
+            // 🚀 Use ({ leadId, quotationNo }) to pull the properties out of the object
+            query: arg => {
+                const { leadId, quotationNo } = arg // Explicitly pull them out
                 const KEY = 'shareLeadDetailsKey'
                 dispatchLoaderEvent(KEY)
 
                 return {
-                    url: `/leads/share-details/${leadId}`,
+                    // Now ${leadId} will be the actual ID, not [object Object]
+                    url: `/leads/share-details/${leadId}?quotationNo=${quotationNo}`,
                     method: 'POST',
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }

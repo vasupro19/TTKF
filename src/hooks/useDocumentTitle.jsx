@@ -11,9 +11,9 @@ const formatTitle = str =>
 /**
  * Hook to set document title - auto-generates from route or uses provided title
  * @param {string} [customTitle] - Custom title to override route-based title
- * @param {string} [defaultTitle='Cerebrum'] - Default title when no route segments
+ * @param {string} [defaultTitle='Tool'] - Default title when no route segments
  */
-const useDocumentTitle = (customTitle, defaultTitle = 'Cerebrum') => {
+const useDocumentTitle = (customTitle, defaultTitle = 'Tool') => {
     const { pathname } = useLocation()
 
     useEffect(() => {

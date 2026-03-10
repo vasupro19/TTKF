@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography'
 // import { openSnackbar } from '@app/store/slices/snackbar'
 
 function Home() {
+    console.log('Home rendered')
     // const dispatch = useDispatch()
     // dummy implementation for file and json response slice
     // const resHandler = async () => {

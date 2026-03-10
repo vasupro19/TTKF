@@ -23,33 +23,29 @@ function AuthGuard({ children }) {
     const [__, setRoute] = useLocalStorage(LOCAL_STORAGE_KEYS.previousRoute, null)
 
     useEffect(() => {
-        if (location.pathname === '/login') return
+        // 🚀 Update: Allow access to the root path (Landing Page)
+        if (location.pathname === '/' || location.pathname === '/login') return
 
         const fetchUser = async () => {
-            // Use the token directly from localStorage if the hook state is lagging
             const activeToken = window.localStorage.getItem(LOCAL_STORAGE_KEYS.token)
 
             if (!activeToken || activeToken === 'null') {
-                navigate('/login', { replace: true })
+                // 🚀 CHANGE: Redirect to Landing Page instead of /login
+                navigate('/', { replace: true })
                 return
             }
 
             try {
-                // Use .unwrap() to catch errors properly in the try/catch block
                 const response = await dispatch(getAuthUser.initiate('', { forceRefetch: true })).unwrap()
-
-                if (!response?.data?.user) {
-                    throw new Error('User not found')
-                }
+                if (!response?.data?.user) throw new Error('User not found')
                 dispatch(setUserDetails({ user: response.data.user }))
             } catch (error) {
-                console.error('AuthGuard Fetch Error:', error)
                 removeToken()
-                navigate('/login', { replace: true })
+                // 🚀 CHANGE: Redirect to Landing Page on error
+                navigate('/', { replace: true })
             }
         }
 
-        // Only run fetch if we aren't logged in AND we aren't already fetching
         if (!isLoggedIn || permissionExpired) {
             fetchUser()
         }
