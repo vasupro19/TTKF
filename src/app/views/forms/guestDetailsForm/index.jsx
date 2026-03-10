@@ -592,7 +592,10 @@ function GuestForm() {
                     luxury: item?.destination?.luxury_hotel,
                     premium: item?.destination?.premium_hotel
                 },
-                fullItem: item // keep complete raw data if needed later
+                fullItem: {
+                    ...item,
+                    quoteNo: currentQuoteNo
+                } // keep complete raw data if needed later
             }))
             const values = value.packageItenary.map(item => ({
                 title: item.title,
