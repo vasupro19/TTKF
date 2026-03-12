@@ -1,9 +1,10 @@
+/* eslint-disable no-nested-ternary */
 import React, { useState, useCallback, useEffect } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
 // router
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
 import {
@@ -52,6 +53,8 @@ import {
     getGuestTourById,
     useRemoveGuestTourItenaryMutation
 } from '@/app/store/slices/api/guestTourSlice'
+import { useGetPackageByLeadIdQuery } from '@/app/store/slices/api/packageConvert'
+
 import { useShareLeadDetailsMutation, useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
 import { getItenaryClientById, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
@@ -64,10 +67,12 @@ import { objectLength } from '@/utilities'
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
 import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
+import ItinerarySection from './itenarySection'
 
 function GuestForm() {
     const { id: formId } = useParams()
     const params = useParams()
+    const location = useLocation()
 
     const navigate = useNavigate()
     const dispatch = useDispatch()
@@ -78,7 +83,10 @@ function GuestForm() {
 
     const { createLeadLKey, updateLeadLKey } = useSelector(state => state.loading)
 
-    const [activeTab, setActiveTab] = useState(0)
+    // const [activeTab, setActiveTab] = useState(0)
+    const [activeTab, setActiveTab] = useState(
+        location.state?.convertedQuoteNo ? 1 : 0 // tabs are 0-indexed
+    )
     const [tabsEnabled, setTabsEnabled] = useState([true, false])
     const [leadId, setLeadId] = useState(null)
     const { removeGuestTourItenaryKey } = useSelector(state => state.loading)
@@ -88,6 +96,7 @@ function GuestForm() {
     const [createTour] = useCreateGuestTourMutation()
     const [updateTour] = useUpdateGuestTourMutation()
     const [removeTour] = useRemoveGuestTourItenaryMutation()
+    const { data: confirmedPackage } = useGetPackageByLeadIdQuery(params.leadId)
 
     const [createSingleTour] = useCreateSingleGuestTourItenaryMutation()
     const [shareLeadDetails, { isLoading }] = useShareLeadDetailsMutation()
@@ -116,7 +125,9 @@ function GuestForm() {
     const [editingData, setEditingData] = useState({})
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false)
     const [availableQuotes, setAvailableQuotes] = useState([]) // e.g. [1, 2, 3]
-    const [currentQuoteNo, setCurrentQuoteNo] = useState(1)
+    const [currentQuoteNo, setCurrentQuoteNo] = useState(
+        location.state?.convertedQuoteNo || 1 // ← default to converted quote, not 1
+    )
 
     // Initial Values
     const initialValues = {
@@ -327,7 +338,14 @@ function GuestForm() {
             }))
             const quoteNums = [...new Set(data.data.map(item => item.quoteNo || 1))].sort()
             setAvailableQuotes(quoteNums)
-            setCurrentQuoteNo(quoteNums[0] || 1)
+            // setCurrentQuoteNo(quoteNums[0] || 1)
+            const targetQuote = location.state?.convertedQuoteNo
+            if (targetQuote && quoteNums.includes(targetQuote)) {
+                setCurrentQuoteNo(targetQuote)
+                setActiveTab(1) // itinerary tab, not quote tab — adjust if needed
+            } else {
+                setCurrentQuoteNo(quoteNums[0] || 1)
+            }
             setSelectedPackage(formatted)
         }
     }
@@ -904,6 +922,7 @@ function GuestForm() {
         setAvailableQuotes(prev => [...prev, nextQuoteNo])
         setCurrentQuoteNo(nextQuoteNo)
     }
+    console.log(currentQuoteNo, 'currentQou')
     return (
         <MainCard
             sx={{ py: 2 }}
@@ -999,334 +1018,29 @@ function GuestForm() {
                         </Box>
 
                         {activeTab === 1 && currentQuoteItineraries.length > 0 && (
-                            <Box sx={{ mt: 3 }}>
-                                <h3>Selected Package Itineraries</h3>
-                                {(() => {
-                                    // const staysBreakdown = calculateStayBreakdown(selectedPackage)
-                                    const staysBreakdown = calculateStayBreakdown(currentQuoteItineraries)
-                                    const totalNights = staysBreakdown.reduce((sum, stay) => sum + stay.nights, 0)
-
-                                    return (
-                                        <Box
-                                            sx={{
-                                                mb: 4,
-                                                p: 3, // Increased padding for a more premium feel
-                                                borderRadius: '16px',
-                                                background: 'linear-gradient(135deg, #e3f2fd 0%, #f5faff 100%)',
-                                                border: '1px solid #90caf9',
-                                                boxShadow: '0px 4px 12px rgba(0,0,0,0.05)'
-                                            }}
-                                        >
-                                            <Box
-                                                sx={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'flex-start',
-                                                    flexWrap: 'wrap',
-                                                    gap: 2
-                                                }}
-                                            >
-                                                <Box>
-                                                    <h4
-                                                        style={{
-                                                            margin: 0,
-                                                            color: '#1a73e8',
-                                                            fontSize: '20px',
-                                                            display: 'flex',
-                                                            alignItems: 'center'
-                                                        }}
-                                                    >
-                                                        <LocationOn sx={{ mr: 1, fontSize: 24 }} />
-                                                        Total Nights Stayed:{' '}
-                                                        <strong style={{ marginLeft: '8px', fontSize: '24px' }}>
-                                                            {totalNights}
-                                                        </strong>
-                                                    </h4>
-
-                                                    {/* Stay Breakdown Chips */}
-                                                    <Box sx={{ mt: 1.5, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                                                        {staysBreakdown.map((stay, i) => (
-                                                            <Box
-                                                                key={Math.random(i)}
-                                                                sx={{
-                                                                    px: 2,
-                                                                    py: 0.5,
-                                                                    borderRadius: '20px',
-                                                                    background: '#fff',
-                                                                    border: '1px solid #bbdefb',
-                                                                    color: '#1976d2',
-                                                                    fontWeight: 600,
-                                                                    fontSize: '13px',
-                                                                    boxShadow: '0px 2px 4px rgba(0,0,0,0.03)'
-                                                                }}
-                                                            >
-                                                                {stay.destination}: {stay.nights} Night
-                                                                {stay.nights > 1 ? 's' : ''}
-                                                            </Box>
-                                                        ))}
-                                                    </Box>
-                                                </Box>
-
-                                                {/* Action Buttons Container */}
-                                                <Box sx={{ display: 'flex', gap: 2 }}>
-                                                    <Button
-                                                        variant='outlined'
-                                                        color='success'
-                                                        startIcon={<Share />}
-                                                        onClick={handleShare}
-                                                        disabled={isLoading}
-                                                        sx={{
-                                                            borderRadius: '10px',
-                                                            fontWeight: 700,
-                                                            textTransform: 'none',
-                                                            px: 3,
-                                                            borderWidth: '2px',
-                                                            '&:hover': { borderWidth: '2px' }
-                                                        }}
-                                                    >
-                                                        Share Details for Quote {currentQuoteNo}
-                                                    </Button>
-                                                    <Button
-                                                        variant='outlined'
-                                                        color='success'
-                                                        startIcon={<WhatsAppIcon />}
-                                                        onClick={handleWhatsAppClick}
-                                                    >
-                                                        Share Quotation {currentQuoteNo} on WhatsApp
-                                                    </Button>
-
-                                                    <Button
-                                                        variant='contained'
-                                                        color='primary'
-                                                        startIcon={<CheckCircle />}
-                                                        onClick={() => handleConvertPackage()} // We'll define this below
-                                                        sx={{
-                                                            borderRadius: '10px',
-                                                            fontWeight: 700,
-                                                            textTransform: 'none',
-                                                            px: 3,
-                                                            background:
-                                                                'linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%)',
-                                                            boxShadow: '0px 4px 12px rgba(26, 115, 232, 0.4)',
-                                                            '&:hover': {
-                                                                background:
-                                                                    'linear-gradient(135deg, #1565c0 0%, #0a3d91 100%)'
-                                                            }
-                                                        }}
-                                                    >
-                                                        Convert Package with Quote {currentQuoteNo}
-                                                    </Button>
-                                                </Box>
-                                            </Box>
-                                        </Box>
-                                    )
-                                })()}
-
-                                <GuestTourPriceForm
-                                    tourId={params.leadId}
-                                    quotationNo={currentQuoteNo}
-                                    activeTab={activeTab}
-                                />
-
-                                <Grid container spacing={4}>
-                                    {currentQuoteItineraries.map((item, index) => (
-                                        <Grid item xs={12} key={item.id}>
-                                            <motion.div
-                                                whileHover={{
-                                                    scale: 1.005,
-                                                    boxShadow: '0px 8px 24px rgba(0,0,0,0.12)'
-                                                }}
-                                                style={{
-                                                    flex: 1,
-                                                    marginLeft: '12px',
-                                                    padding: '24px',
-                                                    borderRadius: '20px',
-                                                    border: '1px solid #e3e7ef',
-                                                    background: '#ffffff',
-                                                    boxShadow: '0px 4px 16px rgba(0,0,0,0.06)',
-                                                    position: 'relative',
-                                                    overflow: 'hidden',
-                                                    minHeight: '300px' // Ensures consistency
-                                                }}
-                                            >
-                                                {/* 1. Improved Action Buttons Wrapper */}
-                                                <Box
-                                                    sx={{
-                                                        position: 'absolute',
-                                                        top: 16,
-                                                        right: 16,
-                                                        display: 'flex',
-                                                        gap: 1,
-                                                        zIndex: 10,
-                                                        bgcolor: 'rgba(255,255,255,0.8)', // Slight backdrop to stay visible over long text
-                                                        borderRadius: '10px',
-                                                        p: 0.5
-                                                    }}
-                                                >
-                                                    <Button
-                                                        size='small'
-                                                        onClick={() => onEditItem(item, index)}
-                                                        startIcon={<Edit />}
-                                                        sx={{
-                                                            bgcolor: '#e3f2fd',
-                                                            color: '#1976d2',
-                                                            textTransform: 'none',
-                                                            fontWeight: 600
-                                                        }}
-                                                    >
-                                                        Edit
-                                                    </Button>
-                                                    <Button
-                                                        size='small'
-                                                        onClick={() => onDeleteItem(item, index)}
-                                                        startIcon={<Delete />}
-                                                        sx={{
-                                                            bgcolor: '#ffebee',
-                                                            color: '#d32f2f',
-                                                            textTransform: 'none',
-                                                            fontWeight: 600
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </Button>
-                                                </Box>
-
-                                                <Grid container spacing={3}>
-                                                    {/* 2. Image Section - Forced to maintain its lane */}
-                                                    <Grid item xs={12} md={4}>
-                                                        <Box sx={{ width: '100%', height: '100%', minHeight: '200px' }}>
-                                                            <img
-                                                                src={item.image}
-                                                                alt={item.title}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    height: '200px', // Fixed height for visual balance
-                                                                    objectFit: 'cover',
-                                                                    borderRadius: '14px',
-                                                                    display: 'block'
-                                                                }}
-                                                            />
-                                                        </Box>
-                                                    </Grid>
-
-                                                    {/* 3. Info Section - Word Break Protection */}
-                                                    <Grid item xs={12} md={8}>
-                                                        <Box sx={{ pr: { md: 22, xs: 0 } }}>
-                                                            {' '}
-                                                            {/* Adds massive padding on the right to avoid button overlap */}
-                                                            <Typography
-                                                                variant='h5'
-                                                                sx={{
-                                                                    fontWeight: 700,
-                                                                    color: '#1d1d1d',
-                                                                    wordBreak: 'break-word', // Standard wrap
-                                                                    overflowWrap: 'anywhere', // Force wrap for "QWERTY..." long strings
-                                                                    lineHeight: 1.2,
-                                                                    mb: 1,
-                                                                    display: 'flex',
-                                                                    alignItems: 'flex-start',
-                                                                    gap: 1
-                                                                }}
-                                                            >
-                                                                <Photo
-                                                                    sx={{ color: '#1a73e8', mt: 0.5, flexShrink: 0 }}
-                                                                />
-                                                                {item?.title}
-                                                            </Typography>
-                                                            <Box
-                                                                sx={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    px: 1.5,
-                                                                    py: 0.5,
-                                                                    bgcolor: '#e8f0fe',
-                                                                    color: '#1a73e8',
-                                                                    borderRadius: '30px',
-                                                                    fontWeight: 600,
-                                                                    fontSize: '13px',
-                                                                    mb: 2
-                                                                }}
-                                                            >
-                                                                <LocationOn sx={{ fontSize: 16, mr: 0.5 }} />
-                                                                {item?.destination}
-                                                            </Box>
-                                                        </Box>
-
-                                                        {/* Description Area */}
-                                                        <Typography
-                                                            sx={{
-                                                                fontSize: '15px',
-                                                                color: '#555',
-                                                                lineHeight: 1.6,
-                                                                wordBreak: 'break-word',
-                                                                overflowWrap: 'anywhere',
-                                                                mb: 3
-                                                            }}
-                                                        >
-                                                            {item?.description}
-                                                        </Typography>
-
-                                                        {/* Accommodation Grid */}
-                                                        <Box sx={{ mt: 'auto' }}>
-                                                            <Typography
-                                                                variant='caption'
-                                                                sx={{
-                                                                    color: '#999',
-                                                                    fontWeight: 700,
-                                                                    mb: 1,
-                                                                    display: 'block'
-                                                                }}
-                                                            >
-                                                                ACCOMMODATION OPTIONS
-                                                            </Typography>
-                                                            <Grid container spacing={1}>
-                                                                {['deluxe', 'superDeluxe', 'premium', 'luxury'].map(
-                                                                    cat => (
-                                                                        <Grid item xs={6} sm={3} key={cat}>
-                                                                            <Box
-                                                                                sx={{
-                                                                                    p: 1.5,
-                                                                                    borderRadius: '12px',
-                                                                                    bgcolor: '#f8faff',
-                                                                                    border: '1px solid #eef2f6',
-                                                                                    height: '100%',
-                                                                                    minHeight: '80px',
-                                                                                    display: 'flex',
-                                                                                    flexDirection: 'column'
-                                                                                }}
-                                                                            >
-                                                                                <Typography
-                                                                                    variant='caption'
-                                                                                    sx={{
-                                                                                        color: '#1a73e8',
-                                                                                        fontWeight: 800,
-                                                                                        textTransform: 'capitalize'
-                                                                                    }}
-                                                                                >
-                                                                                    {cat.replace(/([A-Z])/g, ' $1')}
-                                                                                </Typography>
-                                                                                <Typography
-                                                                                    variant='body2'
-                                                                                    sx={{
-                                                                                        fontWeight: 500,
-                                                                                        wordBreak: 'break-all'
-                                                                                    }}
-                                                                                >
-                                                                                    {item.hotels?.[cat] || '—'}
-                                                                                </Typography>
-                                                                            </Box>
-                                                                        </Grid>
-                                                                    )
-                                                                )}
-                                                            </Grid>
-                                                        </Box>
-                                                    </Grid>
-                                                </Grid>
-                                            </motion.div>
-                                        </Grid>
-                                    ))}
-                                </Grid>
-                            </Box>
+                            <ItinerarySection
+                                currentQuoteItineraries={currentQuoteItineraries}
+                                currentQuoteNo={currentQuoteNo}
+                                staysBreakdown={calculateStayBreakdown(currentQuoteItineraries)}
+                                confirmedPackage={confirmedPackage}
+                                lastSharedQuoteNo={leadData?.data?.lastSharedQuoteNo}
+                                lastSharedAt={leadData?.data?.lastSharedAt}
+                                priceData={price?.data}
+                                isLoading={isLoading}
+                                handleShare={handleShare}
+                                handleWhatsAppClick={handleWhatsAppClick}
+                                handleConvertPackage={handleConvertPackage}
+                                onEditItem={onEditItem}
+                                onDeleteItem={onDeleteItem}
+                                GuestTourPriceForm={
+                                    <GuestTourPriceForm
+                                        tourId={params.leadId}
+                                        quotationNo={currentQuoteNo}
+                                        activeTab={activeTab}
+                                    />
+                                }
+                                params={params}
+                            />
                         )}
                     </Box>
                 </Grid>

@@ -124,6 +124,14 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             }),
             // Provides tags so the list refreshes if a new payment is added
             providesTags: (result, error, packageId) => [{ type: 'GuestPayment', id: packageId }]
+        }),
+        getPackageByLeadId: build.query({
+            query: leadId => ({
+                url: `/package/getPackagebyLead/${leadId}`,
+                method: 'GET'
+            }),
+            // Provides tags so the list refreshes if a new payment is added
+            providesTags: (result, error, packageId) => [{ type: 'ConfirmedPackage', id: packageId }]
         })
     })
 })
@@ -139,5 +147,6 @@ export const {
     useAddGuestPaymentMutation,
     useSendVoucherEmailMutation,
     useGetGuestPaymentHistoryQuery,
+    useGetPackageByLeadIdQuery,
     endpoints: { getConfirmedBooking, convertPackage, getAllConfirmedPackages }
 } = bookingSlice

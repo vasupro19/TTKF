@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Button, Grid, TextField, Autocomplete, Typography, CircularProgress } from '@mui/material'
 import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert'
 
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
 
-function PackageConversion({ isOpen, setIsOpen, leadId, priceData, quotationNo }) {
+function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }) {
+    console.log(quotationNo, 'PackageConversion')
     const [convertPackage, { isLoading }] = useConvertPackageMutation()
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
@@ -43,6 +44,13 @@ function PackageConversion({ isOpen, setIsOpen, leadId, priceData, quotationNo }
             console.error('Conversion failed', error)
         }
     }
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            quotationNo,
+            leadId
+        }))
+    }, [quotationNo, leadId])
 
     return (
         <GlobalModal isOpen={isOpen} setIsOpen={setIsOpen}>

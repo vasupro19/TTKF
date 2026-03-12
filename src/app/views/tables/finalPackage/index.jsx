@@ -293,7 +293,10 @@ function FinalPackageTable() {
                         ...col,
                         label: 'Guest Name',
                         isClickable: true,
-                        onClick: row => navigate(`/process/guest/add/${row.leadId}`)
+                        onClick: row =>
+                            navigate(`/process/guest/add/${row.leadId}`, {
+                                state: { convertedQuoteNo: row.quotationNo } // ← pass it here
+                            })
                     }
                 }
                 if (col.key === 'hotelName') {
