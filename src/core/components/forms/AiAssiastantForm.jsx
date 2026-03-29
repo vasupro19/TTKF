@@ -110,7 +110,7 @@ Example response:
         setAppliedFields([])
 
         try {
-            const response = await fetch('http://localhost:0131/v1/ai/assist', {
+            const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
