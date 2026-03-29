@@ -31,6 +31,7 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
 import IdentityCard from '@/core/components/IdentityCard'
+import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
 
 // CONSTANTS - assuming you have a way to import Select component data
 
@@ -314,6 +315,21 @@ function DestinationClientsForm() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         {/* We use the first (and only) tab's fields */}
                         <Box sx={{ padding: 2 }}>
+                            <AiFormAssistant
+                                fields={tabsFields[0].fields}
+                                formik={formik}
+                                context={`Travel destination form for hotel details. User enters a destination name and needs hotel information for 4 categories: Delux, Super Delux, Luxury, and Premium. Each hotel field should include hotel name, amenities, room details, and pricing hints. Current destination: "${formik.values.name || 'not set yet'}"`}
+                                suggestions={[
+                                    `Suggest hotels for ${formik.values.name || 'this destination'}`,
+                                    'Fill delux hotel details',
+                                    'Fill all hotel categories',
+                                    'Suggest luxury hotels in Shimla',
+                                    'Suggest hotels in Manali',
+                                    'Suggest hotels in Dharamshala',
+                                    'Suggest hotels in Dalhousie',
+                                    'Suggest hotels in Amritsar'
+                                ]}
+                            />
                             <FormComponent
                                 fields={tabsFields[0].fields} // Use fields from the single tab
                                 formik={formik}

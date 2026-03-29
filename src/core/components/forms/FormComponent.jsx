@@ -42,6 +42,8 @@ import DynamicUrlModal from '../modals/DynamicUrlModal'
 import CustomCurrencyInput from './CustomCurrencyInput'
 import DimensionLBHInput from '../DimensionLBHInput'
 import FlexibleAutoComplete from './FlexibleAutoComplete'
+import NumberedListInput from '../NumberedList'
+import BankDetailsInput from '../BankDetailsInput'
 
 function FormComponent({
     fields,
@@ -214,7 +216,6 @@ function FormComponent({
                                 />
                             )} */}
                                     {field.type === 'currency' && <CustomCurrencyInput field={field} formik={formik} />}
-
                                     <Box
                                         display='flex'
                                         sx={{
@@ -308,7 +309,6 @@ function FormComponent({
                                             />
                                         )}
                                     </Box>
-
                                     {field.type === 'select' && (
                                         <FormControl
                                             error={formik.touched[field.name] && formik.errors[field.name]}
@@ -406,7 +406,6 @@ function FormComponent({
                                             )}
                                         </>
                                     )}
-
                                     {field.type === 'file' && (
                                         <CustomFileUpload
                                             field={field}
@@ -482,6 +481,37 @@ function FormComponent({
                                             onInputChange={field.onInputChange}
                                         />
                                     )}
+                                    {field.type === 'numberedList' && (
+                                        <FormControl fullWidth variant='outlined'>
+                                            {!field?.innerLabel && (
+                                                <Typography variant='body2' sx={{ mb: 1 }}>
+                                                    {field.label}{' '}
+                                                    {field.required && <span style={{ color: 'red' }}>*</span>}
+                                                </Typography>
+                                            )}
+                                            <NumberedListInput
+                                                value={formik.values[field.name]}
+                                                onChange={val => formik.setFieldValue(field.name, val)}
+                                                customSx={field?.customSx}
+                                                label={field.label}
+                                            />
+                                            {formik.touched[field.name] && formik.errors[field.name] && (
+                                                <FormHelperText error>{formik.errors[field.name]}</FormHelperText>
+                                            )}
+                                        </FormControl>
+                                    )}
+                                    {field.type === 'bankDetails' && (
+                                        <FormControl fullWidth variant='outlined'>
+                                            <BankDetailsInput
+                                                value={formik.values[field.name]}
+                                                onChange={val => formik.setFieldValue(field.name, val)}
+                                                customSx={field?.customSx}
+                                            />
+                                            {formik.touched[field.name] && formik.errors[field.name] && (
+                                                <FormHelperText error>{formik.errors[field.name]}</FormHelperText>
+                                            )}
+                                        </FormControl>
+                                    )}
 
                                     {field.type === 'textarea' && (
                                         <FormControl fullWidth variant='outlined'>
@@ -542,7 +572,6 @@ function FormComponent({
                                             <ImageIcon />
                                         </Box>
                                     )}
-
                                     {field.type === 'dimensions' && (
                                         <DimensionLBHInput
                                             name={field.name}

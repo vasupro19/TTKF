@@ -227,29 +227,29 @@ function MasterPackagesTable() {
                                 Clear All Filters
                             </CustomButton>
                         )}
-                        <CustomSearchTextField
+                        {/* <CustomSearchTextField
                             search={search}
                             setSearch={setSearch}
                             placeholder='Search locations...'
                         />
                         {/* // Example for "From" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='from'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='From date'
                             label='From'
-                        />
+                        /> */}
                         {/* </Box> */}
 
                         {/* // Example for "To" date */}
-                        <CustomSearchDateField
+                        {/* <CustomSearchDateField
                             type='to'
                             filters={filters}
                             setFilters={setFilters}
                             placeholder='To date'
                             label='To'
-                        />
+                        />  */}
                         {/* <TextField
                         placeholder='search data'
                         size='small'

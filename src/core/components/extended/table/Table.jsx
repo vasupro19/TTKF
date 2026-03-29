@@ -131,7 +131,6 @@ function DataTable({
     const isMobile = useMediaQuery('(max-width:600px)')
 
     // const dispatch = useDispatch()
-    console.log(columns, 'cols')
     const queryColumnItem = {
         data: '', // string
         name: '', // string
@@ -214,13 +213,14 @@ function DataTable({
         setSelected(newSelected)
         setSelectedRow(newSelected)
     }
+    console.log(queryFilters, 'quer  ')
 
     // make query and fire parent handleQuery function
     function makeQuery(excel = false) {
         const queryObject = {
             start: page * length,
             length,
-            // columns: queryColumns,
+            columns: queryColumns,
             // order,
             search: querySearch,
             filters: queryFilters
@@ -369,7 +369,30 @@ function DataTable({
 
     // Note::height of the table rows along with header can be adjusted by regular-height class
     // but to see changes please update padding of individual elements eg:checkbox
+    useEffect(() => {
+        setQuerySearch(globalSearch)
+    }, [globalSearch])
 
+    // ✅ Fixed — keeps campaignId and any other filters
+    useEffect(() => {
+        if (!globalFilters) return
+
+        const updatedFilters = {}
+
+        // Extract any non-date filters (campaignId, type, etc.)
+        Object.entries(globalFilters).forEach(([key, value]) => {
+            if (key !== 'created_at' && value !== undefined && value !== null && value !== '') {
+                updatedFilters[key] = value
+            }
+        })
+
+        // Handle date range separately
+        if (globalFilters?.created_at?.from && globalFilters?.created_at?.to) {
+            updatedFilters.created_at = [`${globalFilters.created_at.from}`, `${globalFilters.created_at.to}`]
+        }
+
+        setQueryFilters(updatedFilters)
+    }, [globalFilters])
     useEffect(() => {
         if (addExcelQuery) makeQuery(true)
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,6 +420,7 @@ function DataTable({
                 return col
             }
         )
+        console.log(updatedQueryColumns)
         setQueryColumns(updatedQueryColumns)
     }
 

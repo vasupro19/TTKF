@@ -10,6 +10,8 @@ import { Box, Divider, Grid } from '@mui/material'
 
 // components
 import FormComponent from '@core/components/forms/FormComponent'
+import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
+
 import MainCard from '@core/components/extended/MainCard'
 
 // redux imports
@@ -272,6 +274,21 @@ function ItenaryClientsForm() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         {/* We use the first (and only) tab's fields */}
                         <Box sx={{ padding: 2 }}>
+                            <AiFormAssistant
+                                fields={tabsFields[0].fields}
+                                formik={formik}
+                                context='Travel itinerary form. User is adding one day at a time for a travel campaign. Each entry has a day number, title (e.g. "Chandigarh to Shimla Via Cab"), description (arrival/transfer/hotel check-in details), and location (state/city name).'
+                                suggestions={[
+                                    'Chandigarh to Shimla via Cab 120kms',
+                                    'Delhi to Manali via Volvo overnight',
+                                    'Arrival at Manali, hotel check-in',
+                                    'Local sightseeing Hadimba Temple Mall Road',
+                                    'Chandigarh to Manali via Cab 300kms',
+                                    'Delhi to Amritsar via Cab 450kms',
+                                    'Solang Valley and Rohtang Pass excursion',
+                                    'Delhi to Dharamshala via Cab 500kms'
+                                ]}
+                            />
                             <FormComponent
                                 fields={tabsFields[0].fields} // Use fields from the single tab
                                 formik={formik}

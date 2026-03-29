@@ -50,7 +50,11 @@ function CampaignsForm() {
     // Initial form values
     const initialValues = {
         title: '',
-        description: ''
+        description: '',
+        inclusions: '', // ✅
+        exclusions: '', // ✅
+        importantNote: '', // ✅
+        bankDetails: ''
     }
 
     // Validation schema
@@ -297,7 +301,7 @@ function CampaignsForm() {
                 {
                     name: 'inclusions',
                     label: 'Inclusions',
-                    type: 'textarea',
+                    type: 'numberedList', // ✅ changed
                     required: true,
                     grid: { xs: 12, sm: 4, md: 6 },
                     size: 'small',
@@ -306,7 +310,7 @@ function CampaignsForm() {
                 {
                     name: 'exclusions',
                     label: 'Exclusions',
-                    type: 'textarea',
+                    type: 'numberedList', // ✅ changed
                     required: true,
                     grid: { xs: 12, sm: 4, md: 6 },
                     size: 'small',
@@ -315,20 +319,20 @@ function CampaignsForm() {
                 {
                     name: 'importantNote',
                     label: 'Important Note',
-                    type: 'textarea', // 🚀 Added
+                    type: 'numberedList', // ✅ changed
                     required: false,
                     grid: { xs: 12, md: 12 },
                     size: 'small',
-                    customSx: { ...customSx, '& textarea': { minHeight: '80px' } }
+                    customSx
                 },
                 {
                     name: 'bankDetails',
                     label: 'Bank Details',
-                    type: 'textarea', // 🚀 Added
+                    type: 'bankDetails', // ✅ changed
                     required: false,
                     grid: { xs: 12, md: 12 },
                     size: 'small',
-                    customSx: { ...customSx, '& textarea': { minHeight: '100px' } }
+                    customSx
                 }
                 // {
                 //     name: 'cost_center',

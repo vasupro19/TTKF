@@ -18,7 +18,8 @@ import { useDispatch, useSelector } from 'react-redux'
 import {
     useCreateSuppliersMutation,
     getSupplierById,
-    useUpdateSupplierMutation
+    useUpdateSupplierMutation,
+    useGetSuppliersQuery
 } from '@/app/store/slices/api/supplierSlice'
 import { useFetchPincodeDetailsMutation } from '@app/store/slices/api/clientSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
@@ -124,6 +125,7 @@ function SupplierForm() {
                 if (!formId) {
                     response = await createSupplierMaster(values).unwrap()
                     setClientId(response.data.id)
+                    navigate(-1)
                     // formik.setFieldValue('tabId', tabLabels[1])
                     // enableTabsAfterValidation(1)
                     // setActiveTab(1)

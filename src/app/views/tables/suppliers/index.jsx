@@ -84,7 +84,7 @@ function MasterSupplierTable() {
             return true
         }
         setUsers(response?.data || [])
-        setRecordsCount(response?.recordsTotal || 0)
+        setRecordsCount(response?.count || 0)
         return true
     }
 
@@ -172,7 +172,7 @@ function MasterSupplierTable() {
         setRefetch(true)
         setTimeout(() => setRefetch(false), 500)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname])
+    }, [location.pathname, navigate])
 
     // use keyboard shortcut
     useKeyboardShortcut('Alt+A', () => {

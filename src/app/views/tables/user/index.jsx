@@ -114,7 +114,6 @@ function SetupUserTable() {
 
     const queryHandler = async query => {
         const { data: response } = await dispatch(getUsers.initiate(query, false))
-        console.log(response)
         if (isExcelQuery(query)) return
 
         setRows(

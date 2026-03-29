@@ -242,11 +242,11 @@ function MasterDestinationTable() {
                                 Clear All Filters
                             </CustomButton>
                         )}
-                        <CustomSearchTextField
+                        {/* <CustomSearchTextField
                             search={search}
                             setSearch={setSearch}
                             placeholder='Search locations...'
-                        />
+                        /> */}
                         {/* // Example for "From" date */}
                         {/* <CustomSearchDateField
                             type='from'

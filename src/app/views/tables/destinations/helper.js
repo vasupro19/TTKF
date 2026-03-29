@@ -29,7 +29,7 @@ export const headers = [
         search: true,
         sort: false,
         stick: true,
-        key: 'campaignId',
+        key: 'campaignTitle',
         visible: true,
         minWidth: 6,
         maxWidth: 8

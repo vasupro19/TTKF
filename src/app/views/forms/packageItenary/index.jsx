@@ -6,7 +6,8 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate } from 'react-router-dom'
 
 // theme components
-import { Box, Divider, Grid, Button } from '@mui/material'
+import { Box, Divider, Grid, Button, Skeleton, ImageList, ImageListItem, Typography } from '@mui/material'
+import { CheckCircle } from '@mui/icons-material'
 
 // components
 import FormComponent from '@core/components/forms/FormComponent'
@@ -17,6 +18,7 @@ import DownloadIcon from '@mui/icons-material/Download'
 import { useDispatch, useSelector } from 'react-redux'
 import { getItenaryClients } from '@/app/store/slices/api/itenarySlice'
 import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
+import { getTravelImages } from '@/app/store/slices/api/aiSlice'
 
 // 🚨 -----------------------------------------------------------
 // 🚨 NEW/UPDATED IMPORTS FOR PACKAGES
@@ -35,6 +37,7 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
 import IdentityCard from '@/core/components/IdentityCard'
+import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
 
 // CONSTANTS - assuming you have a way to import Select component data
 
@@ -52,6 +55,8 @@ function PackagesItenary() {
 
     const [itenaryData, setItenaryData] = useState([])
     const [destinationData, setDestinationData] = useState([])
+    const [imageOptions, setImageOptions] = useState([])
+    const [loadingImages, setLoadingImages] = useState(false)
     const [filters, setFilters] = useState({
         created_at: { from: '', to: '' },
         campaignId: params.campaignId
@@ -302,7 +307,20 @@ function PackagesItenary() {
     useEffect(() => {
         getCampaignsFunc()
     }, [])
+    const selectedItenary = itenaryData.find(i => i.id.toString() === formik.values.itenaryId)
+    const selectedDestination = destinationData.find(d => d.id.toString() === formik.values.destinationId)
+    useEffect(() => {
+        const keyword = selectedDestination?.name || selectedItenary?.title
+        if (!keyword) return
 
+        setLoadingImages(true)
+        dispatch(getTravelImages.initiate(keyword))
+            .then(res => {
+                setImageOptions(res.data?.urls || [])
+            })
+            .catch(() => setImageOptions([]))
+            .finally(() => setLoadingImages(false))
+    }, [formik.values.destinationId, formik.values.itenaryId])
     return (
         <MainCard
             sx={{ py: '1px' }}
@@ -359,6 +377,108 @@ function PackagesItenary() {
                                 showSeparaterBorder={false}
                             />
                         </Box>
+                        {(loadingImages || imageOptions.length > 0) && (
+                            <Box sx={{ mt: 2 }}>
+                                <Typography
+                                    variant='caption'
+                                    sx={{ color: 'text.secondary', mb: 1, display: 'block', fontWeight: 600 }}
+                                >
+                                    SUGGESTED IMAGES — click to select
+                                </Typography>
+
+                                {loadingImages ? (
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        {[1, 2, 3, 4, 5, 6].map(i => (
+                                            <Skeleton
+                                                key={i}
+                                                variant='rectangular'
+                                                width={150}
+                                                height={100}
+                                                sx={{ borderRadius: '8px', flexShrink: 0 }}
+                                            />
+                                        ))}
+                                    </Box>
+                                ) : (
+                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                        {imageOptions.map((img, i) => (
+                                            <Box
+                                                key={img.name}
+                                                onClick={() => formik.setFieldValue('image', img.url)}
+                                                sx={{
+                                                    cursor: 'pointer',
+                                                    borderRadius: '8px',
+                                                    overflow: 'hidden',
+                                                    border: '3px solid',
+                                                    borderColor:
+                                                        formik.values.image === img.url
+                                                            ? 'primary.main'
+                                                            : 'transparent',
+                                                    transition: 'all 0.2s',
+                                                    position: 'relative',
+                                                    '&:hover': {
+                                                        borderColor: 'primary.light',
+                                                        transform: 'scale(1.02)'
+                                                    }
+                                                }}
+                                            >
+                                                <img
+                                                    src={img.thumb}
+                                                    alt={`travel-${i}`}
+                                                    style={{
+                                                        width: '150px',
+                                                        height: '100px',
+                                                        objectFit: 'cover',
+                                                        display: 'block'
+                                                    }}
+                                                />
+                                                {/* ✅ Checkmark on selected */}
+                                                {formik.values.image === img.url && (
+                                                    <Box
+                                                        sx={{
+                                                            position: 'absolute',
+                                                            top: 4,
+                                                            right: 4,
+                                                            backgroundColor: 'primary.main',
+                                                            borderRadius: '50%',
+                                                            width: 20,
+                                                            height: 20,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}
+                                                    >
+                                                        <CheckCircle sx={{ fontSize: 16, color: '#fff' }} />
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                )}
+
+                                {/* ✅ Preview selected image */}
+                                {formik.values.image && (
+                                    <Box sx={{ mt: 1.5 }}>
+                                        <Typography variant='caption' color='text.secondary'>
+                                            Selected Image Preview:
+                                        </Typography>
+                                        <Box
+                                            component='img'
+                                            src={formik.values.image}
+                                            sx={{
+                                                mt: 0.5,
+                                                width: '100%',
+                                                maxHeight: '200px',
+                                                objectFit: 'cover',
+                                                borderRadius: '8px'
+                                            }}
+                                            onError={e => {
+                                                e.target.style.display = 'none'
+                                            }}
+                                        />
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
                     </Box>
                 </Grid>
 
