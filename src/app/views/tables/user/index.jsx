@@ -146,7 +146,7 @@ function SetupUserTable() {
 
     const deleteActionHandler = async () => {
         try {
-            await deactivateUser(removeId).unwrap()
+            await deactivateUser({ id: removeId, active: isActive }).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,

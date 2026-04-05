@@ -100,12 +100,13 @@ export const usersSlice = apiSliceConfig.injectEndpoints({
             })
         }),
         deactivateUser: build.mutation({
-            query: id => {
+            query: ({ id, active }) => {
                 const KEY = `deactivateUserLKey`
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/admin/userManagement/${id}`,
-                    method: 'DELETE',
+                    url: `/user/clientUserdeactivate/${id}`,
+                    method: 'PUT',
+                    body: { active: !active }, // ✅ flip the current status
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },

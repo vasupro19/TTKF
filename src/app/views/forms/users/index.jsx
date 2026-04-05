@@ -140,16 +140,23 @@ export default function SetupUserForm() {
         firstName: z.string().min(1, 'First Name is required'),
 
         phone: z.string().superRefine((val, ctx) => {
-            const cleaned = val.replace(/-/g, '').trim()
+            // ✅ Strip country code (+91 or 91) and hyphens before validating
+            const cleaned = val
+                .replace(/^\+91/, '') // remove +91
+                .replace(/^91/, '') // remove 91 without +
+                .replace(/-/g, '') // remove hyphens
+                .trim()
+
             if (!cleaned) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     message: 'Phone number is required'
                 })
-            } else if (!/^\d{10,15}$/.test(cleaned)) {
+            } else if (!/^\d{10}$/.test(cleaned)) {
+                // ✅ exactly 10 digits after stripping
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
-                    message: 'Must be a valid phone number'
+                    message: 'Must be a valid 10 digit phone number'
                 })
             }
         }),
@@ -371,7 +378,7 @@ export default function SetupUserForm() {
                     const formData = {
                         firstName: userData?.name || '',
                         // Note: Your response uses 'phoneNumber', not 'contact_no'
-                        phone: userData?.phoneNumber || '',
+                        phone: `+91${userData?.phoneNumber}` || '',
                         email: userData?.email || '',
                         // password: userData?.password || '',
                         // confirmPassword: userData?.password || '',
