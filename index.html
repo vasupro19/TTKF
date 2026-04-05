@@ -4,30 +4,30 @@
         <meta charset="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>BUDDY</title>
+        <title>TRAVELYTICS</title>
         <style>
             .ttkWrapper {
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
+                min-height: 100vh;
+                margin: 0;
             }
-
-            .ttkLogo {
-                font-size: 4rem;
-                font-weight: 700;
-                color: #3fa657; /* green theme like truck */
-                letter-spacing: 0.15em;
+            .ttkLogo-img {
+                /* --- INCREASED THE LOGO SIZE --- */
+                width: 500px; /* Adjust this value as needed to get the perfect size for your design */
+                height: auto;
+                /* --- PULSE ANIMATION CONTINUES --- */
                 animation: pulse 1.5s infinite ease-in-out;
-                font-family: monospace;
             }
-
             @keyframes pulse {
                 0% {
                     transform: scale(1);
                     opacity: 0.7;
                 }
                 50% {
-                    transform: scale(1.1);
+                    transform: scale(1.05);
                     opacity: 1;
                 }
                 100% {
@@ -42,13 +42,13 @@
             <div class="splash-screen">
                 <div class="loader">
                     <div class="ttkWrapper">
-                        <h1 class="ttkLogo">OUR TOOL</h1>
+                        <img
+                            src="/public//assets/svg/travelytics_logo.svg"
+                            alt="Travelytics Logo"
+                            class="ttkLogo-img"
+                        />
                     </div>
                 </div>
-                <!-- <div class="title-container">
-                    <h1 class="main-title">Cerebrum</h1>
-                    <p class="sub-title">3PL Warehousing Maestro</p>
-                </div> -->
             </div>
         </div>
         <script type="module" src="/src/main.jsx"></script>
