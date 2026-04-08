@@ -15,7 +15,17 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY, removeLoader })
                 }
             },
-            // 🚨 Tag updated
+            providesTags: ['PackageClient']
+        }),
+        getPackageClientById: build.query({
+            query: id => ({
+                url: `/campaign/package-all?columns[0][data]=id&columns[0][searchable]=true&columns[0][search][value]=${id}&start=0&length=1`,
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            transformResponse: response => ({
+                ...response,
+                data: response?.data?.[0] || null
+            }),
             providesTags: ['PackageClientById']
         }),
         getAllPackagesClient: build.query({
@@ -54,13 +64,25 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
                 dispatchLoaderEvent(KEY)
                 return {
                     // 🚨 Path updated
-                    url: `/package-client/${id}`,
+                    url: `/campaign/package/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
             // 🚨 Tags updated
+            invalidatesTags: ['PackageClient', 'PackageClientById']
+        }),
+        deletePackageClient: build.mutation({
+            query: id => {
+                const KEY = 'deletePackageClientLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/campaign/package/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
             invalidatesTags: ['PackageClient', 'PackageClientById']
         })
     })
@@ -69,9 +91,11 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
 // Export hooks only for Package Client endpoints
 export const {
     useGetPackageClientsQuery,
+    useGetPackageClientByIdQuery,
     useGetAllPackagesClientQuery,
     useCreatePackageClientMutation,
     useUpdatePackageClientMutation,
+    useDeletePackageClientMutation,
 
     // Export the endpoint reference itself if needed elsewhere
     endpoints: { getPackageClientById, getPackageClients }

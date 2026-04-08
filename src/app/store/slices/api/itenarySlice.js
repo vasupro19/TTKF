@@ -49,6 +49,18 @@ export const itenarySlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['ItenaryClient', 'ItenaryClientById']
         }),
+        deleteItenaryClient: build.mutation({
+            query: id => {
+                const KEY = 'deleteItenaryClientLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/campaign/itenary/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['ItenaryClient', 'ItenaryClientById']
+        }),
         uploadItineraries: build.mutation({
             query: payload => {
                 const KEY = 'uploadItinerariesKey'
@@ -71,6 +83,7 @@ export const {
     useGetItenaryClientByIdQuery,
     useCreateItenaryClientMutation,
     useUpdateItenaryClientMutation,
+    useDeleteItenaryClientMutation,
     useUploadItinerariesMutation,
 
     // Export the endpoint reference itself

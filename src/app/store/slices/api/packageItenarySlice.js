@@ -3,61 +3,62 @@ import { apiSliceConfig } from './configSlice'
 
 export const packageItenarySlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
-        // === PACKAGE CLIENT ENDPOINTS ===
         getPackageItenaryClients: build.query({
             query: (query, removeLoader = true) => {
                 const KEY = 'getPackageItenaryClientsLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    // 🚨 Path updated for packages
                     url: `/campaign/package/itenary${query || ''}`,
                     keepUnusedDataFor: 10,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY, removeLoader })
                 }
             },
-            // 🚨 Tag updated
-            providesTags: ['PackageClient']
+            providesTags: ['PackageItenaryClient']
         }),
         getPackageClientItenaryById: build.query({
             query: id => ({
-                // 🚨 Path updated
                 url: `/campaign/package/itenary/${id}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
-            // 🚨 Tag updated
-            providesTags: ['PackageClientById']
+            providesTags: ['PackageItenaryClientById']
         }),
         createPackageItenaryClient: build.mutation({
             query: payload => {
-                // 🚨 Key updated
                 const KEY = 'createPackageItenaryClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    // 🚨 Path updated
                     url: '/campaign/package/itenary',
                     method: 'POST',
                     body: payload,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            // 🚨 Tag updated
-            invalidatesTags: ['PackageClient']
+            invalidatesTags: ['PackageItenaryClient', 'PackageItenaryClientById']
         }),
-        updatePackageClient: build.mutation({
+        updatePackageItenaryClient: build.mutation({
             query: ({ id, ...updateData }) => {
-                // 🚨 Key updated
-                const KEY = 'updatePackageClientLKey'
+                const KEY = 'updatePackageItenaryClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    // 🚨 Path updated
-                    url: `/package-client/${id}`,
+                    url: `/campaign/package/itenary/${id}`,
                     method: 'PUT',
                     body: updateData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            // 🚨 Tags updated
-            invalidatesTags: ['PackageClient', 'PackageClientById']
+            invalidatesTags: ['PackageItenaryClient', 'PackageItenaryClientById']
+        }),
+        deletePackageItenaryClient: build.mutation({
+            query: id => {
+                const KEY = 'deletePackageItenaryClientLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/campaign/package/itenary/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['PackageItenaryClient', 'PackageItenaryClientById']
         }),
         downloadItineraryTemplate: build.query({
             query: () => ({
@@ -74,8 +75,8 @@ export const {
     useGetPackageItenaryClientsQuery,
     useGetPackageClientItenaryByIdQuery,
     useCreatePackageItenaryClientMutation,
-    useUpdatePackageClientMutation,
+    useUpdatePackageItenaryClientMutation,
+    useDeletePackageItenaryClientMutation,
 
-    // Export the endpoint reference itself if needed elsewhere
     endpoints: { getPackageClientItenaryById, getPackageItenaryClients }
 } = packageItenarySlice

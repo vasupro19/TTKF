@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useFormik } from 'formik'
 
 // router
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
 import { Box, Divider, Grid } from '@mui/material'
@@ -40,7 +40,9 @@ function ItenaryClientsForm() {
     // Note: Assuming `id` in useParams is the Itinerary ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
+    const location = useLocation()
     const dispatch = useDispatch()
+    const campaignContextId = location.state?.campaignId
 
     // Hooks for creating/updating itineraries (MOCKED)
     const [createItenaryClient, { isLoading: isCreating }] = useCreateItenaryClientMutation()
@@ -60,7 +62,7 @@ function ItenaryClientsForm() {
     const initialValues = {
         title: '', // Itinerary title (matching headers)
         description: '', // Itinerary description (matching headers)
-        campaignId: '' // Foreign key to CampaignClient
+        campaignId: campaignContextId?.toString() || '' // Foreign key to CampaignClient
     }
 
     // UPDATED Validation schema for Itinerary fields
@@ -180,6 +182,11 @@ function ItenaryClientsForm() {
         if (formId) getItenaryData(formId)
     }, [formId, dispatch]) // Dispatch dependency added for best practice
 
+    useEffect(() => {
+        if (formId || !campaignContextId) return
+        formik.setFieldValue('campaignId', campaignContextId.toString())
+    }, [formId, campaignContextId])
+
     // --- Form Fields Definition ---
 
     const customSx = {
@@ -226,7 +233,7 @@ function ItenaryClientsForm() {
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx,
-                    disabled: campaignsLoading // Disable while loading campaign options
+                    isDisabled: campaignsLoading || Boolean(campaignContextId && !formId) // Disable while loading campaign options
                 },
                 {
                     name: 'description',

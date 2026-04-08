@@ -21,7 +21,11 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getDestinationClients, useUploadDestinationsMutation } from '@/app/store/slices/api/destinationSlice'
+import {
+    getDestinationClients,
+    useDeleteDestinationClientMutation,
+    useUploadDestinationsMutation
+} from '@/app/store/slices/api/destinationSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -55,7 +59,7 @@ function MasterDestinationTable() {
     const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
+    const { getLocationMasterLKey, deleteDestinationClientLKey } = useSelector(state => state.loading)
 
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
@@ -67,6 +71,7 @@ function MasterDestinationTable() {
     const [clearAllFilters, setClearAllFilters] = useState(false)
     const [refetch, setRefetch] = useState(false)
     const [uploadDestinations, { isLoading }] = useUploadDestinationsMutation()
+    const [deleteDestinationClient] = useDeleteDestinationClientMutation()
     // const [getDestinationClient] = useGetDestinationClientsQuery()
 
     const [search, setSearch] = useState({
@@ -114,11 +119,11 @@ function MasterDestinationTable() {
 
     const deleteActionHandler = async () => {
         try {
-            await dispatch(removeLocationMaster.initiate(removeId))
+            await deleteDestinationClient(removeId).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'removed location successfully!',
+                    message: 'Destination deleted successfully!',
                     variant: 'alert',
                     alert: { color: 'success' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -130,9 +135,9 @@ function MasterDestinationTable() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'unable to remove location!',
+                    message: reqError?.data?.message || 'Unable to delete destination!',
                     variant: 'alert',
-                    alert: { color: 'success' },
+                    alert: { color: 'error' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
                 })
             )
@@ -153,7 +158,9 @@ function MasterDestinationTable() {
     }
 
     const handleAdd = () => {
-        navigate('/master/destinations/add')
+        navigate('/master/destinations/add', {
+            state: { campaignId: params.id }
+        })
     }
 
     const menuOptions = useMemo(
@@ -340,10 +347,10 @@ function MasterDestinationTable() {
                 />
                 <PopperContextMenu options={menuOptions} />
                 <ConfirmModal
-                    title='Delete Location'
+                    title='Delete Destination'
                     message={
                         <>
-                            Are you sure you want to delete this location:{' '}
+                            Are you sure you want to delete this destination:{' '}
                             <strong>{users?.find(user => user?.id === removeId)?.name || 'Unknown'}</strong>?
                         </>
                     }
@@ -351,7 +358,7 @@ function MasterDestinationTable() {
                     confirmText='Yes, Delete'
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
                     onConfirm={deleteActionHandler}
-                    isLoading={removeLocationMasterLKey}
+                    isLoading={deleteDestinationClientLKey}
                 />
             </MainCard>
         </ContextMenuProvider>

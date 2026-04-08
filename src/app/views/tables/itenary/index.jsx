@@ -17,7 +17,11 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getItenaryClients, useUploadItinerariesMutation } from '@/app/store/slices/api/itenarySlice'
+import {
+    getItenaryClients,
+    useDeleteItenaryClientMutation,
+    useUploadItinerariesMutation
+} from '@/app/store/slices/api/itenarySlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -48,8 +52,9 @@ function MasterItenaryTable() {
     const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
+    const { getLocationMasterLKey, deleteItenaryClientLKey } = useSelector(state => state.loading)
     const [uploadTrigger, { isLoading }] = useUploadItinerariesMutation()
+    const [deleteItenaryClient] = useDeleteItenaryClientMutation()
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
     const [recordsCount, setRecordsCount] = useState(0)
@@ -106,11 +111,11 @@ function MasterItenaryTable() {
 
     const deleteActionHandler = async () => {
         try {
-            await dispatch(removeLocationMaster.initiate(removeId))
+            await deleteItenaryClient(removeId).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'removed location successfully!',
+                    message: 'Itinerary deleted successfully!',
                     variant: 'alert',
                     alert: { color: 'success' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -122,9 +127,9 @@ function MasterItenaryTable() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'unable to remove location!',
+                    message: reqError?.data?.message || 'Unable to delete itinerary!',
                     variant: 'alert',
-                    alert: { color: 'success' },
+                    alert: { color: 'error' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
                 })
             )
@@ -145,7 +150,9 @@ function MasterItenaryTable() {
     }
 
     const handleAdd = () => {
-        navigate('/master/itenary/add')
+        navigate('/master/itenary/add', {
+            state: { campaignId: params.id }
+        })
     }
 
     const menuOptions = useMemo(
@@ -400,18 +407,18 @@ function MasterItenaryTable() {
                 />
                 <PopperContextMenu options={menuOptions} />
                 <ConfirmModal
-                    title='Delete Location'
+                    title='Delete Itinerary'
                     message={
                         <>
-                            Are you sure you want to delete this location:{' '}
-                            <strong>{users?.find(user => user?.id === removeId)?.name || 'Unknown'}</strong>?
+                            Are you sure you want to delete this itinerary:{' '}
+                            <strong>{users?.find(user => user?.id === removeId)?.title || 'Unknown'}</strong>?
                         </>
                     }
                     icon='warning'
                     confirmText='Yes, Delete'
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
                     onConfirm={deleteActionHandler}
-                    isLoading={removeLocationMasterLKey}
+                    isLoading={deleteItenaryClientLKey}
                 />
             </MainCard>
         </ContextMenuProvider>

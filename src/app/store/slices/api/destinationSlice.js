@@ -49,6 +49,18 @@ export const destinationSlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['DestinationClient', 'DestinationClientById']
         }),
+        deleteDestinationClient: build.mutation({
+            query: id => {
+                const KEY = 'deleteDestinationClientLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/campaign/destination/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['DestinationClient', 'DestinationClientById']
+        }),
         uploadDestinations: build.mutation({
             query: payload => {
                 const KEY = 'uploadDestinationsKey'
@@ -78,6 +90,7 @@ export const {
     useGetDestinationClientByIdQuery,
     useCreateDestinationClientMutation,
     useUpdateDestinationClientMutation,
+    useDeleteDestinationClientMutation,
     useUploadDestinationsMutation,
 
     // Export the endpoint reference itself if needed elsewhere

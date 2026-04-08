@@ -1,5 +1,4 @@
 import { createSlice } from '@reduxjs/toolkit'
-import { menuItems } from '@/app/layouts/header/menuItems'
 
 const AuthSlice = createSlice({
     name: 'Auth',
@@ -81,8 +80,8 @@ const AuthSlice = createSlice({
             state.menuItems = action.payload
         },
         setUserDetails: (state, action) => {
-            console.log(action.payload, 'action')
-            state.user = { ...action.payload.user }
+            const user = action.payload?.user || action.payload || null
+            state.user = user ? { ...user } : null
             state.isLoggedIn = true
             state.error = null
             state.permissionExpired = false

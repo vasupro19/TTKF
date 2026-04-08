@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useFormik } from 'formik'
 
 // router
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
 import { Box, Divider, Grid } from '@mui/material'
@@ -39,6 +39,8 @@ function DestinationClientsForm() {
     // Note: Assuming `id` in useParams is the DestinationClients ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
+    const location = useLocation()
+    const campaignContextId = location.state?.campaignId
 
     // Hooks for creating/updating destinations
     const [createDestinationClient] = useCreateDestinationClientMutation()
@@ -59,7 +61,7 @@ function DestinationClientsForm() {
 
     const initialValues = {
         name: '', // Destination name
-        campaignId: '', // Foreign key to CampaignClient
+        campaignId: campaignContextId?.toString() || '', // Foreign key to CampaignClient
         delux_hotel: '',
         super_delux_hotel: '',
         luxury_hotel: '',
@@ -178,6 +180,11 @@ function DestinationClientsForm() {
         if (formId) getDestinationData(formId)
     }, [formId])
 
+    useEffect(() => {
+        if (formId || !campaignContextId) return
+        formik.setFieldValue('campaignId', campaignContextId.toString())
+    }, [formId, campaignContextId])
+
     // --- Form Fields Definition ---
 
     const customSx = {
@@ -228,7 +235,8 @@ function DestinationClientsForm() {
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
-                    customSx
+                    customSx,
+                    isDisabled: Boolean(campaignContextId && !formId)
                     // disabled: campaignsLoading // Disable while loading campaign options
                 },
                 {

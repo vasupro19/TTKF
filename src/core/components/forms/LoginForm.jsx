@@ -63,10 +63,11 @@ export default function Login() {
             try {
                 const res = await login(values).unwrap()
                 const userData = res.data.user
-                dispatch(setUserDetails(userData))
+                dispatch(setUserDetails({ user: userData }))
                 await setToken(res.data.accessToken)
                 const menus = await triggerMenu(userData.id).unwrap()
                 dispatch(setMenuItems(menus.data))
+                navigate('/dashboard', { replace: true })
             } catch (err) {
                 dispatch(
                     openSnackbar({

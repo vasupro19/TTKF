@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useFormik } from 'formik'
 
 // router
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
 import { Box, Divider, Grid } from '@mui/material'
@@ -40,6 +40,8 @@ function PackagesClientForm() {
     // Note: Assuming `id` in useParams is the PackageClients ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
+    const location = useLocation()
+    const campaignContextId = location.state?.campaignId
 
     // 👈 Hooks for creating/updating Packages
     const [createPackageClient] = useCreatePackageClientMutation()
@@ -57,7 +59,7 @@ function PackagesClientForm() {
 
     const initialValues = {
         name: '', // Package name
-        campaignId: '' // Foreign key to CampaignClient
+        campaignId: campaignContextId?.toString() || '' // Foreign key to CampaignClient
     }
 
     // 👈 Validation schema for PackageClient fields
@@ -169,6 +171,11 @@ function PackagesClientForm() {
         if (formId) getPackageData(formId) // 👈 Updated function call
     }, [formId])
 
+    useEffect(() => {
+        if (formId || !campaignContextId) return
+        formik.setFieldValue('campaignId', campaignContextId.toString())
+    }, [formId, campaignContextId])
+
     // --- Form Fields Definition ---
 
     const customSx = {
@@ -220,7 +227,8 @@ function PackagesClientForm() {
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
-                    customSx
+                    customSx,
+                    isDisabled: Boolean(campaignContextId && !formId)
                 }
             ]
         }

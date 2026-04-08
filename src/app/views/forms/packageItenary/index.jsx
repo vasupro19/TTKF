@@ -1,66 +1,54 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
-// router
-import { useParams, useNavigate } from 'react-router-dom'
-
-// theme components
-import { Box, Divider, Grid, Button, Skeleton, ImageList, ImageListItem, Typography } from '@mui/material'
-import { CheckCircle } from '@mui/icons-material'
-
-// components
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Box, Divider, Grid, Skeleton, Typography, Card, CardContent, IconButton, Tooltip } from '@mui/material'
+import { CheckCircle, Delete, Edit } from '@mui/icons-material'
 import FormComponent from '@core/components/forms/FormComponent'
 import MainCard from '@core/components/extended/MainCard'
-import DownloadIcon from '@mui/icons-material/Download'
-
-// redux imports
+import CustomButton from '@core/components/extended/CustomButton'
 import { useDispatch, useSelector } from 'react-redux'
 import { getItenaryClients } from '@/app/store/slices/api/itenarySlice'
 import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
 import { getTravelImages } from '@/app/store/slices/api/aiSlice'
-
-// 🚨 -----------------------------------------------------------
-// 🚨 NEW/UPDATED IMPORTS FOR PACKAGES
-// 🚨 Adjust the file paths as necessary for your project structure
-// 🚨 -----------------------------------------------------------
 import {
     useCreatePackageItenaryClientMutation,
-    useUpdatePackageClientMutation,
+    useUpdatePackageItenaryClientMutation,
+    useDeletePackageItenaryClientMutation,
     getPackageClientItenaryById
-} from '@/app/store/slices/api/packageItenarySlice' // 👈 **NEW Package Slice**
-
-import {
-    getCampaigns // Hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/campaignSlice' // Existing Campaign Slice
+} from '@/app/store/slices/api/packageItenarySlice'
+import { getCampaigns } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
-
-import { objectLength } from '@/utilities'
 import IdentityCard from '@/core/components/IdentityCard'
-import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
-
-// CONSTANTS - assuming you have a way to import Select component data
+import ConfirmModal from '@/core/components/modals/ConfirmModal'
+import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 
 function PackagesItenary() {
-    // 👈 **Renamed Component**
-    // Note: Assuming `id` in useParams is the PackageClients ID for editing
-    const { id: formId } = useParams()
     const navigate = useNavigate()
+    const location = useLocation()
     const dispatch = useDispatch()
     const params = useParams()
 
-    // 👈 Hooks for creating/updating Packages
     const [createPackageItenaryClient] = useCreatePackageItenaryClientMutation()
-    const [updatePackageClient] = useUpdatePackageClientMutation()
+    const [updatePackageItenaryClient] = useUpdatePackageItenaryClientMutation()
+    const [deletePackageItenaryClient] = useDeletePackageItenaryClientMutation()
 
     const [itenaryData, setItenaryData] = useState([])
     const [destinationData, setDestinationData] = useState([])
+    const [packageActivities, setPackageActivities] = useState([])
     const [imageOptions, setImageOptions] = useState([])
     const [loadingImages, setLoadingImages] = useState(false)
-    const [filters, setFilters] = useState({
-        created_at: { from: '', to: '' },
-        campaignId: params.campaignId
-    })
+    const [editingActivity, setEditingActivity] = useState(null)
+    const [deleteId, setDeleteId] = useState(null)
+
+    async function fetchActivities() {
+        const { data, error } = await dispatch(getPackageClientItenaryById.initiate(params.packageId))
+        if (error) return
+        setPackageActivities(data?.data || [])
+    }
+
+    const focusActivityId = location.state?.focusActivityId
 
     const getItenaryAndDestination = async () => {
         const { data: itenaryRes } = await dispatch(getItenaryClients.initiate(`?campaignId=${params.campaignId}`))
@@ -71,29 +59,19 @@ function PackagesItenary() {
         setDestinationData(destinationRes?.data || [])
     }
 
-    useEffect(() => {
-        // getCampaignsFunc()
-        getItenaryAndDestination()
-    }, [])
-
-    const [editData, setEditData] = useState({})
     const [campaignsData, setcampaignsData] = useState([])
 
-    // 👈 Assuming you will use appropriate loading keys for package operations
-    const { createPackageLKey, updatePackageLKey } = useSelector(state => state.loading || {})
-
-    // const dispatch = useDispatch()
-
-    // --- Initial Values and Validation Schema ---
+    const { createPackageItenaryClientLKey, updatePackageItenaryClientLKey, deletePackageItenaryClientLKey } =
+        useSelector(state => state.loading || {})
 
     const initialValues = {
         packageId: params.packageId,
-        campaignId: '',
+        campaignId: params.campaignId || '',
         itenaryId: '',
-        destinationId: ''
+        destinationId: '',
+        image: ''
     }
 
-    // 👈 Validation schema for PackageClient fields
     const validationSchema = z.object({
         campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
         itenaryId: z.number({ invalid_type_error: 'Itenary is required' }).int().positive(),
@@ -103,7 +81,6 @@ function PackagesItenary() {
 
     const validate = values => {
         try {
-            // Convert campaignId to number for Zod validation
             const parsedValues = {
                 ...values,
                 campaignId: values.campaignId ? parseInt(values?.campaignId, 10) : '',
@@ -121,45 +98,50 @@ function PackagesItenary() {
         }
     }
 
-    // --- Formik Setup ---
-
     const formik = useFormik({
         initialValues,
         validate,
         onSubmit: async values => {
             try {
-                // Ensure campaignId is an integer before sending
                 const payload = {
                     ...values,
                     campaignId: parseInt(values.campaignId, 10),
                     itenaryId: parseInt(values.itenaryId, 10),
-                    destinationId: parseInt(values.destinationId, 10)
+                    destinationId: values.destinationId ? parseInt(values.destinationId, 10) : null
                 }
 
                 let response
-                if (formId) {
-                    // 👈 Update existing package
-                    response = await updatePackageClient({ id: formId, ...payload }).unwrap()
+                if (editingActivity?.id) {
+                    response = await updatePackageItenaryClient({ id: editingActivity.id, ...payload }).unwrap()
                 } else {
-                    // 👈 Create new package
                     response = await createPackageItenaryClient(payload).unwrap()
                 }
-                console.log(response)
+
                 if (response.success || response.status_code === 200) {
                     dispatch(
                         openSnackbar({
                             open: true,
-                            message: response.message || 'Package saved successfully!', // 👈 Updated text
+                            message:
+                                response.message ||
+                                `Package activity ${editingActivity?.id ? 'updated' : 'created'} successfully!`,
                             variant: 'alert',
                             alert: { color: 'success' },
                             anchorOrigin: { vertical: 'top', horizontal: 'right' }
                         })
                     )
-                    // 👈 Navigate to the list view after submission
-                    navigate(-1) // 👈 Updated navigation path
+                    setEditingActivity(null)
+                    formik.resetForm({
+                        values: {
+                            packageId: params.packageId,
+                            campaignId: params.campaignId || '',
+                            itenaryId: '',
+                            destinationId: '',
+                            image: ''
+                        }
+                    })
+                    fetchActivities()
                 }
             } catch (error) {
-                // ... (Error handling remains similar to your original code)
                 if (error.data?.data?.errors) {
                     const backendErrors = error.data.data.errors
                     const formikErrors = {}
@@ -185,34 +167,26 @@ function PackagesItenary() {
         validateOnChange: true
     })
 
-    // --- Data Fetching and Edit Logic ---
-
-    const getPackageData = async id => {
-        // 👈 Updated function name
-        const { data, error } = await dispatch(getPackageClientItenaryById.initiate(id)) // 👈 Updated RTK query
-        if (error) return
-
-        if (data && data?.data && objectLength(data.data)) {
-            setEditData(data.data)
-
-            // Set form values for editing
-            const packageData = data.data // 👈 Updated variable name
-            formik.setValues({
-                ...packageData,
-                campaignId: packageData.campaignId.toString() // Convert number to string for Select component
-            })
-        }
+    function resetFormState() {
+        setEditingActivity(null)
+        formik.resetForm({
+            values: {
+                packageId: params.packageId,
+                campaignId: params.campaignId || '',
+                itenaryId: '',
+                destinationId: '',
+                image: ''
+            }
+        })
     }
 
     useEffect(() => {
-        if (formId) getPackageData(formId) // 👈 Updated function call
-    }, [formId])
-
-    // --- Form Fields Definition ---
+        getItenaryAndDestination()
+        fetchActivities()
+    }, [params.packageId, params.campaignId])
 
     const customSx = {
         '& input, & textarea': {
-            // Apply styles to both input and textarea
             backgroundColor: '#fff',
             padding: '12px 8px',
             height: '18px'
@@ -226,10 +200,9 @@ function PackagesItenary() {
         flexGrow: 1
     }
 
-    // Transform campaigns data for the Select component
     const campaignOptions = campaignsData?.map(camp => ({
-        label: camp.title, // Use campaign title for display
-        value: camp.id.toString() // Use campaign ID as value (must be string for Formik Select)
+        label: camp.title,
+        value: camp.id.toString()
     }))
 
     const itenaryOptions = itenaryData?.map(item => ({
@@ -241,12 +214,11 @@ function PackagesItenary() {
         label: item.name,
         value: item.id.toString()
     }))
-    const handleCustomChange = e => {
-        const { name, value } = e.target
 
+    const handleCustomChange = e => {
         formik.handleChange(e)
     }
-    // 👈 Updated field label/name
+
     const tabsFields = [
         {
             label: 'Package Information',
@@ -294,21 +266,30 @@ function PackagesItenary() {
         }
     ]
 
-    // 👈 Updated IdentityCard labels/values
     const identityCardData = [
-        { label: 'Campaign ID', value: formik.values?.campaignId ?? 'N/A' },
-        { label: 'Itenary', value: formik.values?.itenaryId ?? 'N/A' },
-        { label: 'Destination', value: formik.values?.destinationId ?? 'N/A' }
+        {
+            label: 'Package',
+            value: packageActivities?.[0]?.package?.name || params.packageId || 'N/A'
+        },
+        {
+            label: 'Campaign',
+            value: campaignsData?.find(item => item.id.toString() === formik.values?.campaignId)?.title || 'N/A'
+        },
+        { label: 'Activities', value: packageActivities.length || 0 }
     ]
+
     const getCampaignsFunc = async () => {
         const { data: response } = await dispatch(getCampaigns.initiate())
         setcampaignsData(response.data)
     }
+
     useEffect(() => {
         getCampaignsFunc()
     }, [])
+
     const selectedItenary = itenaryData.find(i => i.id.toString() === formik.values.itenaryId)
     const selectedDestination = destinationData.find(d => d.id.toString() === formik.values.destinationId)
+
     useEffect(() => {
         const keyword = selectedDestination?.name || selectedItenary?.title
         if (!keyword) return
@@ -321,26 +302,70 @@ function PackagesItenary() {
             .catch(() => setImageOptions([]))
             .finally(() => setLoadingImages(false))
     }, [formik.values.destinationId, formik.values.itenaryId])
+
+    const handleEditActivity = activity => {
+        setEditingActivity(activity)
+        formik.setValues({
+            packageId: activity.packageId?.toString() || params.packageId,
+            campaignId: params.campaignId || '',
+            itenaryId: activity.itenaryId?.toString() || '',
+            destinationId: activity.destinationId?.toString() || '',
+            image: activity.image || ''
+        })
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    useEffect(() => {
+        if (!focusActivityId || packageActivities.length === 0) return
+
+        const matchedActivity = packageActivities.find(item => item.id === Number(focusActivityId))
+        if (!matchedActivity) return
+
+        handleEditActivity(matchedActivity)
+        navigate(location.pathname, { replace: true, state: null })
+    }, [focusActivityId, packageActivities])
+
+    const handleAskDelete = id => {
+        setDeleteId(id)
+        dispatch(openModal({ type: 'confirm_modal' }))
+    }
+
+    const handleDeleteActivity = async () => {
+        try {
+            const response = await deletePackageItenaryClient(deleteId).unwrap()
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: response?.message || 'Package activity deleted successfully!',
+                    variant: 'alert',
+                    alert: { color: 'success' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            if (editingActivity?.id === deleteId) {
+                resetFormState()
+            }
+            fetchActivities()
+        } catch (error) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: error?.data?.message || 'Unable to delete package activity',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } finally {
+            dispatch(closeModal())
+        }
+    }
+
     return (
         <MainCard
             sx={{ py: '1px' }}
             contentSX={{ px: '2px', py: 1.5 }}
-            title={formId ? 'Edit Package' : 'Create New Package'} // 👈 Updated title
-            // secondary={
-            // <Grid item xs={12}>
-            //     <Button
-            //         variant='outlined'
-            //         color='secondary'
-            //         fullWidth
-            //         startIcon={<DownloadIcon />}
-            //         onClick={handleDownload}
-            //         disabled={isDownloading} // 👈 Disable while generating
-            //         sx={{ mt: 2 }}
-            //     >
-            //         {isDownloading ? 'Generating...' : 'Download Sample Excel'}
-            //     </Button>
-            // </Grid>
-            // }
+            title={editingActivity ? 'Edit Package Activity' : 'Add Package Activity'}
         >
             <Grid
                 container
@@ -361,15 +386,26 @@ function PackagesItenary() {
                 <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         <Box sx={{ padding: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant='h4'>
+                                    {editingActivity ? 'Update existing activity' : 'Create new activity'}
+                                </Typography>
+                                {editingActivity ? (
+                                    // eslint-disable-next-line react/jsx-no-bind
+                                    <CustomButton variant='outlined' color='secondary' onClick={resetFormState}>
+                                        Cancel Edit
+                                    </CustomButton>
+                                ) : null}
+                            </Box>
                             <FormComponent
                                 fields={tabsFields[0].fields}
                                 formik={formik}
                                 handleCustomChange={handleCustomChange}
-                                submitting={createPackageLKey || updatePackageLKey} // 👈 Updated loading keys
+                                submitting={createPackageItenaryClientLKey || updatePackageItenaryClientLKey}
                                 customStyle={{
                                     backgroundColor: 'none'
                                 }}
-                                submitButtonText={formId ? 'Update' : 'Create'}
+                                submitButtonText={editingActivity ? 'Update Activity' : 'Create Activity'}
                                 submitButtonSx={{
                                     textAlign: 'right',
                                     marginTop: 2
@@ -485,14 +521,129 @@ function PackagesItenary() {
                 <Grid item xs={12} md={12}>
                     <Divider
                         sx={{
-                            marginTop: '-2rem',
+                            marginTop: '-1rem',
                             borderColor: '#BCC1CA',
                             marginBottom: '1rem',
                             boxShadow: '1px 1px 4px #00000054'
                         }}
                     />
                 </Grid>
+
+                <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant='h4'>Existing Activities</Typography>
+                        <CustomButton variant='outlined' color='secondary' onClick={() => navigate(-1)}>
+                            Back
+                        </CustomButton>
+                    </Box>
+
+                    {packageActivities.length === 0 ? (
+                        <Typography color='text.secondary'>No activities added for this package yet.</Typography>
+                    ) : (
+                        <Grid container spacing={2}>
+                            {packageActivities.map(activity => (
+                                <Grid item xs={12} md={6} key={activity.id}>
+                                    <Card
+                                        sx={{
+                                            borderRadius: 3,
+                                            border: '1px solid',
+                                            borderColor:
+                                                editingActivity?.id === activity.id ? 'primary.main' : 'divider',
+                                            boxShadow: editingActivity?.id === activity.id ? 4 : 1
+                                        }}
+                                    >
+                                        <CardContent>
+                                            <Box
+                                                sx={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'flex-start',
+                                                    gap: 2
+                                                }}
+                                            >
+                                                <Box>
+                                                    <Typography variant='h5' sx={{ fontWeight: 700 }}>
+                                                        {activity.title ||
+                                                            activity.itenary?.title ||
+                                                            'Untitled Activity'}
+                                                    </Typography>
+                                                    <Typography variant='body2' color='text.secondary'>
+                                                        Destination: {activity.destination?.name || 'Not selected'}
+                                                    </Typography>
+                                                    <Typography variant='body2' color='text.secondary'>
+                                                        Itinerary: {activity.itenary?.title || 'Not selected'}
+                                                    </Typography>
+                                                </Box>
+                                                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                                    <Tooltip title='Edit activity'>
+                                                        <IconButton
+                                                            color='primary'
+                                                            onClick={() => handleEditActivity(activity)}
+                                                        >
+                                                            <Edit />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title='Delete activity'>
+                                                        <IconButton
+                                                            color='error'
+                                                            onClick={() => handleAskDelete(activity.id)}
+                                                        >
+                                                            <Delete />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Box>
+                                            </Box>
+
+                                            {activity.image ? (
+                                                <Box
+                                                    component='img'
+                                                    src={activity.image}
+                                                    alt={activity.title || activity.itenary?.title || 'activity'}
+                                                    sx={{
+                                                        mt: 2,
+                                                        width: '100%',
+                                                        height: 220,
+                                                        objectFit: 'cover',
+                                                        borderRadius: 2,
+                                                        border: '1px solid',
+                                                        borderColor: 'divider'
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Box
+                                                    sx={{
+                                                        mt: 2,
+                                                        height: 220,
+                                                        borderRadius: 2,
+                                                        border: '1px dashed',
+                                                        borderColor: 'divider',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: 'text.secondary'
+                                                    }}
+                                                >
+                                                    No image selected
+                                                </Box>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
+                </Grid>
             </Grid>
+
+            <ConfirmModal
+                title='Delete Activity'
+                message='Are you sure you want to delete this package activity?'
+                icon='warning'
+                confirmText='Yes, Delete'
+                customStyle={{ width: { xs: '300px', sm: '456px' } }}
+                onConfirm={handleDeleteActivity}
+                isLoading={deletePackageItenaryClientLKey}
+            />
         </MainCard>
     )
 }

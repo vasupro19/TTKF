@@ -226,6 +226,30 @@ const protectedRoutes = {
             )
         },
         {
+            path: '/userManagement/role',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <ViewRoleManagement />
+                </Suspense>
+            )
+        },
+        {
+            path: '/userManagement/role/create',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <CreateRoleManagement />
+                </Suspense>
+            )
+        },
+        {
+            path: '/userManagement/role/:id',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <CreateRoleManagement />
+                </Suspense>
+            )
+        },
+        {
             path: '/master/campaigns',
             element: (
                 <Suspense fallback={<Loader />}>
@@ -315,6 +339,14 @@ const protectedRoutes = {
         },
         {
             path: '/master/packages/add',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <PackagesClientForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/packages/edit/:id',
             element: (
                 <Suspense fallback={<Loader />}>
                     <PackagesClientForm />

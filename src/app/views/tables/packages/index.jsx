@@ -16,7 +16,7 @@ import CustomSearchDateField from '@/core/components/extended/CustomSearchDateFi
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getPackageClients } from '@/app/store/slices/api/packageSlice'
+import { getPackageClients, useDeletePackageClientMutation } from '@/app/store/slices/api/packageSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -47,7 +47,8 @@ function MasterPackagesTable() {
     const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
+    const { getLocationMasterLKey, deletePackageClientLKey } = useSelector(state => state.loading)
+    const [deletePackageClient] = useDeletePackageClientMutation()
 
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
@@ -69,7 +70,7 @@ function MasterPackagesTable() {
         campaignId: params.id
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/setup/location/${id}`), [])
+    const editHandler = useCallback(async id => navigate(`/master/packages/edit/${id}`), [])
 
     const handleExcelClick = () => {
         setExcelHandler(true)
@@ -112,11 +113,11 @@ function MasterPackagesTable() {
 
     const deleteActionHandler = async () => {
         try {
-            await dispatch(removeLocationMaster.initiate(removeId))
+            await deletePackageClient(removeId).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'removed location successfully!',
+                    message: 'Package deleted successfully!',
                     variant: 'alert',
                     alert: { color: 'success' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -128,9 +129,9 @@ function MasterPackagesTable() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'unable to remove location!',
+                    message: reqError?.data?.message || 'Unable to delete package!',
                     variant: 'alert',
-                    alert: { color: 'success' },
+                    alert: { color: 'error' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
                 })
             )
@@ -165,7 +166,9 @@ function MasterPackagesTable() {
     )
 
     const handleAdd = () => {
-        navigate('/master/packages/add')
+        navigate('/master/packages/add', {
+            state: { campaignId: params.id }
+        })
     }
 
     const menuOptions = useMemo(
@@ -199,8 +202,10 @@ function MasterPackagesTable() {
         }
     })
 
-    const addActivityHandler = (id, row) => {
-        navigate(`/package/activities/${id}/${row.id}`)
+    const addActivityHandler = row => {
+        const campaignId = row?.campaignId || params.id
+        if (!campaignId || !row?.id) return
+        navigate(`/package/activities/${campaignId}/${row.id}`)
     }
 
     return (
@@ -338,8 +343,7 @@ function MasterPackagesTable() {
                                     sx={{ color: 'info.main' }}
                                     size='small'
                                     aria-label='add activity'
-                                    // You will need to define addActivityHandler in your component
-                                    onClick={() => addActivityHandler(params.id, row)}
+                                    onClick={() => addActivityHandler(row)}
                                 >
                                     <Tooltip title='Add Activity'>
                                         {/* Assuming you have the 'Add' icon imported from @mui/icons-material or similar */}
@@ -380,10 +384,10 @@ function MasterPackagesTable() {
                 />
                 <PopperContextMenu options={menuOptions} />
                 <ConfirmModal
-                    title='Delete Location'
+                    title='Delete Package'
                     message={
                         <>
-                            Are you sure you want to delete this location:{' '}
+                            Are you sure you want to delete this package:{' '}
                             <strong>{users?.find(user => user?.id === removeId)?.name || 'Unknown'}</strong>?
                         </>
                     }
@@ -391,7 +395,7 @@ function MasterPackagesTable() {
                     confirmText='Yes, Delete'
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
                     onConfirm={deleteActionHandler}
-                    isLoading={removeLocationMasterLKey}
+                    isLoading={deletePackageClientLKey}
                 />
             </MainCard>
         </ContextMenuProvider>
