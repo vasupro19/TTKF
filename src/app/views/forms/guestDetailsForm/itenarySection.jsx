@@ -32,7 +32,9 @@ import {
     NightsStay,
     TableChart,
     ViewModule,
-    SwapHoriz
+    SwapHoriz,
+    KeyboardArrowUp,
+    KeyboardArrowDown
 } from '@mui/icons-material'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -456,7 +458,9 @@ export default function ItinerarySection({
     onEditItem,
     onDeleteItem,
     GuestTourPriceForm,
-    params
+    params,
+    onReorderDay,
+    totalDays
 }) {
     const [fullScreen, setFullScreen] = useState(false)
     const [view, setView] = useState('cards') // 'cards' | 'table'
@@ -584,7 +588,7 @@ export default function ItinerarySection({
                 {/* Status banners */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2.5 }}>
                     {/* Converted quote banner */}
-                    {confirmedPackage?.data && (
+                    {confirmedPackage?.data && confirmedPackage.data.selectedPackage && (
                         <Box
                             sx={{
                                 display: 'flex',
@@ -697,7 +701,7 @@ export default function ItinerarySection({
                             '&:hover': { background: 'linear-gradient(135deg, #0f172a, #1e3a8a)' }
                         }}
                     >
-                        {confirmedPackage?.data
+                        {confirmedPackage?.data && confirmedPackage.data.selectedPackage
                             ? convertedQuoteNo === currentQuoteNo
                                 ? `🔄 Re-convert Quote ${currentQuoteNo}`
                                 : `⚠️ Replace Q${convertedQuoteNo} → Q${currentQuoteNo}`
@@ -725,206 +729,303 @@ export default function ItinerarySection({
                         transition={{ duration: 0.2 }}
                     >
                         <Grid container spacing={3}>
-                            {currentQuoteItineraries.map((item, index) => (
-                                <Grid item xs={12} key={item.fullItem?.id || index}>
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.06 }}
-                                    >
-                                        <Box
-                                            sx={{
-                                                borderRadius: '20px',
-                                                overflow: 'hidden',
-                                                border: '1px solid #e2e8f0',
-                                                bgcolor: 'white',
-                                                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-                                                transition: 'all 0.25s ease',
-                                                '&:hover': {
-                                                    boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-                                                    transform: 'translateY(-2px)'
-                                                }
-                                            }}
+                            {[...currentQuoteItineraries]
+                                .sort((a, b) => a.fullItem.order - b.fullItem.order)
+                                .map((item, index, arr) => (
+                                    <Grid item xs={12} key={item.fullItem?.id || index}>
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: index * 0.06 }}
                                         >
-                                            {/* Day Header */}
                                             <Box
                                                 sx={{
-                                                    px: 3,
-                                                    py: 1.8,
-                                                    background: 'linear-gradient(135deg, #1c2d45, #2a4a7f)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'space-between'
+                                                    borderRadius: '20px',
+                                                    overflow: 'hidden',
+                                                    border: '1px solid #e2e8f0',
+                                                    bgcolor: 'white',
+                                                    boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                                                    transition: 'all 0.25s ease',
+                                                    '&:hover': {
+                                                        boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                                                        transform: 'translateY(-2px)'
+                                                    }
                                                 }}
                                             >
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                                    <Box
-                                                        sx={{
-                                                            width: 30,
-                                                            height: 30,
-                                                            borderRadius: '50%',
-                                                            bgcolor: 'rgba(255,255,255,0.2)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            fontWeight: 900,
-                                                            color: 'white',
-                                                            fontSize: '0.82rem'
-                                                        }}
-                                                    >
-                                                        {index + 1}
-                                                    </Box>
-                                                    <Typography
-                                                        sx={{ fontWeight: 800, color: 'white', fontSize: '0.98rem' }}
-                                                    >
-                                                        Day {index + 1}: {item.title}
-                                                    </Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                    <Chip
-                                                        label={item.destination}
-                                                        size='small'
-                                                        icon={
-                                                            <LocationOn
+                                                {/* Day Header */}
+                                                {/* Day Header */}
+                                                <Box
+                                                    sx={{
+                                                        px: 3,
+                                                        py: 1.8,
+                                                        background:
+                                                            'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1a56a0 100%)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between'
+                                                    }}
+                                                >
+                                                    {/* Left — Day badge + up/down */}
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                                        {/* Day number badge */}
+                                                        <Box
+                                                            sx={{
+                                                                minWidth: 48,
+                                                                height: 48,
+                                                                borderRadius: '12px',
+                                                                background: 'rgba(255,255,255,0.12)',
+                                                                border: '1px solid rgba(255,255,255,0.2)',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center'
+                                                            }}
+                                                        >
+                                                            <Typography
                                                                 sx={{
-                                                                    fontSize: '13px !important',
-                                                                    color: '#93c5fd !important'
+                                                                    fontSize: '9px',
+                                                                    color: '#93c5fd',
+                                                                    fontWeight: 700,
+                                                                    letterSpacing: '0.1em',
+                                                                    textTransform: 'uppercase',
+                                                                    lineHeight: 1
+                                                                }}
+                                                            >
+                                                                DAY
+                                                            </Typography>
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '20px',
+                                                                    color: '#fff',
+                                                                    fontWeight: 800,
+                                                                    lineHeight: 1.1
+                                                                }}
+                                                            >
+                                                                {index + 1}
+                                                            </Typography>
+                                                        </Box>
+
+                                                        {/* Title */}
+                                                        <Box>
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '0.97rem',
+                                                                    fontWeight: 700,
+                                                                    color: '#fff',
+                                                                    lineHeight: 1.3,
+                                                                    letterSpacing: '0.01em'
+                                                                }}
+                                                            >
+                                                                {item.title || 'Untitled Day'}
+                                                            </Typography>
+                                                            <Chip
+                                                                label={item.destination}
+                                                                size='small'
+                                                                icon={
+                                                                    <LocationOn
+                                                                        sx={{
+                                                                            fontSize: '12px !important',
+                                                                            color: '#93c5fd !important'
+                                                                        }}
+                                                                    />
+                                                                }
+                                                                sx={{
+                                                                    mt: 0.5,
+                                                                    height: 20,
+                                                                    bgcolor: 'rgba(255,255,255,0.1)',
+                                                                    border: '1px solid rgba(255,255,255,0.15)',
+                                                                    color: '#cbd5e1',
+                                                                    fontWeight: 500,
+                                                                    fontSize: '0.7rem',
+                                                                    '& .MuiChip-label': { px: 1 }
                                                                 }}
                                                             />
-                                                        }
-                                                        sx={{
-                                                            bgcolor: 'rgba(255,255,255,0.15)',
-                                                            color: 'white',
-                                                            fontWeight: 600
-                                                        }}
-                                                    />
-                                                    <IconButton
-                                                        size='small'
-                                                        onClick={() => onEditItem(item, index)}
-                                                        sx={{
-                                                            bgcolor: 'rgba(255,255,255,0.15)',
-                                                            color: 'white',
-                                                            '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
-                                                        }}
-                                                    >
-                                                        <Edit sx={{ fontSize: 16 }} />
-                                                    </IconButton>
-                                                    <IconButton
-                                                        size='small'
-                                                        onClick={() => onDeleteItem(item, index)}
-                                                        sx={{
-                                                            bgcolor: 'rgba(239,68,68,0.3)',
-                                                            color: 'white',
-                                                            '&:hover': { bgcolor: 'rgba(239,68,68,0.5)' }
-                                                        }}
-                                                    >
-                                                        <Delete sx={{ fontSize: 16 }} />
-                                                    </IconButton>
-                                                </Box>
-                                            </Box>
-
-                                            <Grid container>
-                                                {/* Image */}
-                                                {item.image && (
-                                                    <Grid item xs={12} md={3}>
-                                                        <Box
-                                                            component='img'
-                                                            src={item.image}
-                                                            alt={item.title}
-                                                            sx={{
-                                                                width: '100%',
-                                                                height: '100%',
-                                                                minHeight: 180,
-                                                                objectFit: 'cover',
-                                                                display: 'block'
-                                                            }}
-                                                        />
-                                                    </Grid>
-                                                )}
-
-                                                {/* Description */}
-                                                <Grid item xs={12} md={item.image ? 5 : 8}>
-                                                    <Box sx={{ p: 3 }}>
-                                                        <Typography
-                                                            sx={{
-                                                                color: '#475569',
-                                                                lineHeight: 1.8,
-                                                                fontSize: '0.92rem'
-                                                            }}
-                                                        >
-                                                            {item.description ||
-                                                                'Enjoy your day exploring beautiful landscapes.'}
-                                                        </Typography>
-                                                    </Box>
-                                                </Grid>
-
-                                                {/* Hotel tiers - right column */}
-                                                <Grid item xs={12} md={4}>
-                                                    <Box
-                                                        sx={{
-                                                            p: 2.5,
-                                                            height: '100%',
-                                                            bgcolor: '#fafbff',
-                                                            borderLeft: '1px solid #e2e8f0'
-                                                        }}
-                                                    >
-                                                        <Typography
-                                                            sx={{
-                                                                fontSize: '0.68rem',
-                                                                fontWeight: 800,
-                                                                color: '#94a3b8',
-                                                                textTransform: 'uppercase',
-                                                                letterSpacing: '0.08em',
-                                                                mb: 1.5
-                                                            }}
-                                                        >
-                                                            🏨 Hotels
-                                                        </Typography>
-                                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                            {HOTEL_TIERS.map(tier => (
-                                                                <Box
-                                                                    key={tier.key}
-                                                                    sx={{
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'space-between',
-                                                                        px: 1.5,
-                                                                        py: 0.8,
-                                                                        borderRadius: '8px',
-                                                                        bgcolor: tier.bg,
-                                                                        border: `1px solid ${tier.border}`
-                                                                    }}
-                                                                >
-                                                                    <Typography
-                                                                        sx={{
-                                                                            fontSize: '0.72rem',
-                                                                            fontWeight: 800,
-                                                                            color: tier.color
-                                                                        }}
-                                                                    >
-                                                                        {tier.label}
-                                                                    </Typography>
-                                                                    <Typography
-                                                                        sx={{
-                                                                            fontSize: '0.78rem',
-                                                                            fontWeight: 600,
-                                                                            color: '#1e293b',
-                                                                            textAlign: 'right',
-                                                                            maxWidth: '60%'
-                                                                        }}
-                                                                    >
-                                                                        {item.hotels?.[tier.key] || '—'}
-                                                                    </Typography>
-                                                                </Box>
-                                                            ))}
                                                         </Box>
                                                     </Box>
+
+                                                    {/* Right — reorder + actions */}
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        {/* Up/Down reorder */}
+                                                        <Box sx={{ display: 'flex', flexDirection: 'column', mr: 1 }}>
+                                                            <IconButton
+                                                                size='small'
+                                                                disabled={index === 0}
+                                                                onClick={() => onReorderDay(item, 'up')}
+                                                                sx={{
+                                                                    p: 0.3,
+                                                                    color:
+                                                                        index === 0
+                                                                            ? 'rgba(255,255,255,0.2)'
+                                                                            : '#60a5fa',
+                                                                    '&:hover': { bgcolor: 'rgba(96,165,250,0.15)' }
+                                                                }}
+                                                            >
+                                                                <KeyboardArrowUp sx={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                size='small'
+                                                                disabled={index === arr.length - 1}
+                                                                onClick={() => onReorderDay(item, 'down')}
+                                                                sx={{
+                                                                    p: 0.3,
+                                                                    color:
+                                                                        index === arr.length - 1
+                                                                            ? 'rgba(255,255,255,0.2)'
+                                                                            : '#60a5fa',
+                                                                    '&:hover': { bgcolor: 'rgba(96,165,250,0.15)' }
+                                                                }}
+                                                            >
+                                                                <KeyboardArrowDown sx={{ fontSize: 18 }} />
+                                                            </IconButton>
+                                                        </Box>
+
+                                                        <Box
+                                                            sx={{
+                                                                width: '1px',
+                                                                height: 32,
+                                                                bgcolor: 'rgba(255,255,255,0.15)',
+                                                                mr: 0.5
+                                                            }}
+                                                        />
+
+                                                        {/* Edit */}
+                                                        <IconButton
+                                                            size='small'
+                                                            onClick={() => onEditItem(item, index)}
+                                                            sx={{
+                                                                bgcolor: 'rgba(96,165,250,0.15)',
+                                                                color: '#93c5fd',
+                                                                border: '1px solid rgba(96,165,250,0.2)',
+                                                                '&:hover': { bgcolor: 'rgba(96,165,250,0.3)' }
+                                                            }}
+                                                        >
+                                                            <Edit sx={{ fontSize: 15 }} />
+                                                        </IconButton>
+
+                                                        {/* Delete */}
+                                                        <IconButton
+                                                            size='small'
+                                                            onClick={() => onDeleteItem(item, index)}
+                                                            sx={{
+                                                                bgcolor: 'rgba(239,68,68,0.15)',
+                                                                color: '#fca5a5',
+                                                                border: '1px solid rgba(239,68,68,0.2)',
+                                                                '&:hover': { bgcolor: 'rgba(239,68,68,0.35)' }
+                                                            }}
+                                                        >
+                                                            <Delete sx={{ fontSize: 15 }} />
+                                                        </IconButton>
+                                                    </Box>
+                                                </Box>
+
+                                                <Grid container>
+                                                    {/* Image */}
+                                                    {item.image && (
+                                                        <Grid item xs={12} md={3}>
+                                                            <Box
+                                                                component='img'
+                                                                src={item.image}
+                                                                alt={item.title}
+                                                                sx={{
+                                                                    width: '100%',
+                                                                    height: '100%',
+                                                                    minHeight: 180,
+                                                                    objectFit: 'cover',
+                                                                    display: 'block'
+                                                                }}
+                                                            />
+                                                        </Grid>
+                                                    )}
+
+                                                    {/* Description */}
+                                                    <Grid item xs={12} md={item.image ? 5 : 8}>
+                                                        <Box sx={{ p: 3 }}>
+                                                            <Typography
+                                                                sx={{
+                                                                    color: '#475569',
+                                                                    lineHeight: 1.8,
+                                                                    fontSize: '0.92rem'
+                                                                }}
+                                                            >
+                                                                {item.description ||
+                                                                    'Enjoy your day exploring beautiful landscapes.'}
+                                                            </Typography>
+                                                        </Box>
+                                                    </Grid>
+
+                                                    {/* Hotel tiers - right column */}
+                                                    <Grid item xs={12} md={4}>
+                                                        <Box
+                                                            sx={{
+                                                                p: 2.5,
+                                                                height: '100%',
+                                                                bgcolor: '#fafbff',
+                                                                borderLeft: '1px solid #e2e8f0'
+                                                            }}
+                                                        >
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '0.68rem',
+                                                                    fontWeight: 800,
+                                                                    color: '#94a3b8',
+                                                                    textTransform: 'uppercase',
+                                                                    letterSpacing: '0.08em',
+                                                                    mb: 1.5
+                                                                }}
+                                                            >
+                                                                🏨 Hotels
+                                                            </Typography>
+                                                            <Box
+                                                                sx={{
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: 1
+                                                                }}
+                                                            >
+                                                                {HOTEL_TIERS.map(tier => (
+                                                                    <Box
+                                                                        key={tier.key}
+                                                                        sx={{
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'space-between',
+                                                                            px: 1.5,
+                                                                            py: 0.8,
+                                                                            borderRadius: '8px',
+                                                                            bgcolor: tier.bg,
+                                                                            border: `1px solid ${tier.border}`
+                                                                        }}
+                                                                    >
+                                                                        <Typography
+                                                                            sx={{
+                                                                                fontSize: '0.72rem',
+                                                                                fontWeight: 800,
+                                                                                color: tier.color
+                                                                            }}
+                                                                        >
+                                                                            {tier.label}
+                                                                        </Typography>
+                                                                        <Typography
+                                                                            sx={{
+                                                                                fontSize: '0.78rem',
+                                                                                fontWeight: 600,
+                                                                                color: '#1e293b',
+                                                                                textAlign: 'right',
+                                                                                maxWidth: '60%'
+                                                                            }}
+                                                                        >
+                                                                            {item.hotels?.[tier.key] || '—'}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                ))}
+                                                            </Box>
+                                                        </Box>
+                                                    </Grid>
                                                 </Grid>
-                                            </Grid>
-                                        </Box>
-                                    </motion.div>
-                                </Grid>
-                            ))}
+                                            </Box>
+                                        </motion.div>
+                                    </Grid>
+                                ))}
                         </Grid>
                     </motion.div>
                 ) : (

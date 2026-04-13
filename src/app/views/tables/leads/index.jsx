@@ -102,7 +102,7 @@ function MasterLeadsTable() {
     }
 
     const deleteHandler = useCallback(async (id, status) => {
-        if (status !== 'verified') {
+        if (status !== 'verified' && status !== 'Confirmed') {
             setModal(id)
             dispatch(
                 openModal({

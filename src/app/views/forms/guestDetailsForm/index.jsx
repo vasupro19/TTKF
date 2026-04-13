@@ -119,7 +119,8 @@ function GuestForm() {
         description: '',
         destinationId: '',
         destination: '', // Name of the destination
-        image: ''
+        image: '',
+        insertAfterOrder: undefined // ✅ null = append at end
     })
     const [isEditing, setisEditing] = useState(false)
     const [editingData, setEditingData] = useState({})
@@ -922,7 +923,53 @@ function GuestForm() {
         setAvailableQuotes(prev => [...prev, nextQuoteNo])
         setCurrentQuoteNo(nextQuoteNo)
     }
-    console.log(currentQuoteNo, 'currentQou')
+    const handleReorderDay = async (item, direction) => {
+        const currentOrder = item.fullItem.order
+        const quoteItems = currentQuoteItineraries
+        // Find the item to swap with
+        const swapItem =
+            direction === 'up'
+                ? quoteItems.find(i => i.fullItem.order === currentOrder - 1)
+                : quoteItems.find(i => i.fullItem.order === currentOrder + 1)
+
+        if (!swapItem) return // already at top or bottom
+
+        try {
+            // ✅ Swap orders on backend
+            await Promise.all([
+                updateTour({
+                    id: item.fullItem.id,
+                    order: swapItem.fullItem.order
+                }).unwrap(),
+                updateTour({
+                    id: swapItem.fullItem.id,
+                    order: currentOrder
+                }).unwrap()
+            ])
+
+            // ✅ Update local state immediately (no flicker)
+            setSelectedPackage(prev =>
+                prev.map(p => {
+                    if (p.fullItem.id === item.fullItem.id)
+                        return { ...p, fullItem: { ...p.fullItem, order: swapItem.fullItem.order } }
+                    if (p.fullItem.id === swapItem.fullItem.id)
+                        return { ...p, fullItem: { ...p.fullItem, order: currentOrder } }
+                    return p
+                })
+            )
+        } catch (error) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Failed to reorder day',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        }
+    }
+
     return (
         <MainCard
             sx={{ py: 2 }}
@@ -1039,6 +1086,8 @@ function GuestForm() {
                                         activeTab={activeTab}
                                     />
                                 }
+                                onReorderDay={handleReorderDay}
+                                totalDays={currentQuoteItineraries.length}
                                 params={params}
                             />
                         )}
