@@ -119,6 +119,7 @@ const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
 const PackageItenaryView = lazy(() => import('@views/forms/packageItenary/actitvityPackage'))
 
 const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
+const FacebookIntegrationForm = lazy(() => import('@views/forms/integrations/facebookIntegration'))
 
 const SupplierForm = lazy(() => import('@/app/views/masters/supplier/create'))
 const MasterSupplierTable = lazy(() => import('@/app/views/masters/supplier'))
@@ -390,6 +391,14 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <GmailIntegrationForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/integration/facebook',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <FacebookIntegrationForm />
                 </Suspense>
             )
         },

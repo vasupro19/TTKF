@@ -926,6 +926,7 @@ function GuestForm() {
     const handleReorderDay = async (item, direction) => {
         const currentOrder = item.fullItem.order
         const quoteItems = currentQuoteItineraries
+        console.log(quoteItems)
         // Find the item to swap with
         const swapItem =
             direction === 'up'

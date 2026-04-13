@@ -1,5 +1,35 @@
 import { createSlice } from '@reduxjs/toolkit'
 
+const FACEBOOK_INTEGRATION_MENU = {
+    id: 'facebook_integration',
+    label: 'Facebook Integration',
+    icon: 'Memory',
+    url: '/integration/facebook',
+    group: 'integration',
+    access: true,
+    type: 'item'
+}
+
+const normalizeMenuItems = menuItems => {
+    if (!Array.isArray(menuItems)) return []
+
+    return menuItems.map(item => {
+        if (item?.id !== 'integration' || !Array.isArray(item.children)) {
+            return item
+        }
+
+        const hasFacebookItem = item.children.some(child => child?.url === FACEBOOK_INTEGRATION_MENU.url)
+        if (hasFacebookItem) {
+            return item
+        }
+
+        return {
+            ...item,
+            children: [...item.children, FACEBOOK_INTEGRATION_MENU]
+        }
+    })
+}
+
 const AuthSlice = createSlice({
     name: 'Auth',
     initialState: {
@@ -77,7 +107,7 @@ const AuthSlice = createSlice({
             state.selectedLocation = action.payload
         },
         setMenuItems: (state, action) => {
-            state.menuItems = action.payload
+            state.menuItems = normalizeMenuItems(action.payload)
         },
         setUserDetails: (state, action) => {
             const user = action.payload?.user || action.payload || null
