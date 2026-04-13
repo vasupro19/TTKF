@@ -56,6 +56,18 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['getLeads', 'leadMasterById']
         }),
+        deleteLead: build.mutation({
+            query: id => {
+                const KEY = 'deleteLeadKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/leads/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['getLeads', 'leadMasterById']
+        }),
         shareLeadDetails: build.mutation({
             // 🚀 Use ({ leadId, quotationNo }) to pull the properties out of the object
             query: arg => {
@@ -70,6 +82,13 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
+        }),
+        getLeadPreview: build.query({
+            query: ({ leadId, quoteNo }) => ({
+                url: `/leads/preview/${leadId}?quoteNo=${quoteNo}`,
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            providesTags: ['leadPreview']
         })
     })
 })
@@ -79,6 +98,7 @@ export const {
     useGetLeadByIdQuery,
     useCreateLeadMutation,
     useUpdateLeadMutation,
+    useDeleteLeadMutation,
     useShareLeadDetailsMutation,
-    endpoints: { getLeads, getLeadById }
+    endpoints: { getLeads, getLeadById, getLeadPreview }
 } = leadsSlice

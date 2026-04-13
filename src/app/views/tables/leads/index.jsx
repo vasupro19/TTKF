@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
+import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
+import { Add, Edit, Delete, FilterAltOff } from '@mui/icons-material'
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined'
 import VerifiedIcon from '@mui/icons-material/Verified'
 import LocalHotelIcon from '@mui/icons-material/LocalHotel'
@@ -18,8 +18,7 @@ import CustomSearchTextField from '@/core/components/extended/CustomSearchTextFi
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
-import { getLeads, useUpdateLeadMutation } from '@/app/store/slices/api/leadSlice'
+import { getLeads, useDeleteLeadMutation, useUpdateLeadMutation } from '@/app/store/slices/api/leadSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -44,27 +43,27 @@ import { headers } from './helper'
 // }
 
 function MasterLeadsTable() {
-    const [anchorEl, setAnchorEl] = useState(null)
     const params = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
     const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
+    const { getLeadsMasterLKey, deleteLeadKey, updateLeadKey } = useSelector(state => state.loading)
 
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
     const [recordsCount, setRecordsCount] = useState(0)
     const [excelHandler, setExcelHandler] = useState(false)
-    const [modal, setModal] = useState('')
-
+    const [modalAction, setModalAction] = useState('')
+    const [selectedLeadId, setSelectedLeadId] = useState(null)
     const [removeId, setRemoveId] = useState(null)
 
     const [isShowClearButton, setIsShowClearButton] = useState(false)
     const [clearAllFilters, setClearAllFilters] = useState(false)
     const [refetch, setRefetch] = useState(false)
     const [updateLeads] = useUpdateLeadMutation()
+    const [deleteLead] = useDeleteLeadMutation()
     const { user } = useSelector(state => state.auth)
     // const [getDestinationClient] = useGetDestinationClientsQuery()
 
@@ -101,25 +100,29 @@ function MasterLeadsTable() {
         setFilters({ created_at: { from: '', to: '' } })
     }
 
-    const deleteHandler = useCallback(async (id, status) => {
-        if (status !== 'verified' && status !== 'Confirmed') {
-            setModal(id)
+    const openConfirmModal = useCallback(
+        (action, id) => {
+            setModalAction(action)
+            setSelectedLeadId(id)
+            if (action === 'delete') {
+                setRemoveId(id)
+            }
             dispatch(
                 openModal({
                     type: 'confirm_modal'
                 })
             )
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+        },
+        [dispatch]
+    )
 
     const deleteActionHandler = async () => {
         try {
-            await dispatch(removeLocationMaster.initiate(removeId))
+            const response = await deleteLead(removeId).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'removed location successfully!',
+                    message: response?.message || 'Lead deleted successfully!',
                     variant: 'alert',
                     alert: { color: 'success' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -131,13 +134,16 @@ function MasterLeadsTable() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'unable to remove location!',
+                    message: reqError?.data?.data?.message || 'Unable to delete lead!',
                     variant: 'alert',
-                    alert: { color: 'success' },
+                    alert: { color: 'error' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
                 })
             )
         } finally {
+            setModalAction('')
+            setSelectedLeadId(null)
+            setRemoveId(null)
             dispatch(closeModal())
         }
     }
@@ -168,11 +174,11 @@ function MasterLeadsTable() {
             {
                 label: 'Delete',
                 icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
-                onClick: row => deleteHandler(row.id, row),
+                onClick: row => openConfirmModal('delete', row.id),
                 condition: row => hasEditAccess
             }
         ],
-        [editHandler, deleteHandler, hasEditAccess]
+        [editHandler, openConfirmModal, hasEditAccess]
     )
 
     useEffect(() => {
@@ -190,9 +196,7 @@ function MasterLeadsTable() {
 
     const verifyLead = async id => {
         try {
-            console.log(id, 'modal')
             await updateLeads({ id, leadStatus: 'verified', updatedBy: user?.id }).unwrap()
-            dispatch(closeModal())
             dispatch(
                 openSnackbar({
                     open: true,
@@ -205,6 +209,10 @@ function MasterLeadsTable() {
             setRefetch(true)
         } catch (error) {
             console.log(error)
+        } finally {
+            setModalAction('')
+            setSelectedLeadId(null)
+            dispatch(closeModal())
         }
     }
 
@@ -353,8 +361,20 @@ function MasterLeadsTable() {
                                 <IconButton
                                     sx={{ color: 'error.main' }}
                                     size='small'
-                                    aria-label='edit row'
-                                    onClick={() => deleteHandler(row.id, row.status)}
+                                    aria-label='delete lead'
+                                    onClick={() => openConfirmModal('delete', row.id)}
+                                >
+                                    <Tooltip title='Delete Lead'>
+                                        <Delete fontSize='small' color='error' />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
+                            <UiAccessGuard type='edit'>
+                                <IconButton
+                                    sx={{ color: 'error.main' }}
+                                    size='small'
+                                    aria-label='verify lead'
+                                    onClick={() => openConfirmModal('verify', row.id)}
                                 >
                                     {row.status !== 'verified' && row.status !== 'Confirmed' ? (
                                         <Tooltip title='Verify'>
@@ -384,19 +404,25 @@ function MasterLeadsTable() {
                     )}
                     setIsShowClearButton={setIsShowClearButton}
                     clearAllFilters={clearAllFilters}
-                    isLoading={getLocationMasterLKey}
+                    isLoading={getLeadsMasterLKey}
                     enableContextMenu
                 />
                 <PopperContextMenu options={menuOptions} />
 
                 <ConfirmModal
-                    title='Verify Leads'
-                    message={<>Are you sure you want to verify this lead: </>}
+                    title={modalAction === 'delete' ? 'Delete Lead' : 'Verify Lead'}
+                    message={
+                        modalAction === 'delete' ? (
+                            <>Are you sure you want to delete this lead?</>
+                        ) : (
+                            <>Are you sure you want to verify this lead?</>
+                        )
+                    }
                     icon='warning'
-                    confirmText='Yes'
+                    confirmText={modalAction === 'delete' ? 'Delete' : 'Yes'}
                     customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={() => verifyLead(modal)}
-                    isLoading={removeLocationMasterLKey}
+                    onConfirm={() => (modalAction === 'delete' ? deleteActionHandler() : verifyLead(selectedLeadId))}
+                    isLoading={modalAction === 'delete' ? deleteLeadKey : updateLeadKey}
                 />
             </MainCard>
         </ContextMenuProvider>

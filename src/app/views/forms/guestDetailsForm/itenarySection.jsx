@@ -34,7 +34,8 @@ import {
     ViewModule,
     SwapHoriz,
     KeyboardArrowUp,
-    KeyboardArrowDown
+    KeyboardArrowDown,
+    Visibility
 } from '@mui/icons-material'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -453,6 +454,7 @@ export default function ItinerarySection({
     priceData,
     isLoading,
     handleShare,
+    handlePreview,
     handleWhatsAppClick,
     handleConvertPackage,
     onEditItem,
@@ -650,6 +652,14 @@ export default function ItinerarySection({
 
                 {/* Action buttons */}
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Button
+                        variant='contained'
+                        startIcon={<Visibility />}
+                        onClick={handlePreview}
+                        sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600 }}
+                    >
+                        Preview & Send
+                    </Button>
                     <Button
                         variant='outlined'
                         startIcon={<Share />}

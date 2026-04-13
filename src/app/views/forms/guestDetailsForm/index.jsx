@@ -7,6 +7,7 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
+
 import {
     Box,
     Button,
@@ -17,7 +18,9 @@ import {
     Typography,
     CircularProgress,
     InputAdornment,
-    MenuItem
+    MenuItem,
+    Modal,
+    IconButton
 } from '@mui/material'
 import {
     LocationOn,
@@ -29,7 +32,10 @@ import {
     AttachMoney, // For the new section header
     Save,
     Share,
-    CheckCircle
+    CheckCircle,
+    Visibility,
+    Send,
+    Close
 } from '@mui/icons-material'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { motion } from 'framer-motion'
@@ -55,7 +61,7 @@ import {
 } from '@/app/store/slices/api/guestTourSlice'
 import { useGetPackageByLeadIdQuery } from '@/app/store/slices/api/packageConvert'
 
-import { useShareLeadDetailsMutation, useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
+import { useShareLeadDetailsMutation, useGetLeadByIdQuery, getLeadPreview } from '@/app/store/slices/api/leadSlice'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
 import { getItenaryClientById, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
 import { useGetDestinationClientsQuery } from '@/app/store/slices/api/destinationSlice'
@@ -129,6 +135,9 @@ function GuestForm() {
     const [currentQuoteNo, setCurrentQuoteNo] = useState(
         location.state?.convertedQuoteNo || 1 // ← default to converted quote, not 1
     )
+    const [previewOpen, setPreviewOpen] = useState(false)
+    const [previewHtml, setPreviewHtml] = useState('')
+    const [loadingPreview, setLoadingPreview] = useState(false)
 
     // Initial Values
     const initialValues = {
@@ -836,12 +845,12 @@ function GuestForm() {
     }
     const handleShare = async () => {
         try {
-            // 🚀 Pass both leadId and the current active quotation number
             await shareLeadDetails({
                 leadId: params.leadId,
                 quotationNo: currentQuoteNo
             }).unwrap()
 
+            setPreviewOpen(false)
             dispatch(
                 openSnackbar({
                     open: true,
@@ -970,6 +979,27 @@ function GuestForm() {
             )
         }
     }
+    const handlePreview = async () => {
+        setLoadingPreview(true)
+        setPreviewOpen(true)
+        try {
+            const { data } = await dispatch(getLeadPreview.initiate({ leadId: params.leadId, quoteNo: currentQuoteNo }))
+            setPreviewHtml(data?.data?.html || '')
+        } catch (err) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Failed to load preview',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            setPreviewOpen(false)
+        } finally {
+            setLoadingPreview(false)
+        }
+    }
 
     return (
         <MainCard
@@ -1076,6 +1106,7 @@ function GuestForm() {
                                 priceData={price?.data}
                                 isLoading={isLoading}
                                 handleShare={handleShare}
+                                handlePreview={handlePreview}
                                 handleWhatsAppClick={handleWhatsAppClick}
                                 handleConvertPackage={handleConvertPackage}
                                 onEditItem={onEditItem}
@@ -1217,6 +1248,105 @@ function GuestForm() {
                         }}
                     />
                 </Grid>
+                <Modal open={previewOpen} onClose={() => setPreviewOpen(false)}>
+                    <Box
+                        sx={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            width: '85vw',
+                            maxWidth: 900,
+                            height: '85vh',
+                            bgcolor: 'background.paper',
+                            borderRadius: '16px',
+                            boxShadow: 24,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden'
+                        }}
+                    >
+                        {/* Header */}
+                        <Box
+                            sx={{
+                                px: 3,
+                                py: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                borderBottom: '1px solid #e2e8f0'
+                            }}
+                        >
+                            <Typography variant='h6' fontWeight={700}>
+                                Email Preview — Quotation #{currentQuoteNo}
+                            </Typography>
+                            <IconButton onClick={() => setPreviewOpen(false)}>
+                                <Close />
+                            </IconButton>
+                        </Box>
+
+                        {/* Preview iframe */}
+                        <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+                            {loadingPreview ? (
+                                <Box
+                                    sx={{
+                                        height: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <CircularProgress />
+                                </Box>
+                            ) : (
+                                <iframe
+                                    srcDoc={previewHtml}
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        border: 'none'
+                                    }}
+                                    title='Email Preview'
+                                />
+                            )}
+                        </Box>
+
+                        {/* Footer actions */}
+                        <Box
+                            sx={{
+                                px: 3,
+                                py: 2,
+                                borderTop: '1px solid #e2e8f0',
+                                display: 'flex',
+                                justifyContent: 'flex-end',
+                                gap: 2
+                            }}
+                        >
+                            <Button
+                                variant='outlined'
+                                onClick={() => setPreviewOpen(false)}
+                                sx={{ borderRadius: '8px', textTransform: 'none' }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant='contained'
+                                startIcon={isLoading ? <CircularProgress size={16} color='inherit' /> : <Send />}
+                                onClick={handleShare}
+                                disabled={isLoading}
+                                sx={{
+                                    borderRadius: '8px',
+                                    textTransform: 'none',
+                                    fontWeight: 700,
+                                    background: 'linear-gradient(135deg, #1c2d45, #2a4a7f)',
+                                    '&:hover': { background: 'linear-gradient(135deg, #0f172a, #1e3a8a)' }
+                                }}
+                            >
+                                {isLoading ? 'Sending...' : `Send to ${leadData?.data?.senderEmail || 'Guest'}`}
+                            </Button>
+                        </Box>
+                    </Box>
+                </Modal>
             </Grid>
         </MainCard>
     )
