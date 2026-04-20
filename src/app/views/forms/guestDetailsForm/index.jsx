@@ -61,7 +61,15 @@ import {
 } from '@/app/store/slices/api/guestTourSlice'
 import { useGetPackageByLeadIdQuery } from '@/app/store/slices/api/packageConvert'
 
-import { useShareLeadDetailsMutation, useGetLeadByIdQuery, getLeadPreview } from '@/app/store/slices/api/leadSlice'
+import {
+    useShareLeadDetailsMutation,
+    useGetLeadByIdQuery,
+    getLeadPreview,
+    useGenerateQuotationPdfMutation
+} from '@/app/store/slices/api/leadSlice'
+import { useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
+
+// import AiFormAssistant from '@/core/components/forms/AiAssiastantForm'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
 import { getItenaryClientById, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
 import { useGetDestinationClientsQuery } from '@/app/store/slices/api/destinationSlice'
@@ -108,9 +116,34 @@ function GuestForm() {
     const [shareLeadDetails, { isLoading }] = useShareLeadDetailsMutation()
 
     const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery()
-    const { data: itenaries = [], isLoading: loadingItenary } = useGetItenaryClientsQuery()
-    const { data: destinations = [], isLoading: loadingDestinations } = useGetDestinationClientsQuery()
+
+    // Server-side search state for the two dropdowns
+    const [itenarySearch, setItenarySearch] = useState('')
+    const [destinationSearch, setDestinationSearch] = useState('')
+
+    // Debounced search values so we don't fire a request on every keystroke
+    const [itenarySearchDebounced, setItenarySearchDebounced] = useState('')
+    const [destinationSearchDebounced, setDestinationSearchDebounced] = useState('')
+
+    useEffect(() => {
+        const t = setTimeout(() => setItenarySearchDebounced(itenarySearch), 350)
+        return () => clearTimeout(t)
+    }, [itenarySearch])
+
+    useEffect(() => {
+        const t = setTimeout(() => setDestinationSearchDebounced(destinationSearch), 350)
+        return () => clearTimeout(t)
+    }, [destinationSearch])
+
+    const { data: itenaries = [], isLoading: loadingItenary } = useGetItenaryClientsQuery(
+        itenarySearchDebounced ? `?search=${itenarySearchDebounced}` : ''
+    )
+    const { data: destinations = [], isLoading: loadingDestinations } = useGetDestinationClientsQuery(
+        destinationSearchDebounced ? `?search=${destinationSearchDebounced}` : ''
+    )
+    console.log(destinations, itenaries, 'fff')
     const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(params.leadId)
+    const [generatePdf, { isLoading: isGenerating }] = useGenerateQuotationPdfMutation()
 
     const { data: leadData } = useGetLeadByIdQuery(params.leadId)
 
@@ -138,6 +171,8 @@ function GuestForm() {
     const [previewOpen, setPreviewOpen] = useState(false)
     const [previewHtml, setPreviewHtml] = useState('')
     const [loadingPreview, setLoadingPreview] = useState(false)
+    // const [images, setImages] = useState([])
+    // const [loadingImages, setLoadingImages] = useState(false)
 
     // Initial Values
     const initialValues = {
@@ -587,11 +622,12 @@ function GuestForm() {
                     name: 'packageId',
                     label: 'Select Package',
                     type: 'CustomAutocomplete',
-                    options: packages?.data?.map(pkg => ({
-                        label: pkg.name,
-                        value: pkg.id,
-                        packageItenary: pkg.packageItenaries
-                    })),
+                    options:
+                        packages?.data?.map(pkg => ({
+                            label: pkg.name,
+                            value: pkg.id,
+                            packageItenary: pkg.packageItenaries
+                        })) || [],
                     grid: { xs: 12, sm: 6 },
                     size: 'small',
                     customSx
@@ -613,7 +649,7 @@ function GuestForm() {
                 title: item.title,
                 description: item.itenary?.description || '',
                 image: item.image || '',
-                destination: item?.destination?.name || 'FRESH UP',
+                destination: item?.destination?.name || '',
                 hotels: {
                     deluxe: item?.destination?.delux_hotel,
                     superDeluxe: item?.destination?.super_delux_hotel,
@@ -780,15 +816,19 @@ function GuestForm() {
             description: selected?.description || ''
         }))
     }
-
+    const keyword = formData.destinationName || itenaries?.data?.find(i => i.id === formData.itenaryId)?.title || ''
+    const {
+        data: imageData,
+        isLoading: loadingImages,
+        isFetching
+    } = useGetTravelImagesQuery(keyword, {
+        skip: !keyword
+    })
     const handleDestinationSelect = selected => {
-        setFormData(prev => ({
-            ...prev,
-            destinationId: selected?.id || '',
-            destination: selected?.name || ''
-        }))
+        handleChange('destinationId', selected?.id || '')
+        handleChange('destinationName', selected?.name || '')
     }
-
+    const images = imageData?.urls || []
     // 6. Final Save Action
     const handleSaveAction = async () => {
         if (!isEditing) {
@@ -873,42 +913,99 @@ function GuestForm() {
         }
     }
 
-    const handleWhatsAppClick = () => {
-        // 1. Safety check for Lead Data
-        if (!leadData) {
-            alert('Lead details not found. Please wait for data to load.')
+    const handleDownloadPdf = async () => {
+        if (!leadData?.data?.phone) return
+
+        try {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Generating PDF... Please wait!',
+                    variant: 'alert',
+                    alert: { color: 'info' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+
+            const baseUrl = import.meta.env.VITE_APP_BASE_URL
+            const res = await fetch(`${baseUrl}/leads/generate-pdf/${params.leadId}/${currentQuoteNo || 1}`, {
+                method: 'GET',
+                credentials: 'include'
+            })
+
+            if (!res.ok) {
+                let errorMessage = 'Failed to generate PDF.'
+                try {
+                    const text = await res.text()
+                    errorMessage = text
+                } catch (e) {
+                    console.log(e)
+                }
+                throw new Error(errorMessage)
+            }
+
+            const blob = await res.blob()
+            const url = window.URL.createObjectURL(blob)
+
+            const a = document.createElement('a')
+            a.href = url
+            const fileName = `${leadData?.data?.fullName.replace(/\s+/g, '_')}_Trip_Quote.pdf`
+            a.download = fileName
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+
+            setTimeout(() => window.URL.revokeObjectURL(url), 10000)
+
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'PDF Downloaded Successfully!',
+                    variant: 'alert',
+                    alert: { color: 'success' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } catch (err) {
+            console.error('PDF Generation failed:', err)
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Failed to generate PDF. Please try again.',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        }
+    }
+
+    const handleShareQuotation = async () => {
+        // 1. Safety check
+        if (!leadData?.data?.phone) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Lead phone number not found!',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
             return
         }
-        console.log(leadData, 'leadData')
-        // 2. Clean the phone number
-        const phoneNumber = leadData.data.phone.replace(/\D/g, '')
 
-        // 3. Get the Route (e.g., Shimla ➔ Manali ➔ Jibhi)
-        const route = selectedPackage
-            .map(item => item.destination)
-            .filter(name => name !== 'OVERNIGHT JOURNEY' && name !== 'FRESH UP')
-            .join(' ➔ ')
-
-        // 4. Build the Pricing Text
-        // Assuming packagePrices has these keys from your 'handleSavePrices' logic
-        let pricingInfo = `*💰 Package Options:* \n`
-        if (price.data.deluxePrice) pricingInfo += `• Deluxe: ₹${price.data.deluxePrice}\n`
-        if (price.data.superDeluxePrice) pricingInfo += `• Super Deluxe: ₹${price.data.superDeluxePrice}\n`
-        if (price.data.luxuryPrice) pricingInfo += `• Luxury: ₹${price.data.luxuryPrice}\n`
-        if (price.data.premiumPrice) pricingInfo += `• Premium: ₹${price.data.premiumPrice}\n`
-
-        // 5. Create the Message
+        // 2. Prepare WhatsApp Web URL
+        const phoneNumber = leadData?.data?.phone.replace(/\D/g, '')
         const message = encodeURIComponent(
             `*TRAVEL QUOTATION - The Travel Kart*\n\n` +
-                `Hi ${leadData.data.fullName},\n` +
-                `Here are the quotation details for your upcoming trip:\n\n` +
-                `*📍 Route:* ${route || 'Himalayan Tour'}\n\n${
-                    pricingInfo
-                }\n_Detailed day-wise itinerary has been sent to your email._\n\n` +
-                `Please let us know which option works best for you!`
+                `Hi ${leadData?.data?.fullName},\n\n` +
+                `I have attached your customized trip itinerary below. 📄\n\n` +
+                `_Note: Please find the attached PDF in this chat._`
         )
 
-        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`
+        // 3. Open WhatsApp Web in a new tab
+        const whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${message}`
         window.open(whatsappUrl, '_blank')
     }
     const handleConvertPackage = async () => {
@@ -1107,7 +1204,8 @@ function GuestForm() {
                                 isLoading={isLoading}
                                 handleShare={handleShare}
                                 handlePreview={handlePreview}
-                                handleWhatsAppClick={handleWhatsAppClick}
+                                handleWhatsAppClick={handleShareQuotation}
+                                handleDownloadPdf={handleDownloadPdf}
                                 handleConvertPackage={handleConvertPackage}
                                 onEditItem={onEditItem}
                                 onDeleteItem={onDeleteItem}
@@ -1149,32 +1247,55 @@ function GuestForm() {
                                 <Autocomplete
                                     options={itenaries?.data || []}
                                     loading={loadingItenary}
-                                    getOptionLabel={option => option.title || ''}
-                                    // Find the currently selected itinerary based on ID
-                                    value={itenaries?.data?.find(item => item.id === formData.itenaryId) || null}
-                                    onChange={(e, selected) => handleItinerarySelect(selected)}
-                                    // eslint-disable-next-line no-shadow, react/jsx-props-no-spreading
-                                    renderInput={params => <TextField {...params} label='Select Itinerary' fullWidth />}
+                                    getOptionLabel={option => option?.title || ''}
+                                    filterOptions={x => x}
+                                    value={
+                                        itenaries?.data?.find(item => String(item.id) === String(formData.itenaryId)) ||
+                                        null
+                                    }
+                                    inputValue={itenarySearch}
+                                    onInputChange={(e, val, reason) => {
+                                        if (reason === 'input') {
+                                            setItenarySearch(val) // typing
+                                        }
+                                    }}
+                                    onChange={(e, selected) => {
+                                        handleItinerarySelect(selected)
+                                        setItenarySearch(selected?.title || '') // 👈 FIX
+                                    }}
+                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                    // eslint-disable-next-line react/jsx-props-no-spreading
+                                    renderInput={autoParams => <TextField {...autoParams} label='Search Destination' />}
                                 />
                             </Grid>
 
                             {/* Destination Autocomplete */}
                             <Grid item xs={12} sm={6}>
                                 <Autocomplete
-                                    options={destinations?.data || []}
+                                    options={destinations?.data}
                                     loading={loadingDestinations}
-                                    getOptionLabel={option => option.name || ''}
-                                    // Find the currently selected destination based on ID
-                                    value={destinations?.data?.find(item => item.id === formData.destinationId) || null}
-                                    onChange={(e, selected) => handleDestinationSelect(selected)}
-                                    // eslint-disable-next-line no-shadow
-                                    renderInput={params => (
-                                        // eslint-disable-next-line react/jsx-props-no-spreading
-                                        <TextField {...params} label='Select Destination' fullWidth />
-                                    )}
+                                    getOptionLabel={option => option?.name || ''}
+                                    filterOptions={x => x}
+                                    value={
+                                        destinations?.data?.find(
+                                            item => String(item.id) === String(formData.destinationId)
+                                        ) || null
+                                    }
+                                    inputValue={destinationSearch}
+                                    onInputChange={(e, val, reason) => {
+                                        if (reason === 'input') {
+                                            setDestinationSearch(val)
+                                        }
+                                    }}
+                                    onChange={(e, selected) => {
+                                        handleDestinationSelect(selected)
+                                        setDestinationSearch(selected?.name || '') // 👈 FIX
+                                    }}
+                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                    // eslint-disable-next-line react/jsx-props-no-spreading
+                                    renderInput={autoParams => <TextField {...autoParams} label='Search Destination' />}
                                 />
                             </Grid>
-
                             {/* Title and Description fields (Add these for editing!) */}
                             {isEditing && (
                                 <Grid item xs={12}>
@@ -1198,7 +1319,6 @@ function GuestForm() {
                                     />
                                 </Grid>
                             )}
-
                             {/* Image URL */}
                             <Grid item xs={12}>
                                 <TextField
@@ -1208,7 +1328,48 @@ function GuestForm() {
                                     onChange={e => handleChange('image', e.target.value)}
                                 />
                             </Grid>
+                            {/* Loader */}
+                            {loadingImages && (
+                                <Grid item xs={12}>
+                                    <CircularProgress size={24} />
+                                </Grid>
+                            )}
+                            {/* Image Options */}
+                            {images.length > 0 && (
+                                <Grid item xs={12}>
+                                    <Typography variant='caption' sx={{ mb: 1, display: 'block' }}>
+                                        Select an image:
+                                    </Typography>
 
+                                    <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto' }}>
+                                        {images.map(img => (
+                                            <Box
+                                                key={img.name}
+                                                onClick={() => handleChange('image', img.url)}
+                                                sx={{
+                                                    cursor: 'pointer',
+                                                    border:
+                                                        formData.image === img.url
+                                                            ? '2px solid #1976d2'
+                                                            : '1px solid #ccc',
+                                                    borderRadius: 1,
+                                                    overflow: 'hidden'
+                                                }}
+                                            >
+                                                <img
+                                                    src={img.thumb}
+                                                    alt='travel'
+                                                    style={{
+                                                        width: 120,
+                                                        height: 80,
+                                                        objectFit: 'cover'
+                                                    }}
+                                                />
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </Grid>
+                            )}
                             {/* Image Preview */}
                             {formData.image && (
                                 <Grid item xs={12}>
@@ -1221,7 +1382,6 @@ function GuestForm() {
                                     </Box>
                                 </Grid>
                             )}
-
                             {/* Save Button */}
                             <Grid item xs={12}>
                                 <Button variant='contained' fullWidth onClick={handleSaveAction}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -41,6 +41,12 @@ function PackagesItenary() {
     const [loadingImages, setLoadingImages] = useState(false)
     const [editingActivity, setEditingActivity] = useState(null)
     const [deleteId, setDeleteId] = useState(null)
+    const [itenarySearch, setItenarySearch] = useState('')
+    const [destinationSearch, setDestinationSearch] = useState('')
+    const [debouncedItenarySearch, setDebouncedItenarySearch] = useState('')
+    const [debouncedDestinationSearch, setDebouncedDestinationSearch] = useState('')
+    const [loadingItenaries, setLoadingItenaries] = useState(false)
+    const [loadingDestinations, setLoadingDestinations] = useState(false)
 
     async function fetchActivities() {
         const { data, error } = await dispatch(getPackageClientItenaryById.initiate(params.packageId))
@@ -50,14 +56,42 @@ function PackagesItenary() {
 
     const focusActivityId = location.state?.focusActivityId
 
-    const getItenaryAndDestination = async () => {
-        const { data: itenaryRes } = await dispatch(getItenaryClients.initiate(`?campaignId=${params.campaignId}`))
-        const { data: destinationRes } = await dispatch(
-            getDestinationClients.initiate(`?campaignId=${params.campaignId}`)
-        )
-        setItenaryData(itenaryRes?.data || [])
-        setDestinationData(destinationRes?.data || [])
-    }
+    const getItenaryAndDestination = useCallback(
+        async ({ itenaryKeyword = '', destinationKeyword = '' } = {}) => {
+            const itenaryParams = new URLSearchParams()
+            const destinationParams = new URLSearchParams()
+
+            if (params.campaignId) {
+                itenaryParams.set('campaignId', params.campaignId)
+                destinationParams.set('campaignId', params.campaignId)
+            }
+
+            if (itenaryKeyword.trim()) {
+                itenaryParams.set('search', itenaryKeyword.trim())
+            }
+
+            if (destinationKeyword.trim()) {
+                destinationParams.set('search', destinationKeyword.trim())
+            }
+
+            setLoadingItenaries(true)
+            setLoadingDestinations(true)
+
+            try {
+                const [itenaryRes, destinationRes] = await Promise.all([
+                    dispatch(getItenaryClients.initiate(`?${itenaryParams.toString()}`, false)),
+                    dispatch(getDestinationClients.initiate(`?${destinationParams.toString()}`, false))
+                ])
+
+                setItenaryData(itenaryRes?.data?.data || [])
+                setDestinationData(destinationRes?.data?.data || [])
+            } finally {
+                setLoadingItenaries(false)
+                setLoadingDestinations(false)
+            }
+        },
+        [dispatch, params.campaignId]
+    )
 
     const [campaignsData, setcampaignsData] = useState([])
 
@@ -181,9 +215,33 @@ function PackagesItenary() {
     }
 
     useEffect(() => {
-        getItenaryAndDestination()
         fetchActivities()
-    }, [params.packageId, params.campaignId])
+    }, [params.packageId])
+
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            const nextValue = itenarySearch.trim()
+            setDebouncedItenarySearch(nextValue.length >= 2 || nextValue.length === 0 ? nextValue : '')
+        }, 700)
+
+        return () => clearTimeout(timeoutId)
+    }, [itenarySearch])
+
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            const nextValue = destinationSearch.trim()
+            setDebouncedDestinationSearch(nextValue.length >= 2 || nextValue.length === 0 ? nextValue : '')
+        }, 700)
+
+        return () => clearTimeout(timeoutId)
+    }, [destinationSearch])
+
+    useEffect(() => {
+        getItenaryAndDestination({
+            itenaryKeyword: debouncedItenarySearch,
+            destinationKeyword: debouncedDestinationSearch
+        })
+    }, [getItenaryAndDestination, debouncedItenarySearch, debouncedDestinationSearch])
 
     const customSx = {
         '& input, & textarea': {
@@ -207,15 +265,27 @@ function PackagesItenary() {
 
     const itenaryOptions = itenaryData?.map(item => ({
         label: item.title,
-        value: item.id.toString()
+        value: item.id
     }))
 
     const destinationOptions = destinationData?.map(item => ({
         label: item.name,
-        value: item.id.toString()
+        value: item.id
     }))
 
+    const selectedItenaryOption =
+        itenaryOptions.find(item => item.value.toString() === formik.values.itenaryId?.toString?.()) || null
+    const selectedDestinationOption =
+        destinationOptions.find(item => item.value.toString() === formik.values.destinationId?.toString?.()) || null
+
     const handleCustomChange = e => {
+        const { name, value } = e.target
+
+        if (['campaignId', 'itenaryId', 'destinationId'].includes(name)) {
+            formik.setFieldValue(name, value?.value?.toString?.() || value?.value || value || '')
+            return
+        }
+
         formik.handleChange(e)
     }
 
@@ -236,22 +306,36 @@ function PackagesItenary() {
                 {
                     name: 'itenaryId',
                     label: 'Itenary',
-                    type: 'select',
+                    type: 'CustomAutocomplete',
                     options: itenaryOptions,
+                    value: selectedItenaryOption,
+                    loading: loadingItenaries,
+                    onInputChange: ({ value }) => setItenarySearch(value || ''),
+                    helperText:
+                        itenarySearch.trim().length === 1 ? 'Type at least 2 characters to search itinerary' : '',
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
-                    customSx
+                    customSx,
+                    isOptionEqualToValue: (option, selectedValue) =>
+                        option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
                 },
                 {
                     name: 'destinationId',
                     label: 'Destination',
-                    type: 'select',
+                    type: 'CustomAutocomplete',
                     options: destinationOptions,
+                    value: selectedDestinationOption,
+                    loading: loadingDestinations,
+                    onInputChange: ({ value }) => setDestinationSearch(value || ''),
+                    helperText:
+                        destinationSearch.trim().length === 1 ? 'Type at least 2 characters to search destination' : '',
                     required: true,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
-                    customSx
+                    customSx,
+                    isOptionEqualToValue: (option, selectedValue) =>
+                        option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
                 },
                 {
                     name: 'image',
@@ -287,8 +371,8 @@ function PackagesItenary() {
         getCampaignsFunc()
     }, [])
 
-    const selectedItenary = itenaryData.find(i => i.id.toString() === formik.values.itenaryId)
-    const selectedDestination = destinationData.find(d => d.id.toString() === formik.values.destinationId)
+    const selectedItenary = itenaryData.find(i => i.id.toString() === formik.values.itenaryId?.toString?.())
+    const selectedDestination = destinationData.find(d => d.id.toString() === formik.values.destinationId?.toString?.())
 
     useEffect(() => {
         const keyword = selectedDestination?.name || selectedItenary?.title

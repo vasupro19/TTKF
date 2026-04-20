@@ -19,5 +19,6 @@ export const aiSlice = apiSliceConfig.injectEndpoints({
 })
 
 export const {
+    useGetTravelImagesQuery,
     endpoints: { getTravelImages }
 } = aiSlice

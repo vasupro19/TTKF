@@ -1,5 +1,5 @@
 /* eslint-disable react/forbid-prop-types */
-import React, { useState } from 'react'
+import React from 'react'
 import PropTypes from 'prop-types'
 import { Autocomplete, TextField, Box, Typography, CircularProgress } from '@mui/material'
 import Cancel from '@mui/icons-material/Cancel'
@@ -37,8 +37,6 @@ function CustomAutocomplete({
     inputProps = {},
     loading = false
 }) {
-    // State to control what displays in the input field
-    const [inputVal, setInputVal] = useState('')
     return (
         <Box sx={{ alignSelf: 'baseline', ...customSx }}>
             {!innerLabel && (
@@ -52,7 +50,6 @@ function CustomAutocomplete({
             <Autocomplete
                 options={options}
                 value={value}
-                inputValue={inputVal}
                 disabled={isDisabled}
                 loading={loading}
                 slotProps={{
@@ -91,12 +88,10 @@ function CustomAutocomplete({
                     }
                 }}
                 onInputChange={(event, newInputValue) => {
-                    setInputVal(newInputValue)
                     if (onInputChange) onInputChange({ name, value: newInputValue })
                 }}
                 // Ensure the actual value to show in the display input is controlled
                 onChange={(event, newValue) => {
-                    setInputVal('')
                     // eslint-disable-next-line no-unused-expressions
                     !tempUi && setFieldValue(name, newValue || null) // Use `name` dynamically
                     if (onChange) {
@@ -167,14 +162,13 @@ function CustomAutocomplete({
                                       endAdornment: (
                                           <>
                                               {loading && <CircularProgress color='inherit' size={20} />}
-                                              {inputVal ? (
+                                              {(params.inputProps?.value || value) && (
                                                   <Cancel
                                                       onClick={() => {
                                                           if (isDisabled) {
                                                               return
                                                           }
                                                           setFieldValue(name, '')
-                                                          setInputVal('')
                                                           if (clearValFunc) {
                                                               clearValFunc()
                                                           }
@@ -185,9 +179,8 @@ function CustomAutocomplete({
                                                               : { color: 'primary.main', cursor: 'pointer' }
                                                       }
                                                   />
-                                              ) : (
-                                                  <SearchIcon />
                                               )}
+                                              <SearchIcon />
                                           </>
                                       )
                                   }

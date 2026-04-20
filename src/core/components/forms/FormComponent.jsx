@@ -418,7 +418,7 @@ function FormComponent({
                                             name={field.name}
                                             label={field?.required ? `${field.label} *` : field.label}
                                             options={field.options}
-                                            value={formik.values[field.name]}
+                                            value={field?.value !== undefined ? field.value : formik.values[field.name]}
                                             touched={formik.touched[field.name]}
                                             error={formik.errors[field.name]}
                                             onChange={(e, newValue, label) => {

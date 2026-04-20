@@ -35,7 +35,8 @@ import {
     SwapHoriz,
     KeyboardArrowUp,
     KeyboardArrowDown,
-    Visibility
+    Visibility,
+    PictureAsPdf
 } from '@mui/icons-material'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -456,6 +457,7 @@ export default function ItinerarySection({
     handleShare,
     handlePreview,
     handleWhatsAppClick,
+    handleDownloadPdf,
     handleConvertPackage,
     onEditItem,
     onDeleteItem,
@@ -473,7 +475,7 @@ export default function ItinerarySection({
     const sharedQuoteNo = lastSharedQuoteNo
 
     return (
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ mt: 3, width: '100%' }}>
             {/* ── HEADER BAR ───────────────────────────────────────────── */}
             <Box
                 sx={{
@@ -678,6 +680,23 @@ export default function ItinerarySection({
                         {sharedQuoteNo && sharedQuoteNo !== currentQuoteNo
                             ? `Share Q${currentQuoteNo} (Last sent: Q${sharedQuoteNo})`
                             : `Share Quote ${currentQuoteNo}`}
+                    </Button>
+
+                    <Button
+                        variant='outlined'
+                        startIcon={<PictureAsPdf />}
+                        onClick={handleDownloadPdf}
+                        sx={{
+                            borderRadius: '10px',
+                            fontWeight: 700,
+                            textTransform: 'none',
+                            borderColor: '#e11d48',
+                            color: '#e11d48',
+                            borderWidth: '2px',
+                            '&:hover': { borderWidth: '2px', bgcolor: '#ffe4e6', borderColor: '#e11d48' }
+                        }}
+                    >
+                        Download PDF
                     </Button>
 
                     <Button

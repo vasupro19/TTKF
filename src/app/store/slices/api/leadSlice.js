@@ -89,6 +89,22 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['leadPreview']
+        }),
+        generateQuotationPdf: build.mutation({
+            query: ({ leadId, quoteNo }) => ({
+                url: `/leads/generate-pdf/${leadId}/${quoteNo}`,
+                method: 'GET',
+                responseHandler: response => response.blob()
+            }),
+            async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+                const KEY = 'generatePdfKey'
+                dispatchLoaderEvent(KEY)
+                try {
+                    await queryFulfilled
+                } finally {
+                    dispatchLoaderEvent(KEY, false)
+                }
+            }
         })
     })
 })
@@ -100,5 +116,6 @@ export const {
     useUpdateLeadMutation,
     useDeleteLeadMutation,
     useShareLeadDetailsMutation,
+    useGenerateQuotationPdfMutation,
     endpoints: { getLeads, getLeadById, getLeadPreview }
 } = leadsSlice

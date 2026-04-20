@@ -60,7 +60,9 @@ import {
     AccessAlarm,
     CategoryOutlined,
     CalendarViewMonthOutlined,
-    Storage
+    Storage,
+    BlurOn,
+    Memory
 } from '@mui/icons-material'
 import {
     BigScreenIcon,
@@ -100,6 +102,8 @@ import PackPendencyIcon from '@/assets/icons/PackPendencyIcon'
 import { useEffect } from 'react'
 
 const icons = {
+    BlurOn,
+    Memory,
     HomeIcon,
     DeveloperBoardIcon,
     ExitToAppIcon,

@@ -35,13 +35,13 @@ export const clientSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['client', 'clientById', 'clientData']
         }),
         updateClient: build.mutation({
-            query: ({ id, ...updateData }) => {
+            query: ({ id, data }) => {
                 const KEY = 'updateClientLKey'
                 dispatchLoaderEvent(KEY)
                 return {
                     url: `/client/${id}`,
                     method: 'PUT',
-                    body: updateData,
+                    body: data,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },

@@ -46,7 +46,11 @@ function ClientMasterForm() {
         name: '',
         email: '',
         phoneNumber: '',
-        address: ''
+        address: '',
+        website: '',
+        insta: '',
+        smtpEmail: '',
+        smtpPassword: ''
         // role_id: '2'
     }
 
@@ -68,7 +72,11 @@ function ClientMasterForm() {
             }),
             email: z.string().min(1, 'Ext. Client Code is required'),
             phoneNumber: z.string().min(1, 'Master Client is required'),
-            address: z.string().optional()
+            address: z.string().optional(),
+            website: z.string().optional(),
+            insta: z.string().optional(),
+            smtpEmail: z.string().optional(),
+            smtpPassword: z.string().optional()
         })
         // z.object({
         //     bContactPerson: z.string().min(2, 'Contact Person is required'),
@@ -207,21 +215,39 @@ function ClientMasterForm() {
             try {
                 let response
                 if (activeTab === 0 && !clientId) {
-                    response = await createClient(values).unwrap()
+                    // ✅ Build FormData for file upload
+                    const formData = new FormData()
+                    Object.keys(values).forEach(key => {
+                        if (key === 'logo' && values[key] instanceof File) {
+                            formData.append('logo', values[key])
+                        } else if (values[key] !== undefined && values[key] !== null && values[key] !== '') {
+                            formData.append(key, values[key])
+                        }
+                    })
+
+                    response = await createClient(formData).unwrap() // ✅ send FormData
                     const newClientId = response.data.id
                     setClientId(newClientId)
                     formik.setFieldValue('tabId', tabLabels[1])
                     enableTabsAfterValidation(1)
                     setActiveTab(1)
                 } else if (clientId) {
+                    const formData = new FormData()
+                    Object.keys(values).forEach(key => {
+                        if (key === 'logo' && values[key] instanceof File) {
+                            formData.append('logo', values[key])
+                        } else if (values[key] !== undefined && values[key] !== null && values[key] !== '') {
+                            formData.append(key, values[key])
+                        }
+                    })
                     if (activeTab < tabLabels.length - 1) {
-                        response = await updateClient({ id: clientId, ...values }).unwrap()
+                        response = await updateClient({ id: clientId, data: formData }).unwrap()
                         const nextTab = activeTab + 1
                         formik.setFieldValue('tabId', tabLabels[nextTab])
                         enableTabsAfterValidation(nextTab)
                         setActiveTab(nextTab)
                     } else {
-                        response = await updateClient({ id: clientId, ...values, action: 'submit' }).unwrap()
+                        response = await updateClient({ id: clientId, data: formData }).unwrap()
                         formik.resetForm()
                         setActiveTab(0)
                         setTabsEnabled([true, false, false, false])
@@ -338,6 +364,51 @@ function ClientMasterForm() {
                     grid: { xs: 12, sm: 4, md: 4 },
                     size: 'small',
                     customSx
+                },
+                {
+                    name: 'website',
+                    label: 'Website',
+                    type: 'text',
+                    required: false,
+                    grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'insta',
+                    label: 'Instagram',
+                    type: 'text',
+                    required: false,
+                    grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'smtpEmail',
+                    label: 'SMTP Email',
+                    type: 'text',
+                    required: false,
+                    grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'smtpPassword',
+                    label: 'SMTP Password',
+                    type: 'text',
+                    required: false,
+                    grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'logo',
+                    label: 'Company Logo',
+                    type: 'file',
+                    required: false,
+                    grid: { xs: 12, sm: 4, md: 4 },
+                    size: 'small',
+                    customSx
                 }
             ]
         }
@@ -396,10 +467,13 @@ function ClientMasterForm() {
     }, [dispatch])
     // eslint-disable-next-line no-shadow
     const handleCustomChange = (e, formik) => {
-        const { name, value } = e.target
-        // Trigger handlePincodeChange only for pincode fields
+        const { name, value, files, type } = e.target
 
-        formik.handleChange(e) // For other fields, use normal formik.handleChange
+        if (type === 'file') {
+            formik.setFieldValue(name, files[0]) // ✅ FIX
+        } else {
+            formik.handleChange(e) // ✅ keep existing behavior
+        }
     }
 
     // this useEffect handles edit data

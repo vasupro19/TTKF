@@ -11,7 +11,7 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
     const [formData, setFormData] = useState({
         leadId,
         quotationNo,
-        selectedPackage: '',
+        selectedPackage: null,
         sellingPrice: ''
     })
 
@@ -21,10 +21,10 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
 
     const handlePackageSelect = value => {
         // Auto-fill price from priceData based on selection (e.g., deluxePrice)
-        const price = priceData ? priceData[value] : ''
+        const price = priceData && value ? priceData[value] : ''
         setFormData(prev => ({
             ...prev,
-            selectedPackage: value,
+            selectedPackage: value ?? null,
             sellingPrice: price || ''
         }))
     }
@@ -48,7 +48,9 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
         setFormData(prev => ({
             ...prev,
             quotationNo,
-            leadId
+            leadId,
+            selectedPackage: null,
+            sellingPrice: ''
         }))
     }, [quotationNo, leadId])
 
@@ -77,6 +79,16 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
                             options={['deluxePrice', 'superDeluxePrice', 'luxuryPrice', 'premiumPrice']}
                             value={formData.selectedPackage}
                             onChange={(e, value) => handlePackageSelect(value)}
+                            isOptionEqualToValue={(option, val) => option === val}
+                            getOptionLabel={option => {
+                                const labels = {
+                                    deluxePrice: 'Deluxe',
+                                    superDeluxePrice: 'Super Deluxe',
+                                    luxuryPrice: 'Luxury',
+                                    premiumPrice: 'Premium'
+                                }
+                                return labels[option] || option
+                            }}
                             // eslint-disable-next-line react/jsx-props-no-spreading
                             renderInput={params => <TextField {...params} label='Select Package Category' fullWidth />}
                         />

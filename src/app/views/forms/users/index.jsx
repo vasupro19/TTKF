@@ -130,6 +130,7 @@ export default function SetupUserForm() {
 
         phone: '',
         email: '',
+        emailPassword: '',
 
         password: '',
         confirmPassword: '',
@@ -161,6 +162,7 @@ export default function SetupUserForm() {
             }
         }),
         email: z.union([z.string().min(1, 'Email is required'), z.string().email('Invalid email format')]),
+        emailPassword: z.string().optional(),
 
         password: z.string().optional(),
         confirmPassword: z.string().optional(),
@@ -380,6 +382,7 @@ export default function SetupUserForm() {
                         // Note: Your response uses 'phoneNumber', not 'contact_no'
                         phone: `+91${userData?.phoneNumber}` || '',
                         email: userData?.email || '',
+                        emailPassword: userData?.emailPassword || '',
                         // password: userData?.password || '',
                         // confirmPassword: userData?.password || '',
                         // The label is directly available in userData.role.name
@@ -410,6 +413,7 @@ export default function SetupUserForm() {
                         name: values.firstName,
                         role_id: values.role?.id?.toString(),
                         email: values.email,
+                        emailPassword: values.emailPassword,
                         contact_no: values.phone.slice(2).replace(/-/g, ''),
                         password: values.password,
                         client_id: user?.clientId
@@ -615,6 +619,31 @@ export default function SetupUserForm() {
                                         fullWidth
                                         error={touched.email && !!errors.email}
                                         helperText={touched.email && errors.email}
+                                        autocomplete='off'
+                                    />
+                                </Grid>
+
+                                <Grid item xs={6} md={6} container alignItems='center' alignContent='flex-start'>
+                                    <Box
+                                        sx={{
+                                            width: '100%',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        <Label sx={{ textAlign: 'left', width: '100%' }}>Email App Password</Label>
+                                    </Box>
+                                    <CustomTextFieldWrapper
+                                        as={CustomTextField}
+                                        name='emailPassword'
+                                        type='password'
+                                        variant='outlined'
+                                        size='small'
+                                        placeholder='e.g. abcd efgh ijkl mnop'
+                                        fullWidth
+                                        error={touched.emailPassword && !!errors.emailPassword}
+                                        helperText={touched.emailPassword && errors.emailPassword}
                                         autocomplete='off'
                                     />
                                 </Grid>
