@@ -39,7 +39,10 @@ const TAG_TYPES = [
     'userManagementById',
     'userManagementMappingById',
     'vendor',
-    'vendorById'
+    'vendorById',
+    'jobCandidates',
+    'jobCandidateById',
+    'jobApplication'
 ]
 
 export const apiSliceConfig = createApi({

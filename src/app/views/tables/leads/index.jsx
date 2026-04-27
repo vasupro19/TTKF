@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
-import { Box, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, IconButton, Tooltip, Typography, Chip, Modal, CircularProgress } from '@mui/material'
 import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff } from '@mui/icons-material'
+import { Add, Edit, Delete, FilterAltOff, Visibility } from '@mui/icons-material'
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined'
 import VerifiedIcon from '@mui/icons-material/Verified'
 import LocalHotelIcon from '@mui/icons-material/LocalHotel'
@@ -14,11 +14,15 @@ import MainCard from '@core/components/extended/MainCard'
 import DataTable from '@core/components/extended/table/Table'
 import CustomButton from '@core/components/extended/CustomButton'
 import { CSVExport } from '@/core/components/extended/CreateCSV'
-import CustomSearchTextField from '@/core/components/extended/CustomSearchTextField'
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
-import { getLeads, useDeleteLeadMutation, useUpdateLeadMutation } from '@/app/store/slices/api/leadSlice'
+import {
+    getLeads,
+    getLeadTimeline,
+    useDeleteLeadMutation,
+    useUpdateLeadMutation
+} from '@/app/store/slices/api/leadSlice'
 
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
@@ -58,6 +62,13 @@ function MasterLeadsTable() {
     const [modalAction, setModalAction] = useState('')
     const [selectedLeadId, setSelectedLeadId] = useState(null)
     const [removeId, setRemoveId] = useState(null)
+    const [quickFilter, setQuickFilter] = useState({ status: 'All', followUpState: 'All' })
+    const [timelineModal, setTimelineModal] = useState({
+        open: false,
+        loading: false,
+        leadName: '',
+        events: []
+    })
 
     const [isShowClearButton, setIsShowClearButton] = useState(false)
     const [clearAllFilters, setClearAllFilters] = useState(false)
@@ -83,7 +94,14 @@ function MasterLeadsTable() {
         setTimeout(() => setExcelHandler(false), 1000)
     }
     const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getLeads.initiate(queryString, false))
+        const extraParams = new URLSearchParams()
+        if (quickFilter.status !== 'All') extraParams.set('quickStatus', quickFilter.status)
+        if (quickFilter.followUpState !== 'All') extraParams.set('followUpState', quickFilter.followUpState)
+
+        const enhancedQuery = `${queryString || ''}${queryString?.includes('?') ? '&' : '?'}${extraParams.toString()}`
+        const finalQuery = extraParams.toString() ? enhancedQuery : queryString
+
+        const { data: response } = await dispatch(getLeads.initiate(finalQuery, false))
         if (isExcelQuery(queryString)) {
             return true
         }
@@ -98,6 +116,7 @@ function MasterLeadsTable() {
             regex: false
         })
         setFilters({ created_at: { from: '', to: '' } })
+        setQuickFilter({ status: 'All', followUpState: 'All' })
     }
 
     const openConfirmModal = useCallback(
@@ -169,13 +188,13 @@ function MasterLeadsTable() {
                 label: 'Edit',
                 icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
                 onClick: row => editHandler(row.id, row),
-                condition: row => hasEditAccess
+                condition: () => hasEditAccess
             },
             {
                 label: 'Delete',
                 icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
                 onClick: row => openConfirmModal('delete', row.id),
-                condition: row => hasEditAccess
+                condition: () => hasEditAccess
             }
         ],
         [editHandler, openConfirmModal, hasEditAccess]
@@ -208,7 +227,15 @@ function MasterLeadsTable() {
             )
             setRefetch(true)
         } catch (error) {
-            console.log(error)
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: error?.data?.message || 'Unable to verify lead',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
         } finally {
             setModalAction('')
             setSelectedLeadId(null)
@@ -216,12 +243,220 @@ function MasterLeadsTable() {
         }
     }
 
+    const handleOpenTimeline = async row => {
+        setTimelineModal({
+            open: true,
+            loading: true,
+            leadName: row.fullName,
+            events: []
+        })
+
+        try {
+            const { data } = await dispatch(getLeadTimeline.initiate(row.id))
+            setTimelineModal({
+                open: true,
+                loading: false,
+                leadName: data?.data?.lead?.fullName || row.fullName,
+                events: data?.data?.timeline || []
+            })
+        } catch (error) {
+            setTimelineModal({
+                open: false,
+                loading: false,
+                leadName: '',
+                events: []
+            })
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: error?.data?.message || 'Unable to load lead timeline',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        }
+    }
+
+    const leadSummary = useMemo(() => {
+        const total = users.length
+        const confirmed = users.filter(item => item.status === 'Confirmed').length
+        const verified = users.filter(item => item.status === 'verified').length
+        const pending = total - confirmed - verified
+
+        return [
+            { label: 'Showing', value: `${total} leads`, color: '#1d4ed8', bg: '#eff6ff' },
+            { label: 'Verified', value: verified, color: '#16a34a', bg: '#f0fdf4' },
+            { label: 'Confirmed', value: confirmed, color: '#7c3aed', bg: '#f5f3ff' },
+            { label: 'Pending', value: pending, color: '#b45309', bg: '#fffbeb' }
+        ]
+    }, [users])
+
+    const getLeadStatusStyle = status => {
+        if (status === 'Confirmed') {
+            return { bg: '#f0fdf4', color: '#16a34a' }
+        }
+
+        if (status === 'verified') {
+            return { bg: '#eff6ff', color: '#2563eb' }
+        }
+
+        return { bg: '#fff7ed', color: '#b45309' }
+    }
+
+    const getFollowUpStyle = status => {
+        if (status === 'Overdue') {
+            return { bg: '#fef2f2', color: '#dc2626' }
+        }
+
+        if (status === 'Due Today') {
+            return { bg: '#fffbeb', color: '#b45309' }
+        }
+
+        if (status === 'On Track') {
+            return { bg: '#f0fdf4', color: '#16a34a' }
+        }
+
+        return { bg: '#eff6ff', color: '#2563eb' }
+    }
+
+    const enhancedColumns = useMemo(
+        () =>
+            columns.map(column => {
+                if (column.key === 'status') {
+                    return {
+                        ...column,
+                        render: row => {
+                            const statusStyle = getLeadStatusStyle(row.status)
+
+                            return (
+                                <Chip
+                                    size='small'
+                                    label={row.status || 'Pending'}
+                                    sx={{
+                                        bgcolor: statusStyle.bg,
+                                        color: statusStyle.color,
+                                        fontWeight: 700
+                                    }}
+                                />
+                            )
+                        }
+                    }
+                }
+
+                if (column.key === 'followUpState') {
+                    return {
+                        ...column,
+                        render: row => {
+                            const followUpStyle = getFollowUpStyle(row.followUpState)
+
+                            return (
+                                <Chip
+                                    size='small'
+                                    label={row.followUpState || 'Needs Follow-up'}
+                                    sx={{
+                                        bgcolor: followUpStyle.bg,
+                                        color: followUpStyle.color,
+                                        fontWeight: 700
+                                    }}
+                                />
+                            )
+                        }
+                    }
+                }
+
+                return column
+            }),
+        [columns]
+    )
+
+    useEffect(() => {
+        const searchParams = new URLSearchParams(location.search)
+        const status = searchParams.get('status')
+        const followUpState = searchParams.get('followUpState')
+
+        if (status || followUpState) {
+            setQuickFilter({
+                status: status || 'All',
+                followUpState: followUpState || 'All'
+            })
+            setRefetch(true)
+            setTimeout(() => setRefetch(false), 500)
+        }
+    }, [location.search])
+
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
-                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        gap: 2,
+                        justifyContent: 'space-between',
+                        alignItems: { xs: 'flex-start', md: 'center' },
+                        flexDirection: { xs: 'column', md: 'row' }
+                    }}
+                >
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                         <Typography variant='h3'>All Leads</Typography>
+                        <Typography variant='body2' color='text.secondary'>
+                            Verify leads first, then move them into guest details and package conversion.
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            {leadSummary.map(item => (
+                                <Chip
+                                    key={item.label}
+                                    label={`${item.label}: ${item.value}`}
+                                    size='small'
+                                    sx={{
+                                        bgcolor: item.bg,
+                                        color: item.color,
+                                        fontWeight: 700,
+                                        borderRadius: '8px'
+                                    }}
+                                />
+                            ))}
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            {[
+                                { label: 'All', key: 'All' },
+                                { label: 'Pending', key: 'Pending' },
+                                { label: 'Verified', key: 'verified' },
+                                { label: 'Confirmed', key: 'Confirmed' }
+                            ].map(item => (
+                                <Chip
+                                    key={item.key}
+                                    label={item.label}
+                                    size='small'
+                                    variant={quickFilter.status === item.key ? 'filled' : 'outlined'}
+                                    color={quickFilter.status === item.key ? 'primary' : 'default'}
+                                    onClick={() => {
+                                        setQuickFilter(prev => ({ ...prev, status: item.key }))
+                                        setRefetch(true)
+                                        setTimeout(() => setRefetch(false), 500)
+                                    }}
+                                />
+                            ))}
+                            {[
+                                { label: 'All Follow-ups', key: 'All' },
+                                { label: 'Due Today', key: 'Due Today' },
+                                { label: 'Overdue', key: 'Overdue' },
+                                { label: 'On Track', key: 'On Track' }
+                            ].map(item => (
+                                <Chip
+                                    key={item.key}
+                                    label={item.label}
+                                    size='small'
+                                    variant={quickFilter.followUpState === item.key ? 'filled' : 'outlined'}
+                                    color={quickFilter.followUpState === item.key ? 'secondary' : 'default'}
+                                    onClick={() => {
+                                        setQuickFilter(prev => ({ ...prev, followUpState: item.key }))
+                                        setRefetch(true)
+                                        setTimeout(() => setRefetch(false), 500)
+                                    }}
+                                />
+                            ))}
+                        </Box>
                     </Box>
                     <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
                         {/* add your custom filters here */}
@@ -240,11 +475,11 @@ function MasterLeadsTable() {
                                 Clear All Filters
                             </CustomButton>
                         )}
-                        <CustomSearchTextField
+                        {/* <CustomSearchTextField
                             search={search}
                             setSearch={setSearch}
                             placeholder='Search locations...'
-                        />
+                        /> */}
                         {/* // Example for "From" date */}
                         <CustomSearchDateField
                             type='from'
@@ -334,7 +569,7 @@ function MasterLeadsTable() {
                 <DataTable
                     isCheckbox
                     data={users || []}
-                    columns={columns}
+                    columns={enhancedColumns}
                     queryHandler={queryHandler}
                     reqKey='getLocationMasterLKey'
                     refetch={refetch}
@@ -345,6 +580,18 @@ function MasterLeadsTable() {
                     totalRecords={recordsCount}
                     renderAction={row => (
                         <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                            <UiAccessGuard type='edit'>
+                                <IconButton
+                                    sx={{ color: 'info.main' }}
+                                    size='small'
+                                    aria-label='view lead timeline'
+                                    onClick={() => handleOpenTimeline(row)}
+                                >
+                                    <Tooltip title='View Timeline'>
+                                        <Visibility fontSize='small' />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
                             <UiAccessGuard type='edit'>
                                 <IconButton
                                     sx={{ color: 'success.main' }}
@@ -424,6 +671,81 @@ function MasterLeadsTable() {
                     onConfirm={() => (modalAction === 'delete' ? deleteActionHandler() : verifyLead(selectedLeadId))}
                     isLoading={modalAction === 'delete' ? deleteLeadKey : updateLeadKey}
                 />
+
+                <Modal open={timelineModal.open} onClose={() => setTimelineModal(prev => ({ ...prev, open: false }))}>
+                    <Box
+                        sx={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            width: { xs: '92vw', md: '760px' },
+                            maxHeight: '85vh',
+                            overflow: 'auto',
+                            bgcolor: 'background.paper',
+                            borderRadius: '16px',
+                            boxShadow: 24,
+                            p: 3
+                        }}
+                    >
+                        <Typography variant='h4' sx={{ mb: 1 }}>
+                            {timelineModal.leadName} Timeline
+                        </Typography>
+                        <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+                            This shows lead progress, package conversion, service assignment, and payment activity.
+                        </Typography>
+
+                        {timelineModal.loading && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                                <CircularProgress />
+                            </Box>
+                        )}
+                        {!timelineModal.loading && timelineModal.events.length > 0 && (
+                            <Stack spacing={2}>
+                                {timelineModal.events.map(event => (
+                                    <Box
+                                        key={`${event.type}-${event.timestamp}-${event.title}`}
+                                        sx={{
+                                            p: 2,
+                                            borderRadius: '12px',
+                                            border: '1px solid #e2e8f0',
+                                            bgcolor: '#fbfdff'
+                                        }}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: 1,
+                                                flexWrap: 'wrap'
+                                            }}
+                                        >
+                                            <Typography variant='subtitle1' fontWeight={700}>
+                                                {event.title}
+                                            </Typography>
+                                            <Chip
+                                                size='small'
+                                                label={new Date(event.timestamp).toLocaleString('en-IN')}
+                                                variant='outlined'
+                                            />
+                                        </Box>
+                                        {event.description && (
+                                            <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
+                                                {event.description}
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                ))}
+                            </Stack>
+                        )}
+                        {!timelineModal.loading && timelineModal.events.length === 0 && (
+                            <Typography variant='body2' color='text.secondary'>
+                                No timeline activity is available for this lead yet.
+                            </Typography>
+                        )}
+                    </Box>
+                </Modal>
             </MainCard>
         </ContextMenuProvider>
     )

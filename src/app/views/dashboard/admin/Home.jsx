@@ -1,22 +1,17 @@
-/* eslint-disable import/no-extraneous-dependencies */
-/* eslint-disable no-nested-ternary */
-/* eslint-disable react/jsx-props-no-spreading */
 /* eslint-disable react/no-unstable-nested-components */
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { Grid, Paper, Chip, Avatar, LinearProgress, Divider, IconButton, Tooltip } from '@mui/material'
+import { Grid, Paper, Chip, Avatar, LinearProgress, Divider, IconButton, Tooltip, Alert } from '@mui/material'
 import {
     TrendingUp,
     TrendingDown,
     People,
     ConfirmationNumber,
     CurrencyRupee,
-    Send,
-    Hotel,
-    DirectionsCar,
+    FlagCircle,
     ArrowForward,
-    MoreVert,
     Circle
 } from '@mui/icons-material'
 import { motion } from 'framer-motion'
@@ -32,86 +27,122 @@ import {
     ResponsiveContainer,
     PieChart,
     Pie,
-    Cell,
-    Legend
+    Cell
 } from 'recharts'
+import { useSelector } from 'react-redux'
 
-// ─── Mock data (replace with real API calls) ────────────────────────────────
-const monthlyLeads = [
-    { month: 'Oct', leads: 28, confirmed: 12, revenue: 420000 },
-    { month: 'Nov', leads: 35, confirmed: 18, revenue: 610000 },
-    { month: 'Dec', leads: 52, confirmed: 28, revenue: 890000 },
-    { month: 'Jan', leads: 41, confirmed: 22, revenue: 720000 },
-    { month: 'Feb', leads: 38, confirmed: 19, revenue: 580000 },
-    { month: 'Mar', leads: 63, confirmed: 34, revenue: 1050000 }
-]
+import { useGetLeadsQuery } from '@/app/store/slices/api/leadSlice'
+import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
+import { useGetAllConfirmedPackagesQuery } from '@/app/store/slices/api/packageConvert'
 
-const packageBreakdown = [
-    { name: 'Deluxe', value: 38, color: '#64748b' },
-    { name: 'Super Deluxe', value: 29, color: '#1d4ed8' },
-    { name: 'Luxury', value: 22, color: '#7c3aed' },
-    { name: 'Premium', value: 11, color: '#b45309' }
-]
-
-const topDestinations = [
-    { name: 'Manali', bookings: 34, revenue: 890000, pct: 85 },
-    { name: 'Shimla', bookings: 28, revenue: 620000, pct: 70 },
-    { name: 'Spiti Valley', bookings: 19, revenue: 540000, pct: 55 },
-    { name: 'Kasol', bookings: 15, revenue: 310000, pct: 40 },
-    { name: 'Dharamshala', bookings: 12, revenue: 280000, pct: 32 }
-]
-
-const recentLeads = [
-    { name: 'Priya Sharma', destination: 'Manali', status: 'Hot', package: 'Luxury', date: 'Today', amount: 85000 },
-    { name: 'Rahul Mehta', destination: 'Shimla', status: 'Warm', package: 'Deluxe', date: 'Today', amount: 42000 },
-    {
-        name: 'Sunita Patel',
-        destination: 'Spiti',
-        status: 'Confirmed',
-        package: 'Premium',
-        date: 'Yesterday',
-        amount: 120000
-    },
-    {
-        name: 'Arjun Singh',
-        destination: 'Kasol',
-        status: 'Cold',
-        package: 'Super Deluxe',
-        date: 'Yesterday',
-        amount: 58000
-    },
-    {
-        name: 'Meera Joshi',
-        destination: 'Dharamshala',
-        status: 'Hot',
-        package: 'Luxury',
-        date: '2 days ago',
-        amount: 92000
-    }
-]
+const LEADS_QUERY = '?start=0&length=1000'
+const PACKAGES_QUERY = '?start=0&length=1000'
+const CAMPAIGNS_QUERY = '?start=0&length=500'
+const PACKAGE_COLORS = ['#64748b', '#1d4ed8', '#7c3aed', '#b45309', '#16a34a', '#ea580c']
 
 const STATUS_COLORS = {
     Hot: { bg: '#fef2f2', color: '#dc2626', dot: '#dc2626' },
     Warm: { bg: '#fff7ed', color: '#ea580c', dot: '#ea580c' },
     Cold: { bg: '#eff6ff', color: '#2563eb', dot: '#2563eb' },
-    Confirmed: { bg: '#f0fdf4', color: '#16a34a', dot: '#16a34a' }
+    Confirmed: { bg: '#f0fdf4', color: '#16a34a', dot: '#16a34a' },
+    verified: { bg: '#f0fdf4', color: '#16a34a', dot: '#16a34a' },
+    Verified: { bg: '#f0fdf4', color: '#16a34a', dot: '#16a34a' },
+    Pending: { bg: '#f8fafc', color: '#64748b', dot: '#64748b' }
 }
 
-// ─── Animated counter ────────────────────────────────────────────────────────
-function Counter({ end, prefix = '', suffix = '', duration = 1500 }) {
+const toNumber = value => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+}
+
+const isValidDate = value => {
+    if (!value) return false
+    const date = new Date(value)
+    return !Number.isNaN(date.getTime())
+}
+
+const startOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1)
+
+const getMonthLabel = date =>
+    date.toLocaleDateString('en-IN', {
+        month: 'short'
+    })
+
+const getRelativeDateLabel = value => {
+    if (!isValidDate(value)) return 'Recently'
+    const current = new Date()
+    const target = new Date(value)
+    const currentMidnight = new Date(current.getFullYear(), current.getMonth(), current.getDate())
+    const targetMidnight = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+    const diffDays = Math.round((currentMidnight - targetMidnight) / (1000 * 60 * 60 * 24))
+
+    if (diffDays <= 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+
+    return target.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short'
+    })
+}
+
+const getLeadStatus = lead => lead?.status || lead?.leadStatus || lead?.lead_status || 'Pending'
+
+const getLeadId = lead => lead?.id || lead?.leadId || lead?.lead?.id || null
+
+const getPackageLeadId = booking => booking?.leadId || booking?.lead?.id || booking?.lead_id || null
+
+const getLeadName = lead => lead?.fullName || lead?.name || lead?.lead?.fullName || 'Unknown Lead'
+
+const getCampaignName = (item, campaignMap) =>
+    item?.campaignName ||
+    item?.campaign?.title ||
+    item?.campaign?.name ||
+    campaignMap.get(item?.campaignId) ||
+    campaignMap.get(item?.campaign_id) ||
+    item?.destinationName ||
+    item?.destination?.name ||
+    'Unassigned'
+
+const getPackageCategory = booking =>
+    booking?.selectedPackage || booking?.packageType || booking?.packageName || 'Other'
+
+const getRevenueValue = booking =>
+    toNumber(
+        booking?.sellingPrice ||
+            booking?.totalAmount ||
+            booking?.finalAmount ||
+            booking?.amount ||
+            booking?.grandTotal ||
+            0
+    )
+
+const getProgressColor = index => {
+    if (index === 0) return '#39B54A'
+    if (index === 1) return '#1d4ed8'
+    return '#7c3aed'
+}
+
+function Counter({ end, prefix = '', suffix = '', duration = 1200 }) {
     const [count, setCount] = useState(0)
+
     useEffect(() => {
         let start = 0
-        const step = end / (duration / 16)
+        const safeEnd = toNumber(end)
+        const step = safeEnd / Math.max(duration / 16, 1)
         const timer = setInterval(() => {
             start += step
-            if (start >= end) {
-                setCount(end)
+            if (start >= safeEnd) {
+                setCount(safeEnd)
                 clearInterval(timer)
-            } else setCount(Math.floor(start))
+            } else {
+                setCount(Math.floor(start))
+            }
         }, 16)
+
         return () => clearInterval(timer)
     }, [end, duration])
+
     return (
         <>
             {prefix}
@@ -121,8 +152,7 @@ function Counter({ end, prefix = '', suffix = '', duration = 1500 }) {
     )
 }
 
-// ─── Stat card ───────────────────────────────────────────────────────────────
-function StatCard({ icon, label, value, prefix, suffix, trend, trendVal, color, bg, delay }) {
+function StatCard({ icon, label, value, prefix, suffix, trend, trendVal, color, bg, delay, onClick }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -138,9 +168,11 @@ function StatCard({ icon, label, value, prefix, suffix, trend, trendVal, color, 
                     height: '100%',
                     border: '1px solid #e2e8f0',
                     bgcolor: 'white',
+                    cursor: onClick ? 'pointer' : 'default',
                     transition: 'all 0.25s ease',
                     '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 32px rgba(0,0,0,0.08)' }
                 }}
+                onClick={onClick}
             >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
                     <Box
@@ -158,20 +190,20 @@ function StatCard({ icon, label, value, prefix, suffix, trend, trendVal, color, 
                     </Box>
                     <Chip
                         icon={
-                            trend === 'up' ? (
-                                <TrendingUp sx={{ fontSize: '14px !important' }} />
-                            ) : (
+                            trend === 'down' ? (
                                 <TrendingDown sx={{ fontSize: '14px !important' }} />
+                            ) : (
+                                <TrendingUp sx={{ fontSize: '14px !important' }} />
                             )
                         }
                         label={trendVal}
                         size='small'
                         sx={{
-                            bgcolor: trend === 'up' ? '#f0fdf4' : '#fef2f2',
-                            color: trend === 'up' ? '#16a34a' : '#dc2626',
+                            bgcolor: trend === 'down' ? '#fef2f2' : '#f0fdf4',
+                            color: trend === 'down' ? '#dc2626' : '#16a34a',
                             fontWeight: 700,
                             fontSize: '0.72rem',
-                            '& .MuiChip-icon': { color: trend === 'up' ? '#16a34a' : '#dc2626' }
+                            '& .MuiChip-icon': { color: trend === 'down' ? '#dc2626' : '#16a34a' }
                         }}
                     />
                 </Box>
@@ -197,9 +229,9 @@ function StatCard({ icon, label, value, prefix, suffix, trend, trendVal, color, 
     )
 }
 
-// ─── Custom tooltip for recharts ─────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }) {
     if (!active || !payload?.length) return null
+
     return (
         <Box
             sx={{
@@ -213,13 +245,13 @@ function CustomTooltip({ active, payload, label }) {
             }}
         >
             <Typography sx={{ fontWeight: 800, color: 'white', mb: 0.5, fontSize: '0.82rem' }}>{label}</Typography>
-            {payload.map((p, i) => (
-                <Box key={Math.random()} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p.color }} />
+            {payload.map(item => (
+                <Box key={item.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.color }} />
                     <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.78rem' }}>
-                        {p.name}:{' '}
+                        {item.name}:{' '}
                         <strong style={{ color: 'white' }}>
-                            {p.name === 'revenue' ? `₹${(p.value / 100000).toFixed(1)}L` : p.value}
+                            {item.dataKey === 'revenue' ? `₹${(item.value / 100000).toFixed(1)}L` : item.value}
                         </strong>
                     </Typography>
                 </Box>
@@ -228,18 +260,216 @@ function CustomTooltip({ active, payload, label }) {
     )
 }
 
-// ─── MAIN DASHBOARD ──────────────────────────────────────────────────────────
 function Home() {
+    const navigate = useNavigate()
+    const user = useSelector(state => state.auth?.user)
+    const {
+        data: leadsResponse,
+        isFetching: leadsLoading,
+        isError: leadsError
+    } = useGetLeadsQuery(LEADS_QUERY, { refetchOnMountOrArgChange: true })
+    const {
+        data: packagesResponse,
+        isFetching: packagesLoading,
+        isError: packagesError
+    } = useGetAllConfirmedPackagesQuery(PACKAGES_QUERY, { refetchOnMountOrArgChange: true })
+    const {
+        data: campaignsResponse,
+        isFetching: campaignsLoading,
+        isError: campaignsError
+    } = useGetCampaignsQuery(CAMPAIGNS_QUERY, { refetchOnMountOrArgChange: true })
+
+    const isLoading = leadsLoading || packagesLoading || campaignsLoading
+    const hasError = leadsError || packagesError || campaignsError
+
+    const dashboardData = useMemo(() => {
+        const leads = Array.isArray(leadsResponse?.data) ? leadsResponse.data : []
+        const bookings = Array.isArray(packagesResponse?.data) ? packagesResponse.data : []
+        const campaigns = Array.isArray(campaignsResponse?.data) ? campaignsResponse.data : []
+
+        const campaignMap = new Map(
+            campaigns.map(campaign => [campaign?.id, campaign?.title || campaign?.name || `Campaign ${campaign?.id}`])
+        )
+
+        const totalLeads = toNumber(leadsResponse?.count || leads.length)
+        const confirmedBookings = toNumber(packagesResponse?.recordsTotal || bookings.length)
+        const totalRevenue = bookings.reduce((sum, booking) => sum + getRevenueValue(booking), 0)
+        const totalCampaigns = toNumber(campaignsResponse?.count || campaignsResponse?.recordsTotal || campaigns.length)
+
+        const packageCountByLeadId = new Map()
+        bookings.forEach(booking => {
+            const leadId = getPackageLeadId(booking)
+            if (leadId) {
+                packageCountByLeadId.set(leadId, booking)
+            }
+        })
+
+        const now = new Date()
+        const monthKeys = Array.from({ length: 6 }, (_, index) => {
+            const date = startOfMonth(new Date(now.getFullYear(), now.getMonth() - (5 - index), 1))
+            const key = `${date.getFullYear()}-${date.getMonth()}`
+            return {
+                key,
+                month: getMonthLabel(date),
+                leads: 0,
+                confirmed: 0,
+                revenue: 0
+            }
+        })
+        const monthMap = new Map(monthKeys.map(item => [item.key, item]))
+
+        leads.forEach(lead => {
+            const value = lead?.createdAt || lead?.created_at
+            if (!isValidDate(value)) return
+            const date = new Date(value)
+            const key = `${date.getFullYear()}-${date.getMonth()}`
+            if (monthMap.has(key)) {
+                monthMap.get(key).leads += 1
+            }
+        })
+
+        bookings.forEach(booking => {
+            const value = booking?.createdAt || booking?.created_at
+            if (!isValidDate(value)) return
+            const date = new Date(value)
+            const key = `${date.getFullYear()}-${date.getMonth()}`
+            if (monthMap.has(key)) {
+                monthMap.get(key).confirmed += 1
+                monthMap.get(key).revenue += getRevenueValue(booking)
+            }
+        })
+
+        const recentLeads = [...leads]
+            .sort((left, right) => new Date(right?.createdAt || 0) - new Date(left?.createdAt || 0))
+            .slice(0, 5)
+            .map(lead => {
+                const booking = packageCountByLeadId.get(getLeadId(lead))
+                return {
+                    name: getLeadName(lead),
+                    campaign: getCampaignName(lead, campaignMap),
+                    status: getLeadStatus(lead),
+                    date: getRelativeDateLabel(lead?.createdAt || lead?.created_at),
+                    amount: getRevenueValue(booking)
+                }
+            })
+
+        const campaignCounts = leads.reduce((accumulator, lead) => {
+            const name = getCampaignName(lead, campaignMap)
+            accumulator[name] = (accumulator[name] || 0) + 1
+            return accumulator
+        }, {})
+
+        const highestCampaignCount = Math.max(...Object.values(campaignCounts), 0)
+        const topCampaigns = Object.entries(campaignCounts)
+            .map(([name, bookingsCount]) => ({
+                name,
+                bookings: bookingsCount,
+                pct: highestCampaignCount ? Math.round((bookingsCount / highestCampaignCount) * 100) : 0
+            }))
+            .sort((left, right) => right.bookings - left.bookings)
+            .slice(0, 5)
+
+        const packageBreakdownCounts = bookings.reduce((accumulator, booking) => {
+            const category = getPackageCategory(booking)
+            accumulator[category] = (accumulator[category] || 0) + 1
+            return accumulator
+        }, {})
+
+        const packageBreakdown = Object.entries(packageBreakdownCounts)
+            .map(([name, count], index) => ({
+                name,
+                value: confirmedBookings ? Math.round((count / confirmedBookings) * 100) : 0,
+                color: PACKAGE_COLORS[index % PACKAGE_COLORS.length]
+            }))
+            .sort((left, right) => right.value - left.value)
+
+        const previousMonth = monthKeys[4] || { leads: 0, confirmed: 0, revenue: 0 }
+        const currentMonth = monthKeys[5] || { leads: 0, confirmed: 0, revenue: 0 }
+        const campaignsTrendBase = totalCampaigns > 1 ? totalCampaigns - 1 : totalCampaigns
+
+        const getTrend = (currentValue, previousValue) => {
+            if (!previousValue) {
+                return {
+                    trend: currentValue > 0 ? 'up' : 'down',
+                    trendVal: currentValue > 0 ? 'New this month' : 'No change'
+                }
+            }
+
+            const pct = Math.round(((currentValue - previousValue) / previousValue) * 100)
+            return {
+                trend: pct >= 0 ? 'up' : 'down',
+                trendVal: `${pct >= 0 ? '+' : ''}${pct}% vs last month`
+            }
+        }
+
+        return {
+            stats: [
+                {
+                    icon: <People />,
+                    label: 'Total Leads',
+                    value: totalLeads,
+                    ...getTrend(currentMonth.leads, previousMonth.leads),
+                    color: '#1d4ed8',
+                    bg: '#eff6ff',
+                    delay: 0,
+                    onClick: () => navigate('/process/leads')
+                },
+                {
+                    icon: <ConfirmationNumber />,
+                    label: 'Confirmed Bookings',
+                    value: confirmedBookings,
+                    ...getTrend(currentMonth.confirmed, previousMonth.confirmed),
+                    color: '#16a34a',
+                    bg: '#f0fdf4',
+                    delay: 0.08,
+                    onClick: () => navigate('/process/packages')
+                },
+                {
+                    icon: <CurrencyRupee />,
+                    label: 'Total Revenue',
+                    value: totalRevenue,
+                    prefix: '₹',
+                    ...getTrend(currentMonth.revenue, previousMonth.revenue),
+                    color: '#b45309',
+                    bg: '#fffbeb',
+                    delay: 0.16,
+                    onClick: () => navigate('/process/packages')
+                },
+                {
+                    icon: <FlagCircle />,
+                    label: 'Active Campaigns',
+                    value: totalCampaigns,
+                    ...getTrend(totalCampaigns, campaignsTrendBase),
+                    color: '#7c3aed',
+                    bg: '#f5f3ff',
+                    delay: 0.24,
+                    onClick: () => navigate('/master/campaigns')
+                }
+            ],
+            monthlyLeads: monthKeys,
+            recentLeads,
+            topCampaigns,
+            packageBreakdown
+        }
+    }, [campaignsResponse, leadsResponse, packagesResponse])
+
     const greeting = () => {
-        const h = new Date().getHours()
-        if (h < 12) return 'Good morning'
-        if (h < 17) return 'Good afternoon'
+        const hour = new Date().getHours()
+        if (hour < 12) return 'Good morning'
+        if (hour < 17) return 'Good afternoon'
         return 'Good evening'
     }
 
     return (
         <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: '#f8faff', minHeight: '100vh' }}>
-            {/* ── GREETING ─────────────────────────────────────────── */}
+            {isLoading && <LinearProgress sx={{ mb: 2, borderRadius: '999px' }} />}
+
+            {hasError && (
+                <Alert severity='error' sx={{ mb: 2, borderRadius: '14px' }}>
+                    Dashboard data could not be loaded completely. Please refresh and try again.
+                </Alert>
+            )}
+
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
                 <Box
                     sx={{
@@ -261,10 +491,11 @@ function Home() {
                                 lineHeight: 1.1
                             }}
                         >
-                            {greeting()}, Team 👋
+                            {greeting()}
+                            {user?.name ? `, ${user.name}` : ', Team'}
                         </Typography>
                         <Typography sx={{ color: '#64748b', mt: 0.5, fontSize: '0.9rem' }}>
-                            Here is what happening with your travel business today.
+                            Your dashboard is now showing live lead, booking, campaign, and revenue data.
                         </Typography>
                     </Box>
                     <Box
@@ -278,7 +509,6 @@ function Home() {
                             fontWeight: 700
                         }}
                     >
-                        📅{' '}
                         {new Date().toLocaleDateString('en-IN', {
                             weekday: 'long',
                             day: 'numeric',
@@ -289,60 +519,26 @@ function Home() {
                 </Box>
             </motion.div>
 
-            {/* ── STAT CARDS ───────────────────────────────────────── */}
             <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-                {[
-                    {
-                        icon: <People />,
-                        label: 'Total Leads',
-                        value: 247,
-                        trend: 'up',
-                        trendVal: '+12% this month',
-                        color: '#1d4ed8',
-                        bg: '#eff6ff',
-                        delay: 0
-                    },
-                    {
-                        icon: <ConfirmationNumber />,
-                        label: 'Confirmed Bookings',
-                        value: 133,
-                        trend: 'up',
-                        trendVal: '+8% this month',
-                        color: '#16a34a',
-                        bg: '#f0fdf4',
-                        delay: 0.08
-                    },
-                    {
-                        icon: <CurrencyRupee />,
-                        label: 'Total Revenue',
-                        value: 4270000,
-                        prefix: '₹',
-                        trend: 'up',
-                        trendVal: '+18% this month',
-                        color: '#b45309',
-                        bg: '#fffbeb',
-                        delay: 0.16
-                    },
-                    {
-                        icon: <Send />,
-                        label: 'Quotes Sent',
-                        value: 189,
-                        trend: 'down',
-                        trendVal: '-3% this month',
-                        color: '#7c3aed',
-                        bg: '#f5f3ff',
-                        delay: 0.24
-                    }
-                ].map((card, i) => (
-                    <Grid item xs={6} md={3} key={Math.random()}>
-                        <StatCard {...card} />
+                {dashboardData.stats.map(card => (
+                    <Grid item xs={6} md={3} key={card.label}>
+                        <StatCard
+                            icon={card.icon}
+                            label={card.label}
+                            value={card.value}
+                            prefix={card.prefix}
+                            suffix={card.suffix}
+                            trend={card.trend}
+                            trendVal={card.trendVal}
+                            color={card.color}
+                            bg={card.bg}
+                            delay={card.delay}
+                        />
                     </Grid>
                 ))}
             </Grid>
 
-            {/* ── CHARTS ROW ───────────────────────────────────────── */}
             <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-                {/* Area chart — leads over time */}
                 <Grid item xs={12} md={8}>
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -359,27 +555,35 @@ function Home() {
                                         Leads & Conversions
                                     </Typography>
                                     <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mt: 0.3 }}>
-                                        Last 6 months performance
+                                        Based on the last 6 months of real records
                                     </Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', gap: 2 }}>
                                     {[
                                         { label: 'Leads', color: '#1d4ed8' },
                                         { label: 'Confirmed', color: '#39B54A' }
-                                    ].map(l => (
-                                        <Box key={l.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                                    ].map(item => (
+                                        <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                                             <Box
-                                                sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: l.color }}
+                                                sx={{
+                                                    width: 10,
+                                                    height: 10,
+                                                    borderRadius: '50%',
+                                                    bgcolor: item.color
+                                                }}
                                             />
                                             <Typography sx={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                                                {l.label}
+                                                {item.label}
                                             </Typography>
                                         </Box>
                                     ))}
                                 </Box>
                             </Box>
                             <ResponsiveContainer width='100%' height={240}>
-                                <AreaChart data={monthlyLeads} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart
+                                    data={dashboardData.monthlyLeads}
+                                    margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+                                >
                                     <defs>
                                         <linearGradient id='leadsGrad' x1='0' y1='0' x2='0' y2='1'>
                                             <stop offset='5%' stopColor='#1d4ed8' stopOpacity={0.15} />
@@ -423,7 +627,6 @@ function Home() {
                     </motion.div>
                 </Grid>
 
-                {/* Pie chart — package breakdown */}
                 <Grid item xs={12} md={4}>
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -438,12 +641,12 @@ function Home() {
                                 Package Split
                             </Typography>
                             <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mb: 2 }}>
-                                Bookings by category
+                                Confirmed bookings by package type
                             </Typography>
                             <ResponsiveContainer width='100%' height={180}>
                                 <PieChart>
                                     <Pie
-                                        data={packageBreakdown}
+                                        data={dashboardData.packageBreakdown}
                                         cx='50%'
                                         cy='50%'
                                         innerRadius={52}
@@ -451,8 +654,8 @@ function Home() {
                                         paddingAngle={3}
                                         dataKey='value'
                                     >
-                                        {packageBreakdown.map((entry, i) => (
-                                            <Cell key={Math.random()} fill={entry.color} />
+                                        {dashboardData.packageBreakdown.map(entry => (
+                                            <Cell key={entry.name} fill={entry.color} />
                                         ))}
                                     </Pie>
                                     <ReTooltip
@@ -476,33 +679,48 @@ function Home() {
                                 </PieChart>
                             </ResponsiveContainer>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
-                                {packageBreakdown.map(p => (
-                                    <Box
-                                        key={p.name}
-                                        sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-                                    >
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <Box
-                                                sx={{ width: 10, height: 10, borderRadius: '3px', bgcolor: p.color }}
-                                            />
-                                            <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
-                                                {p.name}
+                                {dashboardData.packageBreakdown.length ? (
+                                    dashboardData.packageBreakdown.map(item => (
+                                        <Box
+                                            key={item.name}
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between'
+                                            }}
+                                        >
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box
+                                                    sx={{
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: '3px',
+                                                        bgcolor: item.color
+                                                    }}
+                                                />
+                                                <Typography
+                                                    sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}
+                                                >
+                                                    {item.name}
+                                                </Typography>
+                                            </Box>
+                                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>
+                                                {item.value}%
                                             </Typography>
                                         </Box>
-                                        <Typography sx={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a' }}>
-                                            {p.value}%
-                                        </Typography>
-                                    </Box>
-                                ))}
+                                    ))
+                                ) : (
+                                    <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                                        No confirmed package data yet.
+                                    </Typography>
+                                )}
                             </Box>
                         </Paper>
                     </motion.div>
                 </Grid>
             </Grid>
 
-            {/* ── BOTTOM ROW ───────────────────────────────────────── */}
             <Grid container spacing={2.5}>
-                {/* Revenue bar chart */}
                 <Grid item xs={12} md={5}>
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -514,10 +732,13 @@ function Home() {
                                 Monthly Revenue
                             </Typography>
                             <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mb: 2.5 }}>
-                                In lakhs (₹)
+                                Based on confirmed package value
                             </Typography>
                             <ResponsiveContainer width='100%' height={200}>
-                                <BarChart data={monthlyLeads} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
+                                <BarChart
+                                    data={dashboardData.monthlyLeads}
+                                    margin={{ top: 0, right: 10, left: -20, bottom: 0 }}
+                                >
                                     <CartesianGrid strokeDasharray='3 3' stroke='#f1f5f9' vertical={false} />
                                     <XAxis
                                         dataKey='month'
@@ -526,17 +747,21 @@ function Home() {
                                         tickLine={false}
                                     />
                                     <YAxis
-                                        tickFormatter={v => `${(v / 100000).toFixed(0)}L`}
+                                        tickFormatter={value => `${(value / 100000).toFixed(0)}L`}
                                         tick={{ fontSize: 11, fill: '#94a3b8' }}
                                         axisLine={false}
                                         tickLine={false}
                                     />
                                     <ReTooltip content={<CustomTooltip />} />
                                     <Bar dataKey='revenue' name='revenue' fill='#1c2d45' radius={[6, 6, 0, 0]}>
-                                        {monthlyLeads.map((_, i) => (
+                                        {dashboardData.monthlyLeads.map((item, index) => (
                                             <Cell
-                                                key={Math.random()}
-                                                fill={i === monthlyLeads.length - 1 ? '#39B54A' : '#1c2d45'}
+                                                key={item.month}
+                                                fill={
+                                                    index === dashboardData.monthlyLeads.length - 1
+                                                        ? '#39B54A'
+                                                        : '#1c2d45'
+                                                }
                                             />
                                         ))}
                                     </Bar>
@@ -546,7 +771,6 @@ function Home() {
                     </motion.div>
                 </Grid>
 
-                {/* Top destinations */}
                 <Grid item xs={12} md={3}>
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -558,63 +782,70 @@ function Home() {
                             sx={{ p: 3, borderRadius: '20px', border: '1px solid #e2e8f0', height: '100%' }}
                         >
                             <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a', mb: 0.5 }}>
-                                Top Destinations
+                                Top Campaigns
                             </Typography>
                             <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mb: 2.5 }}>
-                                By bookings this month
+                                Most active campaigns from live leads
                             </Typography>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {topDestinations.map((dest, i) => (
-                                    <Box key={dest.name}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {dashboardData.topCampaigns.length ? (
+                                    dashboardData.topCampaigns.map((campaign, index) => (
+                                        <Box key={campaign.name}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Typography
+                                                        sx={{
+                                                            width: 20,
+                                                            height: 20,
+                                                            borderRadius: '6px',
+                                                            bgcolor: index === 0 ? '#fef3c7' : '#f1f5f9',
+                                                            color: index === 0 ? '#b45309' : '#64748b',
+                                                            fontSize: '0.68rem',
+                                                            fontWeight: 900,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}
+                                                    >
+                                                        {index + 1}
+                                                    </Typography>
+                                                    <Typography
+                                                        sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}
+                                                    >
+                                                        {campaign.name}
+                                                    </Typography>
+                                                </Box>
                                                 <Typography
-                                                    sx={{
-                                                        width: 20,
-                                                        height: 20,
-                                                        borderRadius: '6px',
-                                                        bgcolor: i === 0 ? '#fef3c7' : '#f1f5f9',
-                                                        color: i === 0 ? '#b45309' : '#64748b',
-                                                        fontSize: '0.68rem',
-                                                        fontWeight: 900,
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center'
-                                                    }}
+                                                    sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}
                                                 >
-                                                    {i + 1}
-                                                </Typography>
-                                                <Typography
-                                                    sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}
-                                                >
-                                                    {dest.name}
+                                                    {campaign.bookings}
                                                 </Typography>
                                             </Box>
-                                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b' }}>
-                                                {dest.bookings}
-                                            </Typography>
-                                        </Box>
-                                        <LinearProgress
-                                            variant='determinate'
-                                            value={dest.pct}
-                                            sx={{
-                                                height: 6,
-                                                borderRadius: '10px',
-                                                bgcolor: '#f1f5f9',
-                                                '& .MuiLinearProgress-bar': {
+                                            <LinearProgress
+                                                variant='determinate'
+                                                value={campaign.pct}
+                                                sx={{
+                                                    height: 6,
                                                     borderRadius: '10px',
-                                                    bgcolor: i === 0 ? '#39B54A' : i === 1 ? '#1d4ed8' : '#7c3aed'
-                                                }
-                                            }}
-                                        />
-                                    </Box>
-                                ))}
+                                                    bgcolor: '#f1f5f9',
+                                                    '& .MuiLinearProgress-bar': {
+                                                        borderRadius: '10px',
+                                                        bgcolor: getProgressColor(index)
+                                                    }
+                                                }}
+                                            />
+                                        </Box>
+                                    ))
+                                ) : (
+                                    <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                                        No campaign activity yet.
+                                    </Typography>
+                                )}
                             </Box>
                         </Paper>
                     </motion.div>
                 </Grid>
 
-                {/* Recent leads */}
                 <Grid item xs={12} md={4}>
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -633,123 +864,153 @@ function Home() {
                                         Recent Leads
                                     </Typography>
                                     <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mt: 0.2 }}>
-                                        Latest inquiries
+                                        Latest inquiries from your live lead table
                                     </Typography>
                                 </Box>
                                 <Tooltip title='View all leads'>
-                                    <IconButton size='small' sx={{ bgcolor: '#f1f5f9', borderRadius: '8px' }}>
+                                    <IconButton
+                                        size='small'
+                                        sx={{ bgcolor: '#f1f5f9', borderRadius: '8px' }}
+                                        onClick={() => navigate('/process/leads')}
+                                    >
                                         <ArrowForward sx={{ fontSize: 16, color: '#64748b' }} />
                                     </IconButton>
                                 </Tooltip>
                             </Box>
 
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                                {recentLeads.map((lead, i) => (
-                                    <Box key={Math.random()}>
-                                        <Box
-                                            sx={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 1.5,
-                                                py: 1.5,
-                                                transition: 'all 0.15s',
-                                                cursor: 'pointer',
-                                                borderRadius: '10px',
-                                                px: 1,
-                                                '&:hover': { bgcolor: '#f8faff' }
-                                            }}
-                                        >
-                                            <Avatar
-                                                sx={{
-                                                    width: 36,
-                                                    height: 36,
-                                                    bgcolor: '#1c2d45',
-                                                    fontSize: '0.78rem',
-                                                    fontWeight: 800,
-                                                    flexShrink: 0
-                                                }}
-                                            >
-                                                {lead.name
-                                                    .split(' ')
-                                                    .map(n => n[0])
-                                                    .join('')}
-                                            </Avatar>
-                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                {dashboardData.recentLeads.length ? (
+                                    dashboardData.recentLeads.map((lead, index) => {
+                                        const colors = STATUS_COLORS[lead.status] || STATUS_COLORS.Pending
+
+                                        return (
+                                            <Box key={`${lead.name}-${lead.date}`}>
                                                 <Box
                                                     sx={{
                                                         display: 'flex',
                                                         alignItems: 'center',
-                                                        justifyContent: 'space-between'
+                                                        gap: 1.5,
+                                                        py: 1.5,
+                                                        transition: 'all 0.15s',
+                                                        borderRadius: '10px',
+                                                        px: 1,
+                                                        '&:hover': { bgcolor: '#f8faff' }
                                                     }}
                                                 >
-                                                    <Typography
+                                                    <Avatar
                                                         sx={{
-                                                            fontWeight: 700,
-                                                            fontSize: '0.83rem',
-                                                            color: '#0f172a',
-                                                            noWrap: true
+                                                            width: 36,
+                                                            height: 36,
+                                                            bgcolor: '#1c2d45',
+                                                            fontSize: '0.78rem',
+                                                            fontWeight: 800,
+                                                            flexShrink: 0
                                                         }}
                                                     >
-                                                        {lead.name}
-                                                    </Typography>
-                                                    <Typography
-                                                        sx={{
-                                                            fontSize: '0.72rem',
-                                                            color: '#94a3b8',
-                                                            flexShrink: 0,
-                                                            ml: 1
-                                                        }}
-                                                    >
-                                                        {lead.date}
-                                                    </Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.3 }}>
-                                                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                                        📍 {lead.destination}
-                                                    </Typography>
-                                                    <Box
-                                                        sx={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: 0.4,
-                                                            px: 1,
-                                                            py: 0.2,
-                                                            borderRadius: '6px',
-                                                            bgcolor: STATUS_COLORS[lead.status]?.bg
-                                                        }}
-                                                    >
-                                                        <Circle
+                                                        {lead.name
+                                                            .split(' ')
+                                                            .map(part => part[0])
+                                                            .join('')
+                                                            .slice(0, 2)}
+                                                    </Avatar>
+                                                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                        <Box
                                                             sx={{
-                                                                fontSize: '7px',
-                                                                color: STATUS_COLORS[lead.status]?.dot
-                                                            }}
-                                                        />
-                                                        <Typography
-                                                            sx={{
-                                                                fontSize: '0.68rem',
-                                                                fontWeight: 700,
-                                                                color: STATUS_COLORS[lead.status]?.color
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'space-between'
                                                             }}
                                                         >
-                                                            {lead.status}
-                                                        </Typography>
+                                                            <Typography
+                                                                sx={{
+                                                                    fontWeight: 700,
+                                                                    fontSize: '0.83rem',
+                                                                    color: '#0f172a',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}
+                                                            >
+                                                                {lead.name}
+                                                            </Typography>
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '0.72rem',
+                                                                    color: '#94a3b8',
+                                                                    flexShrink: 0,
+                                                                    ml: 1
+                                                                }}
+                                                            >
+                                                                {lead.date}
+                                                            </Typography>
+                                                        </Box>
+                                                        <Box
+                                                            sx={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: 1,
+                                                                mt: 0.3
+                                                            }}
+                                                        >
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '0.72rem',
+                                                                    color: '#64748b',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}
+                                                            >
+                                                                {lead.campaign}
+                                                            </Typography>
+                                                            <Box
+                                                                sx={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 0.4,
+                                                                    px: 1,
+                                                                    py: 0.2,
+                                                                    borderRadius: '6px',
+                                                                    bgcolor: colors.bg
+                                                                }}
+                                                            >
+                                                                <Circle sx={{ fontSize: '7px', color: colors.dot }} />
+                                                                <Typography
+                                                                    sx={{
+                                                                        fontSize: '0.68rem',
+                                                                        fontWeight: 700,
+                                                                        color: colors.color
+                                                                    }}
+                                                                >
+                                                                    {lead.status}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Typography
+                                                                sx={{
+                                                                    fontSize: '0.72rem',
+                                                                    color: '#39B54A',
+                                                                    fontWeight: 700,
+                                                                    ml: 'auto'
+                                                                }}
+                                                            >
+                                                                {lead.amount
+                                                                    ? `₹${(lead.amount / 1000).toFixed(0)}K`
+                                                                    : '—'}
+                                                            </Typography>
+                                                        </Box>
                                                     </Box>
-                                                    <Typography
-                                                        sx={{
-                                                            fontSize: '0.72rem',
-                                                            color: '#39B54A',
-                                                            fontWeight: 700,
-                                                            ml: 'auto'
-                                                        }}
-                                                    >
-                                                        ₹{(lead.amount / 1000).toFixed(0)}K
-                                                    </Typography>
                                                 </Box>
+                                                {index < dashboardData.recentLeads.length - 1 && (
+                                                    <Divider sx={{ borderColor: '#f1f5f9' }} />
+                                                )}
                                             </Box>
-                                        </Box>
-                                        {i < recentLeads.length - 1 && <Divider sx={{ borderColor: '#f1f5f9' }} />}
-                                    </Box>
-                                ))}
+                                        )
+                                    })
+                                ) : (
+                                    <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                                        No leads available yet.
+                                    </Typography>
+                                )}
                             </Box>
                         </Paper>
                     </motion.div>

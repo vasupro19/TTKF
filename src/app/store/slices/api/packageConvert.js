@@ -117,6 +117,52 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             })
             // No need to invalidate tags unless the status changes to "Voucher Sent"
         }),
+        sendGuestHotelConfirmationEmail: build.mutation({
+            query: packageId => {
+                const KEY = 'sendGuestHotelConfirmationEmailKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/package/send-email/${packageId}/hotel`,
+                    method: 'POST',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            }
+        }),
+        sendGuestTaxiConfirmationEmail: build.mutation({
+            query: packageId => {
+                const KEY = 'sendGuestTaxiConfirmationEmailKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/package/send-email/${packageId}/taxi`,
+                    method: 'POST',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            }
+        }),
+        getConfirmedVoucherPreview: build.query({
+            query: packageId => ({
+                url: `/package/preview/${packageId}`,
+                method: 'GET',
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            providesTags: ['confirmedVoucherPreview']
+        }),
+        downloadConfirmedVoucherPdf: build.mutation({
+            query: packageId => ({
+                url: `/package/download-pdf/${packageId}`,
+                method: 'GET',
+                responseHandler: response => response.blob()
+            }),
+            async onQueryStarted(arg, { queryFulfilled }) {
+                const KEY = 'downloadConfirmedVoucherPdfKey'
+                dispatchLoaderEvent(KEY)
+                try {
+                    await queryFulfilled
+                } finally {
+                    dispatchLoaderEvent(KEY, false)
+                }
+            }
+        }),
         getGuestPaymentHistory: build.query({
             query: packageId => ({
                 url: `/package/guest-payment-history/${packageId}`,
@@ -138,6 +184,7 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
 
 export const {
     useGetConfirmedBookingQuery,
+    useGetAllConfirmedPackagesQuery,
     useConvertPackageMutation,
     useUpdateConfirmedBookingMutation,
     useAddServiceToPackageMutation,
@@ -146,7 +193,10 @@ export const {
     useSendSupplierEmailMutation,
     useAddGuestPaymentMutation,
     useSendVoucherEmailMutation,
+    useSendGuestHotelConfirmationEmailMutation,
+    useSendGuestTaxiConfirmationEmailMutation,
+    useDownloadConfirmedVoucherPdfMutation,
     useGetGuestPaymentHistoryQuery,
     useGetPackageByLeadIdQuery,
-    endpoints: { getConfirmedBooking, convertPackage, getAllConfirmedPackages }
+    endpoints: { getConfirmedBooking, convertPackage, getAllConfirmedPackages, getConfirmedVoucherPreview }
 } = bookingSlice

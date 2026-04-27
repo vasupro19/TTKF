@@ -133,6 +133,7 @@ const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
 
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
+const JobCandidates = lazy(() => import('@views/masters/JobCandidates/JobCandidates'))
 
 const protectedRoutes = {
     path: '/',
@@ -471,6 +472,14 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <ServiceLedgerTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/candidates',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <JobCandidates />
                 </Suspense>
             )
         }

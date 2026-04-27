@@ -18,9 +18,20 @@ import {
     ListItemIcon,
     Tooltip
 } from '@mui/material'
-import { Edit, Close, InfoOutlined, Email, Delete, MoreVert } from '@mui/icons-material'
+import { Edit, Close, InfoOutlined, Email, Delete, MoreVert, AccountBalanceWallet } from '@mui/icons-material'
 
-function ServiceListModal({ open, onClose, services, type, onEdit, onDelete, onSendEmail, isLoading, isSendingEmail }) {
+function ServiceListModal({
+    open,
+    onClose,
+    services,
+    type,
+    onEdit,
+    onDelete,
+    onSendEmail,
+    onAddPayment,
+    isLoading,
+    isSendingEmail
+}) {
     const filteredServices = services || []
 
     // State for the Action Menu (Delete)
@@ -135,6 +146,20 @@ function ServiceListModal({ open, onClose, services, type, onEdit, onDelete, onS
                                             >
                                                 Edit
                                             </Button>
+
+                                            <Tooltip title='Record Payment'>
+                                                <Button
+                                                    variant='outlined'
+                                                    size='small'
+                                                    color='success'
+                                                    disabled={service.paymentStatus === 'Fully Paid'}
+                                                    startIcon={<AccountBalanceWallet />}
+                                                    onClick={() => onAddPayment(service)}
+                                                    sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                                >
+                                                    Pay
+                                                </Button>
+                                            </Tooltip>
 
                                             <IconButton size='small' onClick={e => handleMenuOpen(e, service)}>
                                                 <MoreVert fontSize='small' />

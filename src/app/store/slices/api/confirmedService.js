@@ -30,7 +30,7 @@ export const confirmedServiceSlice = apiSliceConfig.injectEndpoints({
                 }
             },
             // Invalidates the ledger list to refresh balances automatically
-            invalidatesTags: ['getConfirmedServices']
+            invalidatesTags: ['getConfirmedServices', 'ServiceList', 'confirmedBooking']
         }),
 
         // === GET PAYMENT HISTORY FOR A SERVICE ===

@@ -25,6 +25,8 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
+import JobApplicationForm from './JobApplicationForm'
+import JobApplicationStatusDialog from './JobApplicationStatusDialog'
 
 const loginSchema = z.object({
     email: z.string().email('Enter a valid email address').min(1, 'Email is required'),
@@ -42,6 +44,8 @@ export default function Login() {
     const theme = useTheme()
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'))
     const [triggerMenu] = useLazyGetMenuQuery()
+    const [showJobForm, setShowJobForm] = useState(false)
+    const [showJobStatus, setShowJobStatus] = useState(false)
 
     const validate = values => {
         try {
@@ -451,7 +455,42 @@ export default function Login() {
                                 >
                                     Protected by 256-bit SSL encryption
                                 </Typography>
+
+                                <Box sx={{ mt: 2.5, textAlign: 'center' }}>
+                                    <Typography sx={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                        Looking for a job?{' '}
+                                        <Typography
+                                            component='span'
+                                            onClick={() => setShowJobForm(true)}
+                                            sx={{
+                                                color: '#39B54A',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                '&:hover': { textDecoration: 'underline' }
+                                            }}
+                                        >
+                                            Apply here
+                                        </Typography>
+                                    </Typography>
+                                    <Typography sx={{ fontSize: '0.85rem', color: '#6b7280', mt: 0.8 }}>
+                                        Already applied?{' '}
+                                        <Typography
+                                            component='span'
+                                            onClick={() => setShowJobStatus(true)}
+                                            sx={{
+                                                color: '#1c2d45',
+                                                fontWeight: 800,
+                                                cursor: 'pointer',
+                                                '&:hover': { textDecoration: 'underline' }
+                                            }}
+                                        >
+                                            Check status
+                                        </Typography>
+                                    </Typography>
+                                </Box>
                             </Box>
+                            <JobApplicationForm open={showJobForm} onClose={() => setShowJobForm(false)} />
+                            <JobApplicationStatusDialog open={showJobStatus} onClose={() => setShowJobStatus(false)} />
                         </CardContent>
                     </Card>
                 </motion.div>

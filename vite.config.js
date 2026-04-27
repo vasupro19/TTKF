@@ -10,6 +10,7 @@ import fs from 'fs'
 export default defineConfig({
     plugins: [react(), eslint()],
     resolve: {
+        dedupe: ['react', 'react-dom', '@mui/material', '@mui/system', '@mui/utils', '@emotion/react', '@emotion/styled'],
         alias: {
             '@': path.resolve(__dirname, 'src'),
             '@app': path.resolve(__dirname, 'src/app'),
@@ -19,6 +20,16 @@ export default defineConfig({
             '@store': path.resolve(__dirname, './src/app/store'),
             '@hooks': path.resolve(__dirname, './src/hooks')
         }
+    },
+    optimizeDeps: {
+        include: [
+            '@mui/material',
+            '@mui/material/styles',
+            '@mui/system',
+            '@mui/utils',
+            '@emotion/react',
+            '@emotion/styled'
+        ]
     },
     // server: {
     //     host: 'devcerebrum.holisol.test'

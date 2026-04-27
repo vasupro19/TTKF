@@ -25,6 +25,13 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             }),
             providesTags: ['leadMasterById']
         }),
+        getLeadTimeline: build.query({
+            query: id => ({
+                url: `/leads/${id}/timeline`,
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            providesTags: ['leadTimeline']
+        }),
 
         // === CREATE LEAD ===
         createLead: build.mutation({
@@ -54,7 +61,7 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['getLeads', 'leadMasterById']
+            invalidatesTags: ['getLeads', 'leadMasterById', 'leadTimeline']
         }),
         deleteLead: build.mutation({
             query: id => {
@@ -66,7 +73,7 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['getLeads', 'leadMasterById']
+            invalidatesTags: ['getLeads', 'leadMasterById', 'leadTimeline']
         }),
         shareLeadDetails: build.mutation({
             // 🚀 Use ({ leadId, quotationNo }) to pull the properties out of the object
@@ -112,10 +119,11 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
 export const {
     useGetLeadsQuery,
     useGetLeadByIdQuery,
+    useGetLeadTimelineQuery,
     useCreateLeadMutation,
     useUpdateLeadMutation,
     useDeleteLeadMutation,
     useShareLeadDetailsMutation,
     useGenerateQuotationPdfMutation,
-    endpoints: { getLeads, getLeadById, getLeadPreview }
+    endpoints: { getLeads, getLeadById, getLeadPreview, getLeadTimeline }
 } = leadsSlice

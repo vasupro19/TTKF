@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -32,6 +32,7 @@ function LeadsForm() {
     const { data: campaignsData = [] } = useGetCampaignsQuery()
     const [editData, setEditData] = useState({})
     const { createLeadLKey, updateLeadLKey } = useSelector(state => state.loading)
+    const { user } = useSelector(state => state.auth)
 
     const [activeTab, setActiveTab] = useState(0)
     const [tabsEnabled, setTabsEnabled] = useState([true, false])
@@ -40,11 +41,10 @@ function LeadsForm() {
     const [createLead] = useCreateLeadMutation()
     const [updateLead] = useUpdateLeadMutation()
 
-    const tabLabels = ['leadInfo', 'followUpDetails']
     const userOptions =
-        users?.data?.map(user => ({
-            label: user.name, // change field accordingly
-            value: user.id
+        users?.data?.map(teamUser => ({
+            label: teamUser.name, // change field accordingly
+            value: teamUser.id
         })) ?? []
 
     const campaignOptions =
@@ -62,7 +62,9 @@ function LeadsForm() {
         leadStatus: '',
         remarks: '',
         assignedTo: '',
-        campaignId: ''
+        campaignId: '',
+        followupdate: '',
+        followupremarks: ''
     }
 
     // Validation schema per tab
@@ -103,14 +105,14 @@ function LeadsForm() {
             try {
                 let response
                 if (!formId) {
-                    response = await createLead(values).unwrap()
+                    response = await createLead({ ...values, updatedBy: user?.id }).unwrap()
                     setLeadId(response.data.id)
                     navigate(-1)
 
                     setActiveTab(0)
                     enableTabsAfterValidation(1)
                 } else {
-                    response = await updateLead({ id: leadId, ...values }).unwrap()
+                    response = await updateLead({ id: leadId, ...values, updatedBy: user?.id }).unwrap()
                     formik.resetForm()
                     setActiveTab(0)
                     setTabsEnabled([true, false])
@@ -170,10 +172,13 @@ function LeadsForm() {
     const editHandler = (id, row) => {
         setLeadId(row.id)
         const formatted = {}
-        console.log(row, 'row')
-        Object.keys(row).forEach(key => {
+        Object.keys(initialValues).forEach(key => {
             formatted[key] = row[key] ? row[key].toString() : ''
         })
+        if (row?.upcomingCall?.scheduledFor) {
+            formatted.followupdate = new Date(row.upcomingCall.scheduledFor).toISOString().slice(0, 16)
+            formatted.followupremarks = row.upcomingCall.description || ''
+        }
         formik.setValues({ ...formatted })
         enableTabsAfterValidation(1)
     }
@@ -286,39 +291,32 @@ function LeadsForm() {
                     label: 'Remarks',
                     type: 'text',
                     placeholder: 'Write remarks',
+                    grid: { xs: 12, sm: 6 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'followupdate',
+                    label: 'Schedule Call',
+                    type: 'dateTime',
+                    grid: { xs: 12, sm: 3 },
+                    size: 'small',
+                    customSx
+                },
+                {
+                    name: 'followupremarks',
+                    label: 'Call Reminder Notes',
+                    type: 'text',
+                    placeholder: 'What should be discussed on the call?',
                     grid: { xs: 12 },
                     size: 'small',
                     customSx
                 }
             ]
         }
-        // {
-        //     label: 'Follow-Up Details',
-        //     fields: [
-        //         {
-        //             name: 'followupdate',
-        //             label: 'Follow-Up Date',
-        //             type: 'date',
-        //             grid: { xs: 12, sm: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'followupremarks',
-        //             label: 'Follow-Up Remarks',
-        //             type: 'text',
-        //             placeholder: 'Enter remarks',
-        //             grid: { xs: 12 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // }
     ]
     // eslint-disable-next-line no-shadow
     const handleCustomChange = (e, formik) => {
-        const { name, value } = e.target
-
         formik.handleChange(e)
     }
     return (

@@ -37,7 +37,7 @@ export const headers = [
     {
         id: 3,
         label: 'Phone',
-        search: false,
+        search: true,
         sort: false,
         stick: false,
         key: 'phone',
@@ -69,6 +69,28 @@ export const headers = [
     },
     {
         id: 6,
+        label: 'Status',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'status',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 12
+    },
+    {
+        id: 7,
+        label: 'Follow-up',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'followUpState',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 12
+    },
+    {
+        id: 8,
         label: 'Assigned To',
         search: false,
         sort: false,
@@ -80,7 +102,7 @@ export const headers = [
     },
 
     {
-        id: 7,
+        id: 9,
         label: 'Created At',
         search: false,
         sort: false,

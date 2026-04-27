@@ -10,23 +10,45 @@ const FACEBOOK_INTEGRATION_MENU = {
     type: 'item'
 }
 
+const JOB_CANDIDATES_MENU = {
+    id: 'job_candidates',
+    label: 'Job Candidates',
+    icon: 'UsergroupAddOutlined',
+    url: '/process/candidates',
+    group: 'process',
+    access: true,
+    type: 'item'
+}
+
 const normalizeMenuItems = menuItems => {
     if (!Array.isArray(menuItems)) return []
 
     return menuItems.map(item => {
-        if (item?.id !== 'integration' || !Array.isArray(item.children)) {
-            return item
+        if (item?.id === 'integration' && Array.isArray(item.children)) {
+            const hasFacebookItem = item.children.some(child => child?.url === FACEBOOK_INTEGRATION_MENU.url)
+            if (hasFacebookItem) {
+                return item
+            }
+
+            return {
+                ...item,
+                children: [...item.children, FACEBOOK_INTEGRATION_MENU]
+            }
         }
 
-        const hasFacebookItem = item.children.some(child => child?.url === FACEBOOK_INTEGRATION_MENU.url)
-        if (hasFacebookItem) {
-            return item
+        if (item?.id === 'process' && Array.isArray(item.children)) {
+            const hasJobCandidatesItem = item.children.some(child => child?.url === JOB_CANDIDATES_MENU.url)
+            if (hasJobCandidatesItem) {
+                return item
+            }
+
+            return {
+                ...item,
+                children: [...item.children, JOB_CANDIDATES_MENU]
+            }
         }
 
-        return {
-            ...item,
-            children: [...item.children, FACEBOOK_INTEGRATION_MENU]
-        }
+        return item
     })
 }
 
