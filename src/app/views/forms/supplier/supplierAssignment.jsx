@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Box, TextField, Autocomplete, CircularProgress, Grid } from '@mui/material'
+import { Box, TextField, Autocomplete, Grid } from '@mui/material'
 import { useGetSuppliersQuery } from '@/app/store/slices/api/supplierSlice'
 
 function SupplierAssignmentForm({ type, onDataChange, row }) {
@@ -18,11 +18,10 @@ function SupplierAssignmentForm({ type, onDataChange, row }) {
 
     const { data: response, isLoading } = useGetSuppliersQuery(`type=${type}`)
     const suppliers = response?.data || []
-    console.log(row, 'row')
 
     // 1. Sync data when editing (The "Hydration" Step)
     useEffect(() => {
-        if (row && row.id) {
+        if (row && row.id && row.supplierId) {
             const initialState = {
                 id: row.id,
                 supplierId: row.supplierId,
@@ -37,8 +36,23 @@ function SupplierAssignmentForm({ type, onDataChange, row }) {
             }
             setFormState(initialState)
             onDataChange(initialState) // Inform parent of the initial edit data
+            return
         }
-    }, [row])
+
+        const resetState = {
+            id: null,
+            supplierId: null,
+            cost: '',
+            remarks: '',
+            startDate: '',
+            endDate: '',
+            quantity: '',
+            type,
+            paidAmount: 0
+        }
+        setFormState(resetState)
+        onDataChange(resetState)
+    }, [row, type, onDataChange])
 
     const updateParent = updates => {
         const newState = { ...formState, ...updates }
@@ -58,6 +72,7 @@ function SupplierAssignmentForm({ type, onDataChange, row }) {
                 getOptionLabel={option => `${option.businessname} (${option.city})`}
                 isOptionEqualToValue={(option, value) => option.id === value?.id}
                 onChange={(e, val) => updateParent({ supplierId: val?.id })}
+                noOptionsText={`No ${type?.toLowerCase() || 'supplier'} providers found`}
                 // eslint-disable-next-line react/jsx-props-no-spreading
                 renderInput={params => <TextField {...params} label={`Select ${type}`} variant='outlined' />}
             />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
     Dialog,
     DialogTitle,
@@ -27,6 +27,10 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
         onSave(formData)
     }
 
+    const handleDataChange = useCallback(data => {
+        setFormData(data)
+    }, [])
+
     return (
         <Dialog
             open={open}
@@ -53,7 +57,7 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
                     <Typography variant='body2' color='textSecondary' gutterBottom>
                         Assigning for: <strong>{row?.guestName}</strong>
                     </Typography>
-                    <SupplierAssignmentForm type={type} row={row} onDataChange={data => setFormData(data)} />
+                    <SupplierAssignmentForm type={type} row={row} onDataChange={handleDataChange} />
                 </Box>
             </DialogContent>
 
