@@ -192,7 +192,9 @@ function PackageCreationWizard() {
     const [saving, setSaving] = useState(false)
     const [imageOptionsByRow, setImageOptionsByRow] = useState({})
     const [imageLoadingByRow, setImageLoadingByRow] = useState({})
+    const [destinationHotelLoadingByRow, setDestinationHotelLoadingByRow] = useState({})
     const imageAutofillTimeoutRef = useRef({})
+    const destinationHotelTimeoutRef = useRef({})
 
     const [packageForm, setPackageForm] = useState({
         name: '',
@@ -353,7 +355,95 @@ function PackageCreationWizard() {
         }, 600)
     }
 
+    const scheduleDestinationHotelAutofill = row => {
+        const destinationName = row.name?.trim()
+        if (!destinationName || getMatchedDestination(destinationName)) {
+            return
+        }
+
+        const hasAllHotels =
+            row.delux_hotel?.trim() &&
+            row.super_delux_hotel?.trim() &&
+            row.luxury_hotel?.trim() &&
+            row.premium_hotel?.trim()
+
+        if (hasAllHotels) {
+            return
+        }
+
+        const existingTimeout = destinationHotelTimeoutRef.current[row.id]
+        if (existingTimeout) {
+            clearTimeout(existingTimeout)
+        }
+
+        destinationHotelTimeoutRef.current[row.id] = setTimeout(async () => {
+            setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: true }))
+
+            try {
+                const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        system: `You are an AI assistant helping fill travel package destination hotel suggestions.
+
+Respond ONLY with a valid JSON object.
+Allowed keys:
+- delux_hotel
+- super_delux_hotel
+- luxury_hotel
+- premium_hotel
+
+Rules:
+1. Output pure JSON only
+2. Keep suggestions concise and destination-specific
+3. Suggest realistic hotel examples for India travel planning
+4. If unsure, still provide best-fit examples`,
+                        messages: [
+                            {
+                                role: 'user',
+                                content: `Suggest hotel names for destination: ${destinationName}`
+                            }
+                        ]
+                    })
+                })
+
+                const data = await response.json()
+                const text = data?.content?.[0]?.text || ''
+                const clean = text.replace(/```json|```/g, '').trim()
+                const parsed = clean ? JSON.parse(clean) : {}
+                const nextDeluxHotel = parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
+                const nextSuperDeluxHotel =
+                    parsed.super_delux_hotel || parsed.superDeluxeHotel || parsed.super_deluxe_hotel || ''
+                const nextLuxuryHotel = parsed.luxury_hotel || parsed.luxuryHotel || ''
+                const nextPremiumHotel = parsed.premium_hotel || parsed.premiumHotel || ''
+
+                setDestinations(prev =>
+                    prev.map(item => {
+                        if (item.id !== row.id) {
+                            return item
+                        }
+
+                        return {
+                            ...item,
+                            delux_hotel: item.delux_hotel || nextDeluxHotel || item.delux_hotel,
+                            super_delux_hotel: item.super_delux_hotel || nextSuperDeluxHotel || item.super_delux_hotel,
+                            luxury_hotel: item.luxury_hotel || nextLuxuryHotel || item.luxury_hotel,
+                            premium_hotel: item.premium_hotel || nextPremiumHotel || item.premium_hotel
+                        }
+                    })
+                )
+            } catch (error) {
+                // Keep wizard usable even if AI hotel suggestions fail.
+            } finally {
+                setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: false }))
+                delete destinationHotelTimeoutRef.current[row.id]
+            }
+        }, 500)
+    }
+
     const updateDestinationRow = (rowId, field, value) => {
+        let nextRowForHotelAutofill = null
+
         setDestinations(prev =>
             prev.map(item => {
                 if (item.id !== rowId) {
@@ -366,12 +456,22 @@ function PackageCreationWizard() {
                     const matchedDestination = getMatchedDestination(value)
                     if (matchedDestination) {
                         Object.assign(updated, copyHotelsFromDestination(matchedDestination))
+                    } else {
+                        updated.delux_hotel = ''
+                        updated.super_delux_hotel = ''
+                        updated.luxury_hotel = ''
+                        updated.premium_hotel = ''
                     }
                 }
 
+                nextRowForHotelAutofill = updated
                 return updated
             })
         )
+
+        if (field === 'name' && nextRowForHotelAutofill) {
+            scheduleDestinationHotelAutofill(nextRowForHotelAutofill)
+        }
     }
 
     const addDestinationRow = () => setDestinations(prev => [...prev, createDestinationRow()])
@@ -580,6 +680,7 @@ function PackageCreationWizard() {
         const generatedActivities = buildActivitiesFromDestinations(hydratedDestinations, packageForm.originLocation)
         setDestinations(hydratedDestinations)
         setActivities(generatedActivities)
+        hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
         autoFillImagesForActivities(generatedActivities)
         setActiveStep(1)
     }
@@ -631,6 +732,11 @@ function PackageCreationWizard() {
 
     useEffect(() => {
         const timeouts = imageAutofillTimeoutRef.current
+        return () => Object.values(timeouts).forEach(timeoutId => clearTimeout(timeoutId))
+    }, [])
+
+    useEffect(() => {
+        const timeouts = destinationHotelTimeoutRef.current
         return () => Object.values(timeouts).forEach(timeoutId => clearTimeout(timeoutId))
     }, [])
 
@@ -948,10 +1054,17 @@ function PackageCreationWizard() {
                                                     />
                                                 </Grid>
                                                 <Grid item xs={12} md={3}>
-                                                    <Chip
-                                                        color='primary'
-                                                        label={`${Number(row.nights) + 1 || 2} day suggestion`}
-                                                    />
+                                                    <Stack direction='row' spacing={1} alignItems='center'>
+                                                        <Chip
+                                                            color='primary'
+                                                            label={`${Number(row.nights) + 1 || 2} day suggestion`}
+                                                        />
+                                                        {destinationHotelLoadingByRow[row.id] && (
+                                                            <Typography variant='caption' color='text.secondary'>
+                                                                AI filling hotels...
+                                                            </Typography>
+                                                        )}
+                                                    </Stack>
                                                 </Grid>
                                                 <Grid item xs={12} md={6}>
                                                     <TextField
