@@ -98,19 +98,27 @@ function PackagesItenary() {
     const { createPackageItenaryClientLKey, updatePackageItenaryClientLKey, deletePackageItenaryClientLKey } =
         useSelector(state => state.loading || {})
 
+    const entryTypeOptions = [
+        { label: 'Stay', value: 'Stay' },
+        { label: 'Transit', value: 'Transit' },
+        { label: 'Fresh Up', value: 'FreshUp' }
+    ]
+
     const initialValues = {
         packageId: params.packageId,
         campaignId: params.campaignId || '',
         itenaryId: '',
         destinationId: '',
-        image: ''
+        image: '',
+        entryType: 'Stay'
     }
 
     const validationSchema = z.object({
         campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
         itenaryId: z.number({ invalid_type_error: 'Itenary is required' }).int().positive(),
         destinationId: z.number().optional().nullable(),
-        image: z.string().optional()
+        image: z.string().optional(),
+        entryType: z.string().min(1, 'Entry type is required')
     })
 
     const validate = values => {
@@ -170,7 +178,8 @@ function PackagesItenary() {
                             campaignId: params.campaignId || '',
                             itenaryId: '',
                             destinationId: '',
-                            image: ''
+                            image: '',
+                            entryType: 'Stay'
                         }
                     })
                     fetchActivities()
@@ -209,7 +218,8 @@ function PackagesItenary() {
                 campaignId: params.campaignId || '',
                 itenaryId: '',
                 destinationId: '',
-                image: ''
+                image: '',
+                entryType: 'Stay'
             }
         })
     }
@@ -277,9 +287,26 @@ function PackagesItenary() {
         itenaryOptions.find(item => item.value.toString() === formik.values.itenaryId?.toString?.()) || null
     const selectedDestinationOption =
         destinationOptions.find(item => item.value.toString() === formik.values.destinationId?.toString?.()) || null
+    const isStayEntryType = formik.values.entryType === 'Stay'
+    let destinationHelperText = ''
+
+    if (!isStayEntryType) {
+        destinationHelperText = 'Destination is optional for transit and fresh up entries'
+    } else if (destinationSearch.trim().length === 1) {
+        destinationHelperText = 'Type at least 2 characters to search destination'
+    }
 
     const handleCustomChange = e => {
         const { name, value } = e.target
+
+        if (name === 'entryType') {
+            const nextValue = value?.value || value || 'Stay'
+            formik.setFieldValue('entryType', nextValue)
+            if (nextValue !== 'Stay') {
+                formik.setFieldValue('destinationId', '')
+            }
+            return
+        }
 
         if (['campaignId', 'itenaryId', 'destinationId'].includes(name)) {
             formik.setFieldValue(name, value?.value?.toString?.() || value?.value || value || '')
@@ -328,14 +355,24 @@ function PackagesItenary() {
                     value: selectedDestinationOption,
                     loading: loadingDestinations,
                     onInputChange: ({ value }) => setDestinationSearch(value || ''),
-                    helperText:
-                        destinationSearch.trim().length === 1 ? 'Type at least 2 characters to search destination' : '',
-                    required: true,
+                    helperText: destinationHelperText,
+                    required: isStayEntryType,
+                    isDisabled: !isStayEntryType,
                     grid: { xs: 12, sm: 6, md: 6 },
                     size: 'small',
                     customSx,
                     isOptionEqualToValue: (option, selectedValue) =>
                         option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
+                },
+                {
+                    name: 'entryType',
+                    label: 'Entry Type',
+                    type: 'select',
+                    options: entryTypeOptions,
+                    required: true,
+                    grid: { xs: 12, sm: 6, md: 6 },
+                    size: 'small',
+                    customSx
                 },
                 {
                     name: 'image',
@@ -394,7 +431,8 @@ function PackagesItenary() {
             campaignId: params.campaignId || '',
             itenaryId: activity.itenaryId?.toString() || '',
             destinationId: activity.destinationId?.toString() || '',
-            image: activity.image || ''
+            image: activity.image || '',
+            entryType: activity.entryType || 'Stay'
         })
         window.scrollTo({ top: 0, behavior: 'smooth' })
     }

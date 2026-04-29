@@ -1,5 +1,5 @@
 /* eslint-disable no-nested-ternary */
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -71,8 +71,15 @@ import { useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
 
 // import AiFormAssistant from '@/core/components/forms/AiAssiastantForm'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
-import { getItenaryClientById, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
-import { useGetDestinationClientsQuery } from '@/app/store/slices/api/destinationSlice'
+import {
+    getItenaryClientById,
+    useCreateItenaryClientMutation,
+    useGetItenaryClientsQuery
+} from '@/app/store/slices/api/itenarySlice'
+import {
+    useCreateDestinationClientMutation,
+    useGetDestinationClientsQuery
+} from '@/app/store/slices/api/destinationSlice'
 import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
@@ -82,6 +89,45 @@ import GlobalModal from '../../../../core/components/modals/GlobalModal'
 import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
 import ItinerarySection from './itenarySection'
+
+const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'DAY JOURNEY'])
+
+const isStayEntry = item => {
+    if (item?.entryType) {
+        return item.entryType === 'Stay'
+    }
+
+    const destinationName = item?.destination?.name || item?.destination || ''
+    return !LEGACY_TRANSIT_DESTINATIONS.has(destinationName.toUpperCase())
+}
+
+const buildQuoteDayDescription = ({ entryType, title, destinationName }) => {
+    if (entryType === 'Transit') {
+        if (destinationName) {
+            return `Comfortable transfer and road journey planned towards ${destinationName}.`
+        }
+
+        return 'Comfortable transfer and travel arrangements for the day.'
+    }
+
+    if (entryType === 'FreshUp') {
+        return 'Freshen up, relax, and get ready for the next experience in the journey.'
+    }
+
+    if (title && destinationName) {
+        return `${title} in ${destinationName} with sightseeing, local experiences, and a comfortable stay.`
+    }
+
+    if (destinationName) {
+        return `Enjoy sightseeing, local experiences, and a comfortable stay in ${destinationName}.`
+    }
+
+    if (title) {
+        return `${title} with a smooth and well-planned guest experience.`
+    }
+
+    return ''
+}
 
 function GuestForm() {
     const { id: formId } = useParams()
@@ -110,6 +156,8 @@ function GuestForm() {
     const [createTour] = useCreateGuestTourMutation()
     const [updateTour] = useUpdateGuestTourMutation()
     const [removeTour] = useRemoveGuestTourItenaryMutation()
+    const [createItenaryClient] = useCreateItenaryClientMutation()
+    const [createDestinationClient] = useCreateDestinationClientMutation()
     const { data: confirmedPackage } = useGetPackageByLeadIdQuery(params.leadId)
 
     const [createSingleTour] = useCreateSingleGuestTourItenaryMutation()
@@ -156,8 +204,14 @@ function GuestForm() {
         title: '',
         leadId: params.leadId,
         description: '',
+        entryType: 'Stay',
         destinationId: '',
-        destination: '', // Name of the destination
+        destination: '', // legacy field kept for existing edit flow
+        destinationName: '',
+        delux_hotel: '',
+        super_delux_hotel: '',
+        luxury_hotel: '',
+        premium_hotel: '',
         image: '',
         insertAfterOrder: undefined // ✅ null = append at end
     })
@@ -171,6 +225,9 @@ function GuestForm() {
     const [previewOpen, setPreviewOpen] = useState(false)
     const [previewHtml, setPreviewHtml] = useState('')
     const [loadingPreview, setLoadingPreview] = useState(false)
+    const [aiPrefillLoading, setAiPrefillLoading] = useState(false)
+    const lastAiPrefillKeyRef = useRef('')
+    const aiPrefillTimeoutRef = useRef(null)
     // const [images, setImages] = useState([])
     // const [loadingImages, setLoadingImages] = useState(false)
 
@@ -372,6 +429,7 @@ function GuestForm() {
                 title: item.title,
                 description: item?.description || item.itenary?.description || '',
                 image: item.image || '',
+                entryType: item.entryType || 'Stay',
                 destination: item.destination?.name || '',
                 hotels: {
                     deluxe: item.destination.delux_hotel,
@@ -450,8 +508,14 @@ function GuestForm() {
                 title: editingData.title || '',
                 leadId: params.leadId,
                 description: editingData.description || editingData?.fullItem?.itenary?.description,
+                entryType: editingData.fullItem?.entryType || 'Stay',
                 destinationId: editingData.fullItem?.destinationId || '',
                 destination: editingData.destination || '',
+                destinationName: editingData.destination || '',
+                delux_hotel: editingData.fullItem?.destination?.delux_hotel || '',
+                super_delux_hotel: editingData.fullItem?.destination?.super_delux_hotel || '',
+                luxury_hotel: editingData.fullItem?.destination?.luxury_hotel || '',
+                premium_hotel: editingData.fullItem?.destination?.premium_hotel || '',
                 image: editingData.image || ''
             })
         } else {
@@ -460,12 +524,25 @@ function GuestForm() {
                 itenaryId: '',
                 title: '',
                 description: '',
+                entryType: 'Stay',
                 destinationId: '',
                 destination: '',
+                destinationName: '',
+                delux_hotel: '',
+                super_delux_hotel: '',
+                luxury_hotel: '',
+                premium_hotel: '',
                 image: ''
             })
         }
     }, [editingData, isEditing])
+
+    useEffect(() => {
+        if (openItenaryModal) {
+            setItenarySearch(formData.title || '')
+            setDestinationSearch(formData.destinationName || '')
+        }
+    }, [openItenaryModal, formData.title, formData.destinationName])
     const tabsFields = [
         {
             label: 'Guest Details',
@@ -649,6 +726,7 @@ function GuestForm() {
                 title: item.title,
                 description: item.itenary?.description || '',
                 image: item.image || '',
+                entryType: item.entryType || 'Stay',
                 destination: item?.destination?.name || '',
                 hotels: {
                     deluxe: item?.destination?.delux_hotel,
@@ -666,6 +744,7 @@ function GuestForm() {
                 itenaryId: item.itenary.id || '',
                 image: item.image || '',
                 destinationId: item?.destination?.id || '',
+                entryType: item.entryType || 'Stay',
                 quoteNo: currentQuoteNo
                 // leadId: params.leadId || ''
             }))
@@ -683,9 +762,52 @@ function GuestForm() {
         }
     }
 
+    async function ensureQuoteMasterIds(payload = formData) {
+        const campaignId = leadData?.data?.campaignId
+        const nextPayload = { ...payload }
+
+        if (!nextPayload.itenaryId && nextPayload.title?.trim()) {
+            if (!campaignId) {
+                throw new Error('Assign a campaign to this lead before creating a custom itinerary.')
+            }
+
+            const createdItenary = await createItenaryClient({
+                title: nextPayload.title.trim(),
+                description: nextPayload.description || '',
+                campaignId: Number(campaignId)
+            }).unwrap()
+
+            nextPayload.itenaryId = createdItenary?.data?.id
+        }
+
+        if (nextPayload.entryType === 'Stay' && !nextPayload.destinationId && nextPayload.destinationName?.trim()) {
+            if (!campaignId) {
+                throw new Error('Assign a campaign to this lead before creating a custom destination.')
+            }
+
+            const createdDestination = await createDestinationClient({
+                name: nextPayload.destinationName.trim(),
+                campaignId: Number(campaignId),
+                delux_hotel: nextPayload.delux_hotel || '',
+                super_delux_hotel: nextPayload.super_delux_hotel || '',
+                luxury_hotel: nextPayload.luxury_hotel || '',
+                premium_hotel: nextPayload.premium_hotel || ''
+            }).unwrap()
+
+            nextPayload.destinationId = createdDestination?.data?.id
+        }
+
+        return nextPayload
+    }
+
     const handleAddItenary = async () => {
         try {
-            const res = await createSingleTour({ ...formData, leadId: params.leadId, quoteNo: currentQuoteNo }).unwrap()
+            const preparedPayload = await ensureQuoteMasterIds()
+            const res = await createSingleTour({
+                ...preparedPayload,
+                leadId: params.leadId,
+                quoteNo: currentQuoteNo
+            }).unwrap()
             if (res.success) {
                 setOpenItenaryModal(false)
 
@@ -718,14 +840,23 @@ function GuestForm() {
             itenaryId: '',
             title: '',
             description: '',
+            entryType: 'Stay',
             destinationId: '',
             destination: '',
+            destinationName: '',
+            delux_hotel: '',
+            super_delux_hotel: '',
+            luxury_hotel: '',
+            premium_hotel: '',
             image: ''
         })
+        setItenarySearch('')
+        setDestinationSearch('')
     }
     const handleUpdateItenary = async () => {
         try {
-            const res = await updateTour({ id: formData.id, ...formData, leadId: params.leadId }).unwrap()
+            const preparedPayload = await ensureQuoteMasterIds()
+            const res = await updateTour({ id: formData.id, ...preparedPayload, leadId: params.leadId }).unwrap()
             if (res.success) {
                 setOpenItenaryModal(false)
                 dispatch(
@@ -804,17 +935,243 @@ function GuestForm() {
     }
 
     const handleChange = (name, value) => {
-        setFormData(prev => ({ ...prev, [name]: value }))
+        setFormData(prev => {
+            if (name === 'entryType') {
+                const nextState = { ...prev, entryType: value }
+
+                if (value !== 'Stay') {
+                    nextState.destinationId = ''
+                    nextState.destination = ''
+                    nextState.destinationName = ''
+                    nextState.delux_hotel = ''
+                    nextState.super_delux_hotel = ''
+                    nextState.luxury_hotel = ''
+                    nextState.premium_hotel = ''
+                }
+
+                if (!nextState.description) {
+                    nextState.description = buildQuoteDayDescription({
+                        entryType: value,
+                        title: nextState.title,
+                        destinationName: value === 'Stay' ? nextState.destinationName : ''
+                    })
+                }
+
+                return nextState
+            }
+
+            return { ...prev, [name]: value }
+        })
     }
+
+    const requestAiQuotePrefill = async payload => {
+        const {
+            destinationName = '',
+            title = '',
+            entryType = 'Stay',
+            description = '',
+            delux_hotel: deluxHotel = '',
+            super_delux_hotel: superDeluxHotel = '',
+            luxury_hotel: luxuryHotel = '',
+            premium_hotel: premiumHotel = ''
+        } = payload || {}
+
+        const fallbackDescription = buildQuoteDayDescription({
+            entryType,
+            title,
+            destinationName
+        })
+        const shouldFillDescription = !description?.trim() || description === fallbackDescription
+        const shouldFillHotels =
+            entryType === 'Stay' &&
+            (!deluxHotel?.trim() || !superDeluxHotel?.trim() || !luxuryHotel?.trim() || !premiumHotel?.trim())
+
+        if (!shouldFillDescription && !shouldFillHotels) {
+            return
+        }
+
+        if (!destinationName?.trim() && !title?.trim()) {
+            return
+        }
+
+        setAiPrefillLoading(true)
+
+        try {
+            const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    system: `You are an AI assistant helping fill a travel CRM quotation day form.
+
+Respond ONLY with a valid JSON object.
+Allowed keys:
+- description
+- delux_hotel
+- super_delux_hotel
+- luxury_hotel
+- premium_hotel
+
+Rules:
+1. Output pure JSON only
+2. Keep hotel suggestions realistic, concise, and destination-specific
+3. If entryType is not "Stay", only provide description
+4. Description should sound guest-ready and operationally useful
+5. Leave out any key you cannot confidently fill`,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: `Create quotation autofill for:
+Entry Type: ${entryType}
+Destination: ${destinationName || 'N/A'}
+Itinerary Title: ${title || 'N/A'}
+Existing Description: ${description || 'N/A'}
+Need hotels: ${shouldFillHotels ? 'yes' : 'no'}
+Need description: ${shouldFillDescription ? 'yes' : 'no'}`
+                        }
+                    ]
+                })
+            })
+
+            const data = await response.json()
+            const text = data?.content?.[0]?.text || ''
+            const clean = text.replace(/```json|```/g, '').trim()
+            const parsed = clean ? JSON.parse(clean) : {}
+            const nextDeluxHotel = parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
+            const nextSuperDeluxHotel =
+                parsed.super_delux_hotel || parsed.superDeluxeHotel || parsed.super_deluxe_hotel || ''
+            const nextLuxuryHotel = parsed.luxury_hotel || parsed.luxuryHotel || ''
+            const nextPremiumHotel = parsed.premium_hotel || parsed.premiumHotel || ''
+
+            setFormData(prev => ({
+                ...prev,
+                description:
+                    !prev.description || prev.description === fallbackDescription
+                        ? parsed.description || prev.description
+                        : prev.description,
+                delux_hotel: prev.delux_hotel || nextDeluxHotel || prev.delux_hotel,
+                super_delux_hotel: prev.super_delux_hotel || nextSuperDeluxHotel || prev.super_delux_hotel,
+                luxury_hotel: prev.luxury_hotel || nextLuxuryHotel || prev.luxury_hotel,
+                premium_hotel: prev.premium_hotel || nextPremiumHotel || prev.premium_hotel
+            }))
+        } catch (error) {
+            // Keep the modal usable even if AI parsing/network fails.
+        } finally {
+            setAiPrefillLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (!openItenaryModal) {
+            lastAiPrefillKeyRef.current = ''
+            if (aiPrefillTimeoutRef.current) {
+                clearTimeout(aiPrefillTimeoutRef.current)
+                aiPrefillTimeoutRef.current = null
+            }
+            return
+        }
+
+        const aiKey = [
+            formData.entryType,
+            formData.title?.trim(),
+            formData.destinationName?.trim(),
+            formData.delux_hotel?.trim(),
+            formData.super_delux_hotel?.trim(),
+            formData.luxury_hotel?.trim(),
+            formData.premium_hotel?.trim()
+        ].join('|')
+
+        if (lastAiPrefillKeyRef.current === aiKey) {
+            return
+        }
+
+        if (!formData.title?.trim() && !formData.destinationName?.trim()) {
+            return
+        }
+
+        lastAiPrefillKeyRef.current = aiKey
+        if (aiPrefillTimeoutRef.current) {
+            clearTimeout(aiPrefillTimeoutRef.current)
+        }
+
+        aiPrefillTimeoutRef.current = setTimeout(() => {
+            requestAiQuotePrefill(formData)
+        }, 500)
+    }, [
+        openItenaryModal,
+        formData.entryType,
+        formData.title,
+        formData.destinationName,
+        formData.delux_hotel,
+        formData.super_delux_hotel,
+        formData.luxury_hotel,
+        formData.premium_hotel
+    ])
 
     // 5. Autocomplete Options Handlers (Updated to use formData)
     const handleItinerarySelect = selected => {
-        setFormData(prev => ({
-            ...prev,
+        if (typeof selected === 'string') {
+            const nextState = {
+                ...formData,
+                itenaryId: '',
+                title: selected,
+                description:
+                    formData.description ||
+                    buildQuoteDayDescription({
+                        entryType: formData.entryType,
+                        title: selected,
+                        destinationName: formData.destinationName
+                    })
+            }
+            setFormData(() => {
+                const nextTitle = selected
+                const nextDescription =
+                    formData.description ||
+                    buildQuoteDayDescription({
+                        entryType: formData.entryType,
+                        title: nextTitle,
+                        destinationName: formData.destinationName
+                    })
+
+                return {
+                    ...formData,
+                    itenaryId: '',
+                    title: nextTitle,
+                    description: nextDescription
+                }
+            })
+            return
+        }
+
+        const nextState = {
+            ...formData,
             itenaryId: selected?.id || '',
             title: selected?.title || '',
-            description: selected?.description || ''
-        }))
+            description:
+                selected?.description ||
+                formData.description ||
+                buildQuoteDayDescription({
+                    entryType: formData.entryType,
+                    title: selected?.title || '',
+                    destinationName: formData.destinationName
+                })
+        }
+        setFormData(prev => {
+            const nextTitle = selected?.title || ''
+            const nextDescription =
+                selected?.description ||
+                buildQuoteDayDescription({
+                    entryType: prev.entryType,
+                    title: nextTitle,
+                    destinationName: prev.destinationName
+                })
+
+            return {
+                ...prev,
+                itenaryId: selected?.id || '',
+                title: nextTitle,
+                description: nextDescription
+            }
+        })
     }
     const keyword = formData.destinationName || itenaries?.data?.find(i => i.id === formData.itenaryId)?.title || ''
     const {
@@ -824,13 +1181,83 @@ function GuestForm() {
     } = useGetTravelImagesQuery(keyword, {
         skip: !keyword
     })
+    const destinationInputHelperText =
+        formData.entryType !== 'Stay'
+            ? 'Destination is optional for transit and fresh up entries'
+            : 'If not found, type it here and it will be created automatically for this lead campaign.'
     const handleDestinationSelect = selected => {
-        handleChange('destinationId', selected?.id || '')
-        handleChange('destinationName', selected?.name || '')
+        if (typeof selected === 'string') {
+            const nextState = {
+                ...formData,
+                destinationId: '',
+                destination: selected,
+                destinationName: selected,
+                delux_hotel: '',
+                super_delux_hotel: '',
+                luxury_hotel: '',
+                premium_hotel: '',
+                description:
+                    formData.description ||
+                    buildQuoteDayDescription({
+                        entryType: formData.entryType,
+                        title: formData.title,
+                        destinationName: selected
+                    })
+            }
+            setFormData(() => nextState)
+            return
+        }
+
+        const nextState = {
+            ...formData,
+            destinationId: selected?.id || '',
+            destination: selected?.name || '',
+            destinationName: selected?.name || '',
+            delux_hotel: selected?.delux_hotel || '',
+            super_delux_hotel: selected?.super_delux_hotel || '',
+            luxury_hotel: selected?.luxury_hotel || '',
+            premium_hotel: selected?.premium_hotel || '',
+            description:
+                formData.description ||
+                buildQuoteDayDescription({
+                    entryType: formData.entryType,
+                    title: formData.title,
+                    destinationName: selected?.name || ''
+                })
+        }
+        setFormData(() => nextState)
     }
+    /* eslint-disable react/jsx-props-no-spreading */
+    const renderDestinationInput = autoParams => (
+        <TextField {...autoParams} label='Destination' helperText={destinationInputHelperText} />
+    )
+    /* eslint-enable react/jsx-props-no-spreading */
     const images = imageData?.urls || []
+    /* eslint-disable react/jsx-props-no-spreading */
+    const renderItenaryInput = autoParams => (
+        <TextField
+            {...autoParams}
+            label='Search or Type Itinerary'
+            helperText='If not found, type it here and it will be created automatically for this lead campaign.'
+        />
+    )
+    /* eslint-enable react/jsx-props-no-spreading */
+
     // 6. Final Save Action
     const handleSaveAction = async () => {
+        if (!formData.title?.trim()) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Please select or type an itinerary title first.',
+                    variant: 'alert',
+                    alert: { color: 'warning' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
+        }
+
         if (!isEditing) {
             await handleAddItenary()
         } else {
@@ -848,16 +1275,12 @@ function GuestForm() {
         }
 
         const staysBreakdown = []
-        const travelDestinations = ['OVERNIGHT JOURNEY', 'FRESH UP', 'DAY JOURNEY']
 
         let currentStay = null
 
         // eslint-disable-next-line no-restricted-syntax
         for (const item of itineraries) {
-            const destinationName = (item?.destination || '').toUpperCase()
-
-            // Check if the current day is a true stay
-            const isStayDay = !travelDestinations.includes(destinationName)
+            const isStayDay = isStayEntry(item)
 
             if (isStayDay) {
                 // Normalize the destination name (e.g., 'Shimla' instead of 'shimla')
@@ -1230,84 +1653,175 @@ function GuestForm() {
                             top: '50%',
                             left: '50%',
                             transform: 'translate(-50%, -50%)',
-                            width: 500,
+                            width: { xs: '92vw', sm: 560 },
+                            maxWidth: '92vw',
+                            maxHeight: '85vh',
                             bgcolor: 'background.paper',
-                            p: 3,
                             borderRadius: 2,
                             boxShadow: 24
                         }}
                     >
-                        <Typography variant='h6' mb={2}>
-                            {isEditing ? `Edit Itinerary: ${formData.title}` : 'Add New Itinerary'}
-                        </Typography>
+                        <Box
+                            sx={{
+                                px: 3,
+                                py: 2,
+                                borderBottom: '1px solid #e2e8f0',
+                                position: 'sticky',
+                                top: 0,
+                                bgcolor: 'background.paper',
+                                zIndex: 1
+                            }}
+                        >
+                            <Typography variant='h6'>
+                                {isEditing ? `Edit Itinerary: ${formData.title}` : 'Add New Itinerary'}
+                            </Typography>
+                        </Box>
 
-                        <Grid container spacing={2}>
-                            {/* Itinerary Autocomplete */}
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={itenaries?.data || []}
-                                    loading={loadingItenary}
-                                    getOptionLabel={option => option?.title || ''}
-                                    filterOptions={x => x}
-                                    value={
-                                        itenaries?.data?.find(item => String(item.id) === String(formData.itenaryId)) ||
-                                        null
-                                    }
-                                    inputValue={itenarySearch}
-                                    onInputChange={(e, val, reason) => {
-                                        if (reason === 'input') {
-                                            setItenarySearch(val) // typing
+                        <Box
+                            sx={{
+                                px: 3,
+                                py: 2,
+                                maxHeight: 'calc(85vh - 72px)',
+                                overflowY: 'auto'
+                            }}
+                        >
+                            <Grid container spacing={2}>
+                                {/* Itinerary Autocomplete */}
+                                <Grid item xs={12} sm={6}>
+                                    <Autocomplete
+                                        freeSolo
+                                        options={itenaries?.data || []}
+                                        loading={loadingItenary}
+                                        getOptionLabel={option =>
+                                            typeof option === 'string' ? option : option?.title || ''
                                         }
-                                    }}
-                                    onChange={(e, selected) => {
-                                        handleItinerarySelect(selected)
-                                        setItenarySearch(selected?.title || '') // 👈 FIX
-                                    }}
-                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
-                                    // eslint-disable-next-line react/jsx-props-no-spreading
-                                    renderInput={autoParams => <TextField {...autoParams} label='Search Destination' />}
-                                />
-                            </Grid>
-
-                            {/* Destination Autocomplete */}
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={destinations?.data}
-                                    loading={loadingDestinations}
-                                    getOptionLabel={option => option?.name || ''}
-                                    filterOptions={x => x}
-                                    value={
-                                        destinations?.data?.find(
-                                            item => String(item.id) === String(formData.destinationId)
-                                        ) || null
-                                    }
-                                    inputValue={destinationSearch}
-                                    onInputChange={(e, val, reason) => {
-                                        if (reason === 'input') {
-                                            setDestinationSearch(val)
+                                        filterOptions={x => x}
+                                        value={
+                                            itenaries?.data?.find(
+                                                item => String(item.id) === String(formData.itenaryId)
+                                            ) || (formData.title ? formData.title : null)
                                         }
-                                    }}
-                                    onChange={(e, selected) => {
-                                        handleDestinationSelect(selected)
-                                        setDestinationSearch(selected?.name || '') // 👈 FIX
-                                    }}
-                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
-                                    // eslint-disable-next-line react/jsx-props-no-spreading
-                                    renderInput={autoParams => <TextField {...autoParams} label='Search Destination' />}
-                                />
-                            </Grid>
-                            {/* Title and Description fields (Add these for editing!) */}
-                            {isEditing && (
-                                <Grid item xs={12}>
-                                    <TextField
-                                        fullWidth
-                                        label='Title'
-                                        value={formData.title}
-                                        onChange={e => handleChange('title', e.target.value)}
+                                        inputValue={itenarySearch}
+                                        onInputChange={(e, val, reason) => {
+                                            if (reason === 'input') {
+                                                setItenarySearch(val)
+                                                handleChange('title', val)
+                                                if (!val) {
+                                                    handleChange('itenaryId', '')
+                                                    handleChange('description', '')
+                                                }
+                                            }
+                                        }}
+                                        onChange={(e, selected) => {
+                                            handleItinerarySelect(selected)
+                                            setItenarySearch(
+                                                typeof selected === 'string' ? selected : selected?.title || ''
+                                            )
+                                        }}
+                                        isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                        renderInput={renderItenaryInput}
                                     />
                                 </Grid>
-                            )}
-                            {isEditing && (
+
+                                {/* Destination Autocomplete */}
+                                <Grid item xs={12} sm={6}>
+                                    <Autocomplete
+                                        freeSolo
+                                        options={destinations?.data}
+                                        loading={loadingDestinations}
+                                        disabled={formData.entryType !== 'Stay'}
+                                        getOptionLabel={option =>
+                                            typeof option === 'string' ? option : option?.name || ''
+                                        }
+                                        filterOptions={x => x}
+                                        value={
+                                            destinations?.data?.find(
+                                                item => String(item.id) === String(formData.destinationId)
+                                            ) || (formData.destinationName ? formData.destinationName : null)
+                                        }
+                                        inputValue={destinationSearch}
+                                        onInputChange={(e, val, reason) => {
+                                            if (formData.entryType !== 'Stay') return
+                                            if (reason === 'input') {
+                                                setDestinationSearch(val)
+                                                handleChange('destinationName', val)
+                                                handleChange('destination', val)
+                                                if (!val) {
+                                                    handleChange('destinationId', '')
+                                                }
+                                            }
+                                        }}
+                                        onChange={(e, selected) => {
+                                            if (formData.entryType !== 'Stay') return
+                                            handleDestinationSelect(selected)
+                                            setDestinationSearch(
+                                                typeof selected === 'string' ? selected : selected?.name || ''
+                                            )
+                                        }}
+                                        isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                                        renderInput={renderDestinationInput}
+                                    />
+                                </Grid>
+                                {formData.entryType === 'Stay' && formData.destinationName && (
+                                    <Grid item xs={12}>
+                                        <Box
+                                            sx={{
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: 2,
+                                                p: 1.5,
+                                                bgcolor: '#f8fafc'
+                                            }}
+                                        >
+                                            <Typography variant='subtitle2' sx={{ mb: 1 }}>
+                                                Hotels for {formData.destinationName}
+                                            </Typography>
+                                            <Grid container spacing={1.5}>
+                                                <Grid item xs={12} sm={6}>
+                                                    <TextField
+                                                        fullWidth
+                                                        multiline
+                                                        minRows={2}
+                                                        label='Deluxe Hotel'
+                                                        value={formData.delux_hotel}
+                                                        onChange={e => handleChange('delux_hotel', e.target.value)}
+                                                    />
+                                                </Grid>
+                                                <Grid item xs={12} sm={6}>
+                                                    <TextField
+                                                        fullWidth
+                                                        multiline
+                                                        minRows={2}
+                                                        label='Super Deluxe Hotel'
+                                                        value={formData.super_delux_hotel}
+                                                        onChange={e =>
+                                                            handleChange('super_delux_hotel', e.target.value)
+                                                        }
+                                                    />
+                                                </Grid>
+                                                <Grid item xs={12} sm={6}>
+                                                    <TextField
+                                                        fullWidth
+                                                        multiline
+                                                        minRows={2}
+                                                        label='Luxury Hotel'
+                                                        value={formData.luxury_hotel}
+                                                        onChange={e => handleChange('luxury_hotel', e.target.value)}
+                                                    />
+                                                </Grid>
+                                                <Grid item xs={12} sm={6}>
+                                                    <TextField
+                                                        fullWidth
+                                                        multiline
+                                                        minRows={2}
+                                                        label='Premium Hotel'
+                                                        value={formData.premium_hotel}
+                                                        onChange={e => handleChange('premium_hotel', e.target.value)}
+                                                    />
+                                                </Grid>
+                                            </Grid>
+                                        </Box>
+                                    </Grid>
+                                )}
                                 <Grid item xs={12}>
                                     <TextField
                                         fullWidth
@@ -1316,79 +1830,114 @@ function GuestForm() {
                                         label='Description'
                                         value={formData.description}
                                         onChange={e => handleChange('description', e.target.value)}
+                                        helperText='For a custom itinerary, this description will also be saved into master automatically.'
                                     />
                                 </Grid>
-                            )}
-                            {/* Image URL */}
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    label='Image URL'
-                                    value={formData.image}
-                                    onChange={e => handleChange('image', e.target.value)}
-                                />
-                            </Grid>
-                            {/* Loader */}
-                            {loadingImages && (
-                                <Grid item xs={12}>
-                                    <CircularProgress size={24} />
+                                {aiPrefillLoading && (
+                                    <Grid item xs={12}>
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 1,
+                                                px: 1.5,
+                                                py: 1,
+                                                borderRadius: 2,
+                                                bgcolor: '#eff6ff',
+                                                border: '1px solid #bfdbfe'
+                                            }}
+                                        >
+                                            <CircularProgress size={18} />
+                                            <Typography variant='body2'>
+                                                AI is prefilling description and hotel suggestions...
+                                            </Typography>
+                                        </Box>
+                                    </Grid>
+                                )}
+                                <Grid item xs={12} sm={6}>
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        label='Entry Type'
+                                        value={formData.entryType}
+                                        onChange={e => handleChange('entryType', e.target.value)}
+                                    >
+                                        <MenuItem value='Stay'>Stay</MenuItem>
+                                        <MenuItem value='Transit'>Transit</MenuItem>
+                                        <MenuItem value='FreshUp'>Fresh Up</MenuItem>
+                                    </TextField>
                                 </Grid>
-                            )}
-                            {/* Image Options */}
-                            {images.length > 0 && (
+                                {/* Image URL */}
                                 <Grid item xs={12}>
-                                    <Typography variant='caption' sx={{ mb: 1, display: 'block' }}>
-                                        Select an image:
-                                    </Typography>
+                                    <TextField
+                                        fullWidth
+                                        label='Image URL'
+                                        value={formData.image}
+                                        onChange={e => handleChange('image', e.target.value)}
+                                    />
+                                </Grid>
+                                {/* Loader */}
+                                {loadingImages && (
+                                    <Grid item xs={12}>
+                                        <CircularProgress size={24} />
+                                    </Grid>
+                                )}
+                                {/* Image Options */}
+                                {images.length > 0 && (
+                                    <Grid item xs={12}>
+                                        <Typography variant='caption' sx={{ mb: 1, display: 'block' }}>
+                                            Select an image:
+                                        </Typography>
 
-                                    <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto' }}>
-                                        {images.map(img => (
-                                            <Box
-                                                key={img.name}
-                                                onClick={() => handleChange('image', img.url)}
-                                                sx={{
-                                                    cursor: 'pointer',
-                                                    border:
-                                                        formData.image === img.url
-                                                            ? '2px solid #1976d2'
-                                                            : '1px solid #ccc',
-                                                    borderRadius: 1,
-                                                    overflow: 'hidden'
-                                                }}
-                                            >
-                                                <img
-                                                    src={img.thumb}
-                                                    alt='travel'
-                                                    style={{
-                                                        width: 120,
-                                                        height: 80,
-                                                        objectFit: 'cover'
+                                        <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto' }}>
+                                            {images.map(img => (
+                                                <Box
+                                                    key={img.name}
+                                                    onClick={() => handleChange('image', img.url)}
+                                                    sx={{
+                                                        cursor: 'pointer',
+                                                        border:
+                                                            formData.image === img.url
+                                                                ? '2px solid #1976d2'
+                                                                : '1px solid #ccc',
+                                                        borderRadius: 1,
+                                                        overflow: 'hidden'
                                                     }}
-                                                />
-                                            </Box>
-                                        ))}
-                                    </Box>
-                                </Grid>
-                            )}
-                            {/* Image Preview */}
-                            {formData.image && (
+                                                >
+                                                    <img
+                                                        src={img.thumb}
+                                                        alt='travel'
+                                                        style={{
+                                                            width: 120,
+                                                            height: 80,
+                                                            objectFit: 'cover'
+                                                        }}
+                                                    />
+                                                </Box>
+                                            ))}
+                                        </Box>
+                                    </Grid>
+                                )}
+                                {/* Image Preview */}
+                                {formData.image && (
+                                    <Grid item xs={12}>
+                                        <Box sx={{ border: '1px solid #ccc', p: 1, borderRadius: '4px' }}>
+                                            <motion.img
+                                                src={formData.image}
+                                                alt='Image Preview'
+                                                style={{ width: '100%', maxHeight: '150px', objectFit: 'contain' }}
+                                            />
+                                        </Box>
+                                    </Grid>
+                                )}
+                                {/* Save Button */}
                                 <Grid item xs={12}>
-                                    <Box sx={{ border: '1px solid #ccc', p: 1, borderRadius: '4px' }}>
-                                        <motion.img
-                                            src={formData.image}
-                                            alt='Image Preview'
-                                            style={{ width: '100%', maxHeight: '150px', objectFit: 'contain' }}
-                                        />
-                                    </Box>
+                                    <Button variant='contained' fullWidth onClick={handleSaveAction}>
+                                        {isEditing ? 'Update Itinerary' : 'Save New Itinerary'}
+                                    </Button>
                                 </Grid>
-                            )}
-                            {/* Save Button */}
-                            <Grid item xs={12}>
-                                <Button variant='contained' fullWidth onClick={handleSaveAction}>
-                                    {isEditing ? 'Update Itinerary' : 'Save New Itinerary'}
-                                </Button>
                             </Grid>
-                        </Grid>
+                        </Box>
                     </Box>
                 </GlobalModal>
                 <PackageConversion

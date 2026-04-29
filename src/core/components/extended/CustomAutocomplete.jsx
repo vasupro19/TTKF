@@ -5,6 +5,25 @@ import { Autocomplete, TextField, Box, Typography, CircularProgress } from '@mui
 import Cancel from '@mui/icons-material/Cancel'
 import SearchIcon from '@mui/icons-material/Search'
 
+const normalizeSearchValue = value => (value || '').toString().trim().toLowerCase()
+
+const getSearchableOptionText = (option, getOptionLabel) => {
+    if (!option) {
+        return ''
+    }
+
+    if (typeof option === 'string') {
+        return option
+    }
+
+    const parts = [getOptionLabel(option), option?.label, option?.name, option?.title, option?.code, option?.value]
+
+    return parts
+        .filter(Boolean)
+        .map(item => item.toString())
+        .join(' ')
+}
+
 function CustomAutocomplete({
     name,
     label,
@@ -35,8 +54,21 @@ function CustomAutocomplete({
     onInputChange = false,
     inputRef = null,
     inputProps = {},
-    loading = false
+    loading = false,
+    filterOptions: customFilterOptions = null
 }) {
+    const defaultFilterOptions = (availableOptions, state) => {
+        const query = normalizeSearchValue(state?.inputValue)
+
+        if (!query) {
+            return availableOptions
+        }
+
+        return availableOptions.filter(option =>
+            normalizeSearchValue(getSearchableOptionText(option, getOptionLabel)).includes(query)
+        )
+    }
+
     return (
         <Box sx={{ alignSelf: 'baseline', ...customSx }}>
             {!innerLabel && (
@@ -52,6 +84,11 @@ function CustomAutocomplete({
                 value={value}
                 disabled={isDisabled}
                 loading={loading}
+                autoHighlight
+                openOnFocus
+                clearOnBlur={false}
+                filterOptions={customFilterOptions || defaultFilterOptions}
+                noOptionsText='No matching results'
                 slotProps={{
                     popper: {
                         modifiers: [
@@ -224,7 +261,8 @@ CustomAutocomplete.propTypes = {
     isDisabled: PropTypes.bool,
     onInputChange: PropTypes.oneOfType([PropTypes.func, PropTypes.bool]),
     inputProps: PropTypes.object,
-    loading: PropTypes.bool
+    loading: PropTypes.bool,
+    filterOptions: PropTypes.func
 }
 
 export default CustomAutocomplete

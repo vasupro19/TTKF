@@ -446,6 +446,7 @@ function FormComponent({
                                             customInputProp={field?.inputProps}
                                             inputProps={field?.inputProps}
                                             loading={field?.loading}
+                                            filterOptions={field?.filterOptions}
                                         />
                                     )}
                                     {field.type === 'FlexibleAutoComplete' && (

@@ -171,6 +171,12 @@ function MasterPackagesTable() {
         })
     }
 
+    const handleWizardAdd = () => {
+        navigate('/master/packages/wizard', {
+            state: { campaignId: params.id }
+        })
+    }
+
     const menuOptions = useMemo(
         () => [
             {
@@ -314,9 +320,14 @@ function MasterPackagesTable() {
                             <CSVExport handleExcelClick={handleExcelClick} />
                         </UiAccessGuard>
                         <UiAccessGuard type='create'>
-                            <CustomButton variant='clickable' onClick={handleAdd}>
-                                Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
-                            </CustomButton>
+                            <Stack direction='row' spacing={1}>
+                                <CustomButton variant='clickable' onClick={handleWizardAdd}>
+                                    Quick Wizard <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
+                                </CustomButton>
+                                <CustomButton variant='outlined' onClick={handleAdd}>
+                                    Classic Add
+                                </CustomButton>
+                            </Stack>
                         </UiAccessGuard>
 
                         {/* render action column can be made dynamic based on user authorization  */}

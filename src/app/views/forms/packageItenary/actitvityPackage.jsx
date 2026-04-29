@@ -19,6 +19,17 @@ const HOTEL_TIERS = [
     { key: 'premium', label: 'Premium', color: '#b45309', bg: '#fffbeb', border: '#fde68a' }
 ]
 
+const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'DAY JOURNEY'])
+
+const isStayEntry = item => {
+    if (item?.entryType) {
+        return item.entryType === 'Stay'
+    }
+
+    const destinationName = item?.destination?.name || item?.destination || ''
+    return !LEGACY_TRANSIT_DESTINATIONS.has(destinationName.toUpperCase())
+}
+
 export default function PackageItenaryView() {
     const params = useParams()
     const dispatch = useDispatch()
@@ -129,15 +140,14 @@ export default function PackageItenaryView() {
         navigate(`/package/activities/${campaignId}/${params.packageId}`)
     }
 
-    const travelDestinations = ['OVERNIGHT JOURNEY', 'FRESH UP', 'DAY JOURNEY']
-
     const formattedItineraries = itenaryData.map(item => ({
         id: item.id,
         title: item.title || item.itenary?.title || 'Untitled Activity',
         description:
             item.itenary?.description || 'Enjoy your day exploring beautiful landscapes and local attractions.',
         image: item.image || '',
-        destination: item?.destination?.name || 'FRESH UP',
+        destination: item?.destination?.name || 'Transit',
+        entryType: item.entryType || 'Stay',
         hotels: {
             deluxe: item?.destination?.delux_hotel,
             superDeluxe: item?.destination?.super_delux_hotel,
@@ -148,8 +158,7 @@ export default function PackageItenaryView() {
     }))
 
     const staysBreakdown = formattedItineraries.reduce((acc, item) => {
-        const destinationName = (item.destination || '').toUpperCase()
-        if (travelDestinations.includes(destinationName)) return acc
+        if (!isStayEntry(item)) return acc
 
         const existing = acc.find(stay => stay.destination === item.destination)
         if (existing) {

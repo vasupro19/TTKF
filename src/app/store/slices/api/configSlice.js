@@ -1,50 +1,6 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import Cookies from 'js-cookie'
 
-const TAG_TYPES = [
-    'masterClient',
-    'masterClientById',
-    'itemMaster',
-    'itemMasterById',
-    'itemMasterData',
-    'bucketConfig',
-    'bucketConfigById',
-    'bucketConfigData',
-    'itemProperty',
-    'itemPropertyData',
-    'itemPropertyById',
-    'propertyMapping',
-    'propertyMappingData',
-    'propertyMappingById',
-    'client',
-    'clientById',
-    'clientData',
-    'locationForClient',
-    'customer',
-    'customerById',
-    'country',
-    'state',
-    'stateById',
-    'city',
-    'cityById',
-    'pinCode',
-    'pinCodeById',
-    'locationMaster',
-    'locationMasterById',
-    'roleManagement',
-    'roleManagementData',
-    'roleManagementById',
-    'userManagement',
-    'userManagementData',
-    'userManagementById',
-    'userManagementMappingById',
-    'vendor',
-    'vendorById',
-    'jobCandidates',
-    'jobCandidateById',
-    'jobApplication'
-]
-
 export const apiSliceConfig = createApi({
     reducerPath: 'api',
     baseQuery: fetchBaseQuery({
@@ -85,7 +41,7 @@ export const apiSliceConfig = createApi({
         //     return headers
         // }
     }),
-    tagTypes: TAG_TYPES,
+
     endpoints: () => ({})
 })
 

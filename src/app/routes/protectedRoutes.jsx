@@ -115,6 +115,7 @@ const MasterItenaryTable = lazy(() => import('@/app/views/masters/itenary'))
 const ItenaryClientsForm = lazy(() => import('@views/masters/itenary/create'))
 const MasterPackagesTable = lazy(() => import('@/app/views/masters/packages'))
 const PackagesClientForm = lazy(() => import('@views/masters/packages/create'))
+const PackageCreationWizard = lazy(() => import('@views/forms/packages/PackageCreationWizard'))
 const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
 const PackageItenaryView = lazy(() => import('@views/forms/packageItenary/actitvityPackage'))
 
@@ -344,6 +345,14 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <PackagesClientForm />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/packages/wizard',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <PackageCreationWizard />
                 </Suspense>
             )
         },

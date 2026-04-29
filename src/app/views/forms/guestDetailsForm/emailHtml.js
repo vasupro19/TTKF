@@ -1,3 +1,14 @@
+const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'DAY JOURNEY'])
+
+const isStayEntry = item => {
+    if (item?.entryType) {
+        return item.entryType === 'Stay'
+    }
+
+    const destinationName = item?.destination?.name || item?.destination || ''
+    return !LEGACY_TRANSIT_DESTINATIONS.has(destinationName.toUpperCase())
+}
+
 /**
  * Generates the full HTML content for the guest itinerary email.
  * @param {Array} selectedPackage - The array of daily itinerary items.
@@ -23,14 +34,7 @@ const generateItineraryEmailHtml = (selectedPackage, stayBreakdown) => {
     // --- 3. Build Day-by-Day Itinerary ---
     const itineraryDaysHtml = selectedPackage
         .map((item, index) => {
-            const destinationName = (item?.destination || '').toUpperCase()
-
-            // Conditional logic for Hotel section (Matching your JSX logic)
-            // Check if destination is NOT overnight/fresh up/day journey
-            const showHotels =
-                destinationName !== 'OVERNIGHT JOURNEY' &&
-                destinationName !== 'FRESH UP' &&
-                destinationName !== 'DAY JOURNEY'
+            const showHotels = isStayEntry(item)
 
             const hotelSection = showHotels
                 ? `
