@@ -135,6 +135,7 @@ function FullScreenItinerary({
                     >
                         <Box
                             sx={{
+                                width: '100%',
                                 mb: 4,
                                 borderRadius: '20px',
                                 overflow: 'hidden',
@@ -192,14 +193,27 @@ function FullScreenItinerary({
                                             component='img'
                                             src={item.image}
                                             alt={item.title}
-                                            sx={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }}
+                                            sx={{
+                                                width: '100%',
+                                                height: '100%',
+                                                minHeight: 260,
+                                                aspectRatio: '1 / 1',
+                                                objectFit: 'cover',
+                                                display: 'block'
+                                            }}
                                         />
                                     </Grid>
                                 )}
                                 <Grid item xs={12} md={item.image ? 8 : 12}>
-                                    <Box sx={{ p: 3 }}>
+                                    <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
                                         <Typography
-                                            sx={{ color: '#475569', lineHeight: 1.8, fontSize: '0.95rem', mb: 3 }}
+                                            sx={{
+                                                color: '#475569',
+                                                lineHeight: 1.9,
+                                                fontSize: '0.98rem',
+                                                mb: 3,
+                                                maxWidth: '100%'
+                                            }}
                                         >
                                             {item.description ||
                                                 'Enjoy your day exploring beautiful landscapes and local attractions.'}
@@ -947,10 +961,10 @@ export default function ItinerarySection({
                                                     </Box>
                                                 </Box>
 
-                                                <Grid container>
+                                                <Grid container sx={{ width: '100%' }}>
                                                     {/* Image */}
                                                     {item.image && (
-                                                        <Grid item xs={12} md={3}>
+                                                        <Grid item xs={12} md={3.5}>
                                                             <Box
                                                                 component='img'
                                                                 src={item.image}
@@ -958,7 +972,8 @@ export default function ItinerarySection({
                                                                 sx={{
                                                                     width: '100%',
                                                                     height: '100%',
-                                                                    minHeight: 180,
+                                                                    minHeight: 260,
+                                                                    aspectRatio: '1 / 1',
                                                                     objectFit: 'cover',
                                                                     display: 'block'
                                                                 }}
@@ -968,12 +983,19 @@ export default function ItinerarySection({
 
                                                     {/* Description */}
                                                     <Grid item xs={12} md={item.image ? 5 : 8}>
-                                                        <Box sx={{ p: 3 }}>
+                                                        <Box
+                                                            sx={{
+                                                                p: { xs: 2.5, md: 3.5 },
+                                                                minWidth: 0
+                                                            }}
+                                                        >
                                                             <Typography
                                                                 sx={{
                                                                     color: '#475569',
-                                                                    lineHeight: 1.8,
-                                                                    fontSize: '0.92rem'
+                                                                    lineHeight: 1.9,
+                                                                    fontSize: '0.96rem',
+                                                                    maxWidth: '100%',
+                                                                    wordBreak: 'break-word'
                                                                 }}
                                                             >
                                                                 {item.description ||
@@ -983,13 +1005,14 @@ export default function ItinerarySection({
                                                     </Grid>
 
                                                     {/* Hotel tiers - right column */}
-                                                    <Grid item xs={12} md={4}>
+                                                    <Grid item xs={12} md={3.5}>
                                                         <Box
                                                             sx={{
-                                                                p: 2.5,
+                                                                p: { xs: 2, md: 2.5 },
                                                                 height: '100%',
                                                                 bgcolor: '#fafbff',
-                                                                borderLeft: '1px solid #e2e8f0'
+                                                                borderLeft: '1px solid #e2e8f0',
+                                                                minWidth: 0
                                                             }}
                                                         >
                                                             <Typography
@@ -1040,7 +1063,7 @@ export default function ItinerarySection({
                                                                                 fontWeight: 600,
                                                                                 color: '#1e293b',
                                                                                 textAlign: 'right',
-                                                                                maxWidth: '60%'
+                                                                                maxWidth: '68%'
                                                                             }}
                                                                         >
                                                                             {item.hotels?.[tier.key] || '—'}
@@ -1166,13 +1189,13 @@ export default function ItinerarySection({
                                                     sx={{
                                                         fontSize: '0.72rem',
                                                         color: '#94a3b8',
-                                                        maxWidth: 200,
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap'
+                                                        maxWidth: 260,
+                                                        whiteSpace: 'normal',
+                                                        wordBreak: 'break-word',
+                                                        lineHeight: 1.5
                                                     }}
                                                 >
-                                                    {item.description}
+                                                    {item.description || 'No description provided.'}
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>

@@ -129,6 +129,59 @@ const buildQuoteDayDescription = ({ entryType, title, destinationName }) => {
     return ''
 }
 
+const formatDateForInput = value => {
+    if (!value) {
+        return ''
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) {
+            return ''
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed
+        }
+
+        const parsed = new Date(trimmed)
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed.toISOString().slice(0, 10)
+        }
+
+        return trimmed
+    }
+
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+        return ''
+    }
+
+    return parsed.toISOString().slice(0, 10)
+}
+
+const toIsoDateTime = value => {
+    if (!value) {
+        return undefined
+    }
+
+    const trimmed = value.toString().trim()
+    if (!trimmed) {
+        return undefined
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return `${trimmed}T00:00:00.000Z`
+    }
+
+    const parsed = new Date(trimmed)
+    if (Number.isNaN(parsed.getTime())) {
+        return undefined
+    }
+
+    return parsed.toISOString()
+}
+
 function GuestForm() {
     const { id: formId } = useParams()
     const params = useParams()
@@ -299,16 +352,22 @@ function GuestForm() {
         enableReinitialize: true,
         onSubmit: async values => {
             try {
+                const payload = {
+                    ...values,
+                    pickupDate: toIsoDateTime(values.pickupDate),
+                    dropDate: toIsoDateTime(values.dropDate)
+                }
+
                 let response
                 if (!editBool) {
-                    response = await createGuest(values).unwrap()
+                    response = await createGuest(payload).unwrap()
                     setLeadId(response.data.id)
                     navigate(-1)
 
                     setActiveTab(0)
                     enableTabsAfterValidation(1)
                 } else {
-                    response = await updateGuest({ id: leadId, ...values }).unwrap()
+                    response = await updateGuest({ id: leadId, ...payload }).unwrap()
                     formik.resetForm()
                     setActiveTab(0)
                     setTabsEnabled([true, false])
@@ -464,6 +523,8 @@ function GuestForm() {
         Object.keys(row).forEach(key => {
             if (numberFields.includes(key)) {
                 formatted[key] = row[key] !== null && row[key] !== undefined ? Number(row[key]) : undefined
+            } else if (key === 'pickupDate' || key === 'dropDate') {
+                formatted[key] = formatDateForInput(row[key])
             } else {
                 formatted[key] = row[key] != null ? row[key].toString() : ''
             }
@@ -1528,7 +1589,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
             title={!editBool ? 'Add Quotation' : 'Edit Quotation'}
         >
             <Grid container gap={4} sx={{ border: '1px solid #d0d0d0', px: 1.5, py: 2, borderRadius: '8px' }}>
-                <Grid md={8} container spacing={1} sx={{ px: '4px' }}>
+                <Grid md={12} container spacing={1} sx={{ px: '4px' }}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         <MyTabs
                             activeTab={activeTab}
@@ -1611,6 +1672,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                     submitButtonText={editBool ? 'Update Details' : 'Add Details'}
                                     submitButtonSx={{ textAlign: 'right', marginTop: 2 }}
                                     showSeparaterBorder={false}
+                                    gridStyles={{ md: 12, lg: 12 }}
                                 />
                             )}
                         </Box>
