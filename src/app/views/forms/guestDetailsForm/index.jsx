@@ -67,20 +67,21 @@ import {
     getLeadPreview,
     useGenerateQuotationPdfMutation
 } from '@/app/store/slices/api/leadSlice'
-import { useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
+import { useAssistAiMutation, useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
 
 // import AiFormAssistant from '@/core/components/forms/AiAssiastantForm'
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
 import {
-    getItenaryClientById,
     useCreateItenaryClientMutation,
-    useGetItenaryClientsQuery
+    useGetItenaryClientsQuery,
+    useUpdateItenaryClientMutation
 } from '@/app/store/slices/api/itenarySlice'
 import {
     useCreateDestinationClientMutation,
-    useGetDestinationClientsQuery
+    useGetDestinationClientsQuery,
+    useUpdateDestinationClientMutation
 } from '@/app/store/slices/api/destinationSlice'
-import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
+import { useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -94,7 +95,7 @@ const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'D
 
 const isStayEntry = item => {
     if (item?.entryType) {
-        return item.entryType === 'Stay'
+        return item.entryType === 'Stay' || item.entryType === 'TransitStay'
     }
 
     const destinationName = item?.destination?.name || item?.destination || ''
@@ -104,26 +105,34 @@ const isStayEntry = item => {
 const buildQuoteDayDescription = ({ entryType, title, destinationName }) => {
     if (entryType === 'Transit') {
         if (destinationName) {
-            return `Comfortable transfer and road journey planned towards ${destinationName}.`
+            return `Comfortable transfer and road journey planned towards ${destinationName}. The day is arranged to keep travel smooth and convenient, with enough time to arrive comfortably and continue the itinerary without unnecessary rush.`
         }
 
-        return 'Comfortable transfer and travel arrangements for the day.'
+        return 'Comfortable transfer and travel arrangements are planned for the day, keeping the journey smooth, practical, and guest-friendly throughout.'
+    }
+
+    if (entryType === 'TransitStay') {
+        if (destinationName) {
+            return `Travel towards ${destinationName}, arrive comfortably, and settle in for an overnight stay. After reaching the destination, the remaining time can be enjoyed at a relaxed pace before the night halt.`
+        }
+
+        return 'Travel, arrival, and overnight stay arrangements are planned for the day, balancing onward movement with a smooth and comfortable arrival experience.'
     }
 
     if (entryType === 'FreshUp') {
-        return 'Freshen up, relax, and get ready for the next experience in the journey.'
+        return 'Freshen up, relax, and get ready for the next experience in the journey. This halt helps keep the overall travel flow comfortable and gives the guest a short reset before continuing.'
     }
 
     if (title && destinationName) {
-        return `${title} in ${destinationName} with sightseeing, local experiences, and a comfortable stay.`
+        return `${title} in ${destinationName} with sightseeing, local experiences, and a comfortable stay. The day is planned at an enjoyable pace so guests can explore and unwind without feeling rushed.`
     }
 
     if (destinationName) {
-        return `Enjoy sightseeing, local experiences, and a comfortable stay in ${destinationName}.`
+        return `Enjoy sightseeing, local experiences, and a comfortable stay in ${destinationName}. The plan gives enough time to explore the destination while keeping the overall experience smooth and relaxing.`
     }
 
     if (title) {
-        return `${title} with a smooth and well-planned guest experience.`
+        return `${title} with a smooth and well-planned guest experience, balancing movement, comfort, and leisure through the day.`
     }
 
     return ''
@@ -210,7 +219,10 @@ function GuestForm() {
     const [updateTour] = useUpdateGuestTourMutation()
     const [removeTour] = useRemoveGuestTourItenaryMutation()
     const [createItenaryClient] = useCreateItenaryClientMutation()
+    const [updateItenaryClient] = useUpdateItenaryClientMutation()
     const [createDestinationClient] = useCreateDestinationClientMutation()
+    const [updateDestinationClient] = useUpdateDestinationClientMutation()
+    const [assistAi] = useAssistAiMutation()
     const { data: confirmedPackage } = useGetPackageByLeadIdQuery(params.leadId)
 
     const [createSingleTour] = useCreateSingleGuestTourItenaryMutation()
@@ -242,7 +254,6 @@ function GuestForm() {
     const { data: destinations = [], isLoading: loadingDestinations } = useGetDestinationClientsQuery(
         destinationSearchDebounced ? `?search=${destinationSearchDebounced}` : ''
     )
-    console.log(destinations, itenaries, 'fff')
     const { data: price = [], isLoading: loadingPrices } = useGetGuestTourPriceQuery(params.leadId)
     const [generatePdf, { isLoading: isGenerating }] = useGenerateQuotationPdfMutation()
 
@@ -483,18 +494,24 @@ function GuestForm() {
                 })
             )
             // setEditBool(true)
-            console.log(data.data, 'data')
             const formatted = data.data.map(item => ({
                 title: item.title,
-                description: item?.description || item.itenary?.description || '',
+                description:
+                    item?.description ||
+                    item?.itenary?.description ||
+                    buildQuoteDayDescription({
+                        entryType: item.entryType || 'Stay',
+                        title: item.title,
+                        destinationName: item.destination?.name || ''
+                    }),
                 image: item.image || '',
                 entryType: item.entryType || 'Stay',
                 destination: item.destination?.name || '',
                 hotels: {
-                    deluxe: item.destination.delux_hotel,
-                    superDeluxe: item.destination.super_delux_hotel,
-                    luxury: item.destination.luxury_hotel,
-                    premium: item.destination.premium_hotel
+                    deluxe: item.destination?.delux_hotel,
+                    superDeluxe: item.destination?.super_delux_hotel,
+                    luxury: item.destination?.luxury_hotel,
+                    premium: item.destination?.premium_hotel
                 },
                 fullItem: item // keep complete raw data if needed later
             }))
@@ -568,7 +585,10 @@ function GuestForm() {
                 itenaryId: editingData.fullItem?.itenaryId || '',
                 title: editingData.title || '',
                 leadId: params.leadId,
-                description: editingData.description || editingData?.fullItem?.itenary?.description,
+                description:
+                    editingData.description ||
+                    editingData?.fullItem?.description ||
+                    editingData?.fullItem?.itenary?.description,
                 entryType: editingData.fullItem?.entryType || 'Stay',
                 destinationId: editingData.fullItem?.destinationId || '',
                 destination: editingData.destination || '',
@@ -785,7 +805,14 @@ function GuestForm() {
 
             const formatted = value.packageItenary.map(item => ({
                 title: item.title,
-                description: item.itenary?.description || '',
+                description:
+                    item.description ||
+                    item.itenary?.description ||
+                    buildQuoteDayDescription({
+                        entryType: item.entryType || 'Stay',
+                        title: item.title,
+                        destinationName: item?.destination?.name || ''
+                    }),
                 image: item.image || '',
                 entryType: item.entryType || 'Stay',
                 destination: item?.destination?.name || '',
@@ -825,7 +852,19 @@ function GuestForm() {
 
     async function ensureQuoteMasterIds(payload = formData) {
         const campaignId = leadData?.data?.campaignId
-        const nextPayload = { ...payload }
+        const nextPayload = {
+            ...payload,
+            title: payload.title?.trim?.() || '',
+            description: payload.description?.trim?.() || ''
+        }
+        const matchedItenary =
+            itenaries?.data?.find(item => String(item.id) === String(nextPayload.itenaryId)) ||
+            editingData?.fullItem?.itenary ||
+            null
+        const matchedDestination =
+            destinations?.data?.find(item => String(item.id) === String(nextPayload.destinationId)) ||
+            editingData?.fullItem?.destination ||
+            null
 
         if (!nextPayload.itenaryId && nextPayload.title?.trim()) {
             if (!campaignId) {
@@ -839,9 +878,28 @@ function GuestForm() {
             }).unwrap()
 
             nextPayload.itenaryId = createdItenary?.data?.id
+        } else if (nextPayload.itenaryId && matchedItenary) {
+            const nextItenaryTitle = nextPayload.title || matchedItenary.title || ''
+            const nextItenaryDescription = nextPayload.description || matchedItenary.description || ''
+
+            if (
+                nextItenaryTitle !== (matchedItenary.title || '') ||
+                nextItenaryDescription !== (matchedItenary.description || '')
+            ) {
+                await updateItenaryClient({
+                    id: matchedItenary.id,
+                    title: nextItenaryTitle,
+                    description: nextItenaryDescription,
+                    campaignId: matchedItenary.campaignId || Number(campaignId)
+                }).unwrap()
+            }
         }
 
-        if (nextPayload.entryType === 'Stay' && !nextPayload.destinationId && nextPayload.destinationName?.trim()) {
+        if (
+            (nextPayload.entryType === 'Stay' || nextPayload.entryType === 'TransitStay') &&
+            !nextPayload.destinationId &&
+            nextPayload.destinationName?.trim()
+        ) {
             if (!campaignId) {
                 throw new Error('Assign a campaign to this lead before creating a custom destination.')
             }
@@ -856,6 +914,33 @@ function GuestForm() {
             }).unwrap()
 
             nextPayload.destinationId = createdDestination?.data?.id
+        } else if (
+            (nextPayload.entryType === 'Stay' || nextPayload.entryType === 'TransitStay') &&
+            nextPayload.destinationId
+        ) {
+            const nextDestinationName = nextPayload.destinationName?.trim() || matchedDestination?.name || ''
+            const nextHotels = {
+                delux_hotel: nextPayload.delux_hotel || '',
+                super_delux_hotel: nextPayload.super_delux_hotel || '',
+                luxury_hotel: nextPayload.luxury_hotel || '',
+                premium_hotel: nextPayload.premium_hotel || ''
+            }
+
+            if (
+                matchedDestination &&
+                (nextDestinationName !== (matchedDestination.name || '') ||
+                    nextHotels.delux_hotel !== (matchedDestination.delux_hotel || '') ||
+                    nextHotels.super_delux_hotel !== (matchedDestination.super_delux_hotel || '') ||
+                    nextHotels.luxury_hotel !== (matchedDestination.luxury_hotel || '') ||
+                    nextHotels.premium_hotel !== (matchedDestination.premium_hotel || ''))
+            ) {
+                await updateDestinationClient({
+                    id: matchedDestination.id,
+                    name: nextDestinationName,
+                    campaignId: matchedDestination.campaignId || Number(campaignId),
+                    ...nextHotels
+                }).unwrap()
+            }
         }
 
         return nextPayload
@@ -1000,7 +1085,7 @@ function GuestForm() {
             if (name === 'entryType') {
                 const nextState = { ...prev, entryType: value }
 
-                if (value !== 'Stay') {
+                if (value !== 'Stay' && value !== 'TransitStay') {
                     nextState.destinationId = ''
                     nextState.destination = ''
                     nextState.destinationName = ''
@@ -1014,7 +1099,7 @@ function GuestForm() {
                     nextState.description = buildQuoteDayDescription({
                         entryType: value,
                         title: nextState.title,
-                        destinationName: value === 'Stay' ? nextState.destinationName : ''
+                        destinationName: value === 'Stay' || value === 'TransitStay' ? nextState.destinationName : ''
                     })
                 }
 
@@ -1044,7 +1129,7 @@ function GuestForm() {
         })
         const shouldFillDescription = !description?.trim() || description === fallbackDescription
         const shouldFillHotels =
-            entryType === 'Stay' &&
+            (entryType === 'Stay' || entryType === 'TransitStay') &&
             (!deluxHotel?.trim() || !superDeluxHotel?.trim() || !luxuryHotel?.trim() || !premiumHotel?.trim())
 
         if (!shouldFillDescription && !shouldFillHotels) {
@@ -1058,11 +1143,8 @@ function GuestForm() {
         setAiPrefillLoading(true)
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    system: `You are an AI assistant helping fill a travel CRM quotation day form.
+            const response = await assistAi({
+                system: `You are an AI assistant helping fill a travel CRM quotation day form.
 
 Respond ONLY with a valid JSON object.
 Allowed keys:
@@ -1075,26 +1157,25 @@ Allowed keys:
 Rules:
 1. Output pure JSON only
 2. Keep hotel suggestions realistic, concise, and destination-specific
-3. If entryType is not "Stay", only provide description
-4. Description should sound guest-ready and operationally useful
-5. Leave out any key you cannot confidently fill`,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: `Create quotation autofill for:
+3. If entryType is "Transit", only provide description
+4. If entryType is "TransitStay", provide description and hotel suggestions because it includes an overnight stay
+5. Description should sound guest-ready and operationally useful
+6. Leave out any key you cannot confidently fill`,
+                messages: [
+                    {
+                        role: 'user',
+                        content: `Create quotation autofill for:
 Entry Type: ${entryType}
 Destination: ${destinationName || 'N/A'}
 Itinerary Title: ${title || 'N/A'}
 Existing Description: ${description || 'N/A'}
 Need hotels: ${shouldFillHotels ? 'yes' : 'no'}
 Need description: ${shouldFillDescription ? 'yes' : 'no'}`
-                        }
-                    ]
-                })
-            })
+                    }
+                ]
+            }).unwrap()
 
-            const data = await response.json()
-            const text = data?.content?.[0]?.text || ''
+            const text = response?.content?.[0]?.text || ''
             const clean = text.replace(/```json|```/g, '').trim()
             const parsed = clean ? JSON.parse(clean) : {}
             const nextDeluxHotel = parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
@@ -1243,7 +1324,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         skip: !keyword
     })
     const destinationInputHelperText =
-        formData.entryType !== 'Stay'
+        formData.entryType !== 'Stay' && formData.entryType !== 'TransitStay'
             ? 'Destination is optional for transit and fresh up entries'
             : 'If not found, type it here and it will be created automatically for this lead campaign.'
     const handleDestinationSelect = selected => {
@@ -1791,7 +1872,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                         freeSolo
                                         options={destinations?.data}
                                         loading={loadingDestinations}
-                                        disabled={formData.entryType !== 'Stay'}
+                                        disabled={formData.entryType !== 'Stay' && formData.entryType !== 'TransitStay'}
                                         getOptionLabel={option =>
                                             typeof option === 'string' ? option : option?.name || ''
                                         }
@@ -1803,7 +1884,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                         }
                                         inputValue={destinationSearch}
                                         onInputChange={(e, val, reason) => {
-                                            if (formData.entryType !== 'Stay') return
+                                            if (formData.entryType !== 'Stay' && formData.entryType !== 'TransitStay')
+                                                return
                                             if (reason === 'input') {
                                                 setDestinationSearch(val)
                                                 handleChange('destinationName', val)
@@ -1814,7 +1896,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                             }
                                         }}
                                         onChange={(e, selected) => {
-                                            if (formData.entryType !== 'Stay') return
+                                            if (formData.entryType !== 'Stay' && formData.entryType !== 'TransitStay')
+                                                return
                                             handleDestinationSelect(selected)
                                             setDestinationSearch(
                                                 typeof selected === 'string' ? selected : selected?.name || ''
@@ -1824,66 +1907,69 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                         renderInput={renderDestinationInput}
                                     />
                                 </Grid>
-                                {formData.entryType === 'Stay' && formData.destinationName && (
-                                    <Grid item xs={12}>
-                                        <Box
-                                            sx={{
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: 2,
-                                                p: 1.5,
-                                                bgcolor: '#f8fafc'
-                                            }}
-                                        >
-                                            <Typography variant='subtitle2' sx={{ mb: 1 }}>
-                                                Hotels for {formData.destinationName}
-                                            </Typography>
-                                            <Grid container spacing={1.5}>
-                                                <Grid item xs={12} sm={6}>
-                                                    <TextField
-                                                        fullWidth
-                                                        multiline
-                                                        minRows={2}
-                                                        label='Deluxe Hotel'
-                                                        value={formData.delux_hotel}
-                                                        onChange={e => handleChange('delux_hotel', e.target.value)}
-                                                    />
+                                {(formData.entryType === 'Stay' || formData.entryType === 'TransitStay') &&
+                                    formData.destinationName && (
+                                        <Grid item xs={12}>
+                                            <Box
+                                                sx={{
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: 2,
+                                                    p: 1.5,
+                                                    bgcolor: '#f8fafc'
+                                                }}
+                                            >
+                                                <Typography variant='subtitle2' sx={{ mb: 1 }}>
+                                                    Hotels for {formData.destinationName}
+                                                </Typography>
+                                                <Grid container spacing={1.5}>
+                                                    <Grid item xs={12} sm={6}>
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            minRows={2}
+                                                            label='Deluxe Hotel'
+                                                            value={formData.delux_hotel}
+                                                            onChange={e => handleChange('delux_hotel', e.target.value)}
+                                                        />
+                                                    </Grid>
+                                                    <Grid item xs={12} sm={6}>
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            minRows={2}
+                                                            label='Super Deluxe Hotel'
+                                                            value={formData.super_delux_hotel}
+                                                            onChange={e =>
+                                                                handleChange('super_delux_hotel', e.target.value)
+                                                            }
+                                                        />
+                                                    </Grid>
+                                                    <Grid item xs={12} sm={6}>
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            minRows={2}
+                                                            label='Luxury Hotel'
+                                                            value={formData.luxury_hotel}
+                                                            onChange={e => handleChange('luxury_hotel', e.target.value)}
+                                                        />
+                                                    </Grid>
+                                                    <Grid item xs={12} sm={6}>
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            minRows={2}
+                                                            label='Premium Hotel'
+                                                            value={formData.premium_hotel}
+                                                            onChange={e =>
+                                                                handleChange('premium_hotel', e.target.value)
+                                                            }
+                                                        />
+                                                    </Grid>
                                                 </Grid>
-                                                <Grid item xs={12} sm={6}>
-                                                    <TextField
-                                                        fullWidth
-                                                        multiline
-                                                        minRows={2}
-                                                        label='Super Deluxe Hotel'
-                                                        value={formData.super_delux_hotel}
-                                                        onChange={e =>
-                                                            handleChange('super_delux_hotel', e.target.value)
-                                                        }
-                                                    />
-                                                </Grid>
-                                                <Grid item xs={12} sm={6}>
-                                                    <TextField
-                                                        fullWidth
-                                                        multiline
-                                                        minRows={2}
-                                                        label='Luxury Hotel'
-                                                        value={formData.luxury_hotel}
-                                                        onChange={e => handleChange('luxury_hotel', e.target.value)}
-                                                    />
-                                                </Grid>
-                                                <Grid item xs={12} sm={6}>
-                                                    <TextField
-                                                        fullWidth
-                                                        multiline
-                                                        minRows={2}
-                                                        label='Premium Hotel'
-                                                        value={formData.premium_hotel}
-                                                        onChange={e => handleChange('premium_hotel', e.target.value)}
-                                                    />
-                                                </Grid>
-                                            </Grid>
-                                        </Box>
-                                    </Grid>
-                                )}
+                                            </Box>
+                                        </Grid>
+                                    )}
                                 <Grid item xs={12}>
                                     <TextField
                                         fullWidth
@@ -1926,6 +2012,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                     >
                                         <MenuItem value='Stay'>Stay</MenuItem>
                                         <MenuItem value='Transit'>Transit</MenuItem>
+                                        <MenuItem value='TransitStay'>Transit + Stay</MenuItem>
                                         <MenuItem value='FreshUp'>Fresh Up</MenuItem>
                                     </TextField>
                                 </Grid>

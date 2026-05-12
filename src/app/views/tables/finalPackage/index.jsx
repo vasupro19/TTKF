@@ -37,6 +37,7 @@ import ServiceListModal from '@/core/components/modals/ServiceListModal'
 import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal'
 import GuestLedgerModal from '@/core/components/modals/GuestLedgerModal'
 import SupplierPaymentModal from '@/core/components/modals/SupplierPaymentModal'
+import ConfirmModal from '@/core/components/modals/ConfirmModal'
 import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
 
 import { isExcelQuery } from '@/constants'
@@ -87,6 +88,7 @@ function FinalPackageTable() {
     const [paymentModal, setPaymentModal] = useState({ open: false, row: null })
     const [supplierPaymentModal, setSupplierPaymentModal] = useState({ open: false, row: null })
     const [ledgerModal, setLedgerModal] = useState({ open: false, packageId: null, guestName: '' })
+    const [deleteConfirm, setDeleteConfirm] = useState({ open: false, serviceId: null })
     const [previewState, setPreviewState] = useState({
         open: false,
         loading: false,
@@ -355,11 +357,13 @@ function FinalPackageTable() {
         })
     }
 
-    const handleDeleteService = async id => {
-        if (!window.confirm('Are you sure you want to remove this service?')) return
+    const deleteServiceConfirmed = async () => {
+        if (!deleteConfirm.serviceId) {
+            return
+        }
 
         try {
-            const response = await deleteService(id).unwrap()
+            const response = await deleteService(deleteConfirm.serviceId).unwrap()
             dispatch(
                 openSnackbar({
                     message: response?.message || 'Service removed successfully',
@@ -375,7 +379,13 @@ function FinalPackageTable() {
                     alert: { color: 'error' }
                 })
             )
+        } finally {
+            setDeleteConfirm({ open: false, serviceId: null })
         }
+    }
+
+    const handleDeleteService = id => {
+        setDeleteConfirm({ open: true, serviceId: id })
     }
 
     const handleSendSupplierInquiry = async id => {
@@ -794,6 +804,18 @@ function FinalPackageTable() {
                 onClose={() => setSupplierPaymentModal({ open: false, row: null })}
                 onSave={handleSaveSupplierPayment}
             />
+
+            {deleteConfirm.open && (
+                <ConfirmModal
+                    title='Remove Service'
+                    message='Are you sure you want to remove this service from the confirmed package?'
+                    icon='warning'
+                    confirmText='Remove'
+                    cancelText='Cancel'
+                    onConfirm={deleteServiceConfirmed}
+                    onCancel={() => setDeleteConfirm({ open: false, serviceId: null })}
+                />
+            )}
 
             <GuestLedgerModal
                 open={ledgerModal.open}

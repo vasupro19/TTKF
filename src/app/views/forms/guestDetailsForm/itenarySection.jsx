@@ -216,7 +216,9 @@ function FullScreenItinerary({
                                             }}
                                         >
                                             {item.description ||
-                                                'Enjoy your day exploring beautiful landscapes and local attractions.'}
+                                                item.fullItem?.description ||
+                                                item.fullItem?.itenary?.description ||
+                                                'No description provided.'}
                                         </Typography>
 
                                         {/* Hotel tiers inline */}
@@ -999,7 +1001,9 @@ export default function ItinerarySection({
                                                                 }}
                                                             >
                                                                 {item.description ||
-                                                                    'Enjoy your day exploring beautiful landscapes.'}
+                                                                    item.fullItem?.description ||
+                                                                    item.fullItem?.itenary?.description ||
+                                                                    'No description provided.'}
                                                             </Typography>
                                                         </Box>
                                                     </Grid>
@@ -1195,7 +1199,10 @@ export default function ItinerarySection({
                                                         lineHeight: 1.5
                                                     }}
                                                 >
-                                                    {item.description || 'No description provided.'}
+                                                    {item.description ||
+                                                        item.fullItem?.description ||
+                                                        item.fullItem?.itenary?.description ||
+                                                        'No description provided.'}
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>

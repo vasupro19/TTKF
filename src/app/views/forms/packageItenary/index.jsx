@@ -9,7 +9,7 @@ import FormComponent from '@core/components/forms/FormComponent'
 import MainCard from '@core/components/extended/MainCard'
 import CustomButton from '@core/components/extended/CustomButton'
 import { useDispatch, useSelector } from 'react-redux'
-import { getItenaryClients } from '@/app/store/slices/api/itenarySlice'
+import { getItenaryClients, useUpdateItenaryClientMutation } from '@/app/store/slices/api/itenarySlice'
 import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
 import { getTravelImages } from '@/app/store/slices/api/aiSlice'
 import {
@@ -33,6 +33,7 @@ function PackagesItenary() {
     const [createPackageItenaryClient] = useCreatePackageItenaryClientMutation()
     const [updatePackageItenaryClient] = useUpdatePackageItenaryClientMutation()
     const [deletePackageItenaryClient] = useDeletePackageItenaryClientMutation()
+    const [updateItenaryClient] = useUpdateItenaryClientMutation()
 
     const [itenaryData, setItenaryData] = useState([])
     const [destinationData, setDestinationData] = useState([])
@@ -101,6 +102,7 @@ function PackagesItenary() {
     const entryTypeOptions = [
         { label: 'Stay', value: 'Stay' },
         { label: 'Transit', value: 'Transit' },
+        { label: 'Transit + Stay', value: 'TransitStay' },
         { label: 'Fresh Up', value: 'FreshUp' }
     ]
 
@@ -109,6 +111,7 @@ function PackagesItenary() {
         campaignId: params.campaignId || '',
         itenaryId: '',
         destinationId: '',
+        description: '',
         image: '',
         entryType: 'Stay'
     }
@@ -117,6 +120,7 @@ function PackagesItenary() {
         campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
         itenaryId: z.number({ invalid_type_error: 'Itenary is required' }).int().positive(),
         destinationId: z.number().optional().nullable(),
+        description: z.string().optional(),
         image: z.string().optional(),
         entryType: z.string().min(1, 'Entry type is required')
     })
@@ -145,11 +149,25 @@ function PackagesItenary() {
         validate,
         onSubmit: async values => {
             try {
+                const { description, ...restValues } = values
                 const payload = {
-                    ...values,
-                    campaignId: parseInt(values.campaignId, 10),
-                    itenaryId: parseInt(values.itenaryId, 10),
-                    destinationId: values.destinationId ? parseInt(values.destinationId, 10) : null
+                    ...restValues,
+                    campaignId: parseInt(restValues.campaignId, 10),
+                    itenaryId: parseInt(restValues.itenaryId, 10),
+                    destinationId: restValues.destinationId ? parseInt(restValues.destinationId, 10) : null
+                }
+                const selectedItenaryRecord =
+                    itenaryData.find(item => item.id.toString() === payload.itenaryId?.toString?.()) ||
+                    editingActivity?.itenary
+                const nextDescription = description?.trim?.() || ''
+
+                if (selectedItenaryRecord && nextDescription !== (selectedItenaryRecord.description?.trim?.() || '')) {
+                    await updateItenaryClient({
+                        id: selectedItenaryRecord.id,
+                        title: selectedItenaryRecord.title,
+                        description: nextDescription,
+                        campaignId: selectedItenaryRecord.campaignId || payload.campaignId
+                    }).unwrap()
                 }
 
                 let response
@@ -178,6 +196,7 @@ function PackagesItenary() {
                             campaignId: params.campaignId || '',
                             itenaryId: '',
                             destinationId: '',
+                            description: '',
                             image: '',
                             entryType: 'Stay'
                         }
@@ -218,6 +237,7 @@ function PackagesItenary() {
                 campaignId: params.campaignId || '',
                 itenaryId: '',
                 destinationId: '',
+                description: '',
                 image: '',
                 entryType: 'Stay'
             }
@@ -287,7 +307,7 @@ function PackagesItenary() {
         itenaryOptions.find(item => item.value.toString() === formik.values.itenaryId?.toString?.()) || null
     const selectedDestinationOption =
         destinationOptions.find(item => item.value.toString() === formik.values.destinationId?.toString?.()) || null
-    const isStayEntryType = formik.values.entryType === 'Stay'
+    const isStayEntryType = formik.values.entryType === 'Stay' || formik.values.entryType === 'TransitStay'
     let destinationHelperText = ''
 
     if (!isStayEntryType) {
@@ -302,14 +322,20 @@ function PackagesItenary() {
         if (name === 'entryType') {
             const nextValue = value?.value || value || 'Stay'
             formik.setFieldValue('entryType', nextValue)
-            if (nextValue !== 'Stay') {
+            if (nextValue !== 'Stay' && nextValue !== 'TransitStay') {
                 formik.setFieldValue('destinationId', '')
             }
             return
         }
 
         if (['campaignId', 'itenaryId', 'destinationId'].includes(name)) {
-            formik.setFieldValue(name, value?.value?.toString?.() || value?.value || value || '')
+            const nextValue = value?.value?.toString?.() || value?.value || value || ''
+            formik.setFieldValue(name, nextValue)
+
+            if (name === 'itenaryId') {
+                const matchedItenary = itenaryData.find(item => item.id.toString() === nextValue?.toString?.())
+                formik.setFieldValue('description', matchedItenary?.description || '')
+            }
             return
         }
 
@@ -363,6 +389,17 @@ function PackagesItenary() {
                     customSx,
                     isOptionEqualToValue: (option, selectedValue) =>
                         option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
+                },
+                {
+                    name: 'description',
+                    label: 'Itinerary Description',
+                    type: 'textarea',
+                    minRows: 4,
+                    required: false,
+                    helperText: 'This updates the itinerary master description everywhere it is reused.',
+                    grid: { xs: 12, sm: 12, md: 12 },
+                    size: 'small',
+                    customSx
                 },
                 {
                     name: 'entryType',
@@ -431,6 +468,7 @@ function PackagesItenary() {
             campaignId: params.campaignId || '',
             itenaryId: activity.itenaryId?.toString() || '',
             destinationId: activity.destinationId?.toString() || '',
+            description: activity.itenary?.description || '',
             image: activity.image || '',
             entryType: activity.entryType || 'Stay'
         })

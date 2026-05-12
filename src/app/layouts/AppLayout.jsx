@@ -1,5 +1,5 @@
 import React from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { ErrorBoundary } from 'react-error-boundary'
 import Box from '@mui/material/Box'
 import useDocumentTitle from '@/hooks/useDocumentTitle'
@@ -7,20 +7,18 @@ import useDocumentTitle from '@/hooks/useDocumentTitle'
 import NavBar from './header/NavBar'
 
 function AppLayout() {
-    const { pathname } = useLocation()
-
     // Hook automatically handles route-based titles
     useDocumentTitle()
 
     return (
         <Box sx={{ position: 'relative', height: '100vh' }}>
-            {pathname !== '/select-client-location' && <NavBar />}
+            <NavBar />
             <ErrorBoundary fallback={<>An Error Occurred!</>}>
                 <Box
                     sx={{
                         padding: {
-                            xs: pathname !== '/select-client-location' ? '60px 8px 0px 8px' : 'unset',
-                            sm: pathname !== '/select-client-location' ? '64px 16px 0px 16px' : 'unset'
+                            xs: '60px 8px 0px 8px',
+                            sm: '64px 16px 0px 16px'
                         }
                     }}
                 >

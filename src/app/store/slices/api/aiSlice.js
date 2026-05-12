@@ -3,6 +3,18 @@ import { apiSliceConfig } from './configSlice'
 
 export const aiSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
+        assistAi: build.mutation({
+            query: body => {
+                const KEY = 'assistAiLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: '/ai/assist',
+                    method: 'POST',
+                    body,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            }
+        }),
         getTravelImages: build.query({
             query: keyword => {
                 const KEY = 'getTravelImagesLKey'
@@ -19,6 +31,7 @@ export const aiSlice = apiSliceConfig.injectEndpoints({
 })
 
 export const {
+    useAssistAiMutation,
     useGetTravelImagesQuery,
     endpoints: { getTravelImages }
 } = aiSlice

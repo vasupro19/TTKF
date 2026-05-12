@@ -23,11 +23,36 @@ const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'D
 
 const isStayEntry = item => {
     if (item?.entryType) {
-        return item.entryType === 'Stay'
+        return item.entryType === 'Stay' || item.entryType === 'TransitStay'
     }
 
     const destinationName = item?.destination?.name || item?.destination || ''
     return !LEGACY_TRANSIT_DESTINATIONS.has(destinationName.toUpperCase())
+}
+
+const buildPackageActivityFallbackDescription = item => {
+    const destinationName = item?.destination?.name || item?.destination || ''
+    const title = item?.title || item?.itenary?.title || 'the planned activity'
+
+    if (item?.entryType === 'Transit') {
+        return `Proceed with ${title.toLowerCase()} and enjoy a comfortable onward journey. The transfer is planned to keep travel smooth and convenient, with enough time to arrive comfortably and continue the day’s schedule without feeling rushed.`
+    }
+
+    if (item?.entryType === 'TransitStay') {
+        return destinationName
+            ? `Travel onwards to ${destinationName} with a smooth transfer and comfortable arrival plan. After reaching the destination, settle into the stay and enjoy the remaining time at ease before the overnight halt.`
+            : `Continue the journey with a comfortable transfer and planned overnight halt. The day balances travel and arrival smoothly so the guest can settle in without rush.`
+    }
+
+    if (item?.entryType === 'FreshUp') {
+        return 'Take time to freshen up, relax, and get ready for the next part of the journey. This short halt helps keep the overall itinerary comfortable and guest-friendly.'
+    }
+
+    if (destinationName) {
+        return `Enjoy a well-paced day in ${destinationName} with sightseeing, local experiences, and comfortable leisure time. The itinerary is designed to keep the experience smooth, memorable, and enjoyable before the overnight stay.`
+    }
+
+    return 'Enjoy the planned experiences for the day with a comfortable pace and a smooth overall travel flow.'
 }
 
 export default function PackageItenaryView() {
@@ -143,8 +168,7 @@ export default function PackageItenaryView() {
     const formattedItineraries = itenaryData.map(item => ({
         id: item.id,
         title: item.title || item.itenary?.title || 'Untitled Activity',
-        description:
-            item.itenary?.description || 'Enjoy your day exploring beautiful landscapes and local attractions.',
+        description: item.description || item.itenary?.description || buildPackageActivityFallbackDescription(item),
         image: item.image || '',
         destination: item?.destination?.name || 'Transit',
         entryType: item.entryType || 'Stay',

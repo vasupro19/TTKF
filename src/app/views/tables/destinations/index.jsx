@@ -217,9 +217,25 @@ function MasterDestinationTable() {
                     destinations: formattedData,
                     campaignId: params.id
                 }).unwrap()
-                alert('Upload Successful!')
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: 'Destinations uploaded successfully!',
+                        variant: 'alert',
+                        alert: { color: 'success' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
             } catch (err) {
-                console.error('Upload failed', err)
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: err?.data?.message || 'Upload failed. Please check the file and try again.',
+                        variant: 'alert',
+                        alert: { color: 'error' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
             }
         }
 

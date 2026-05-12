@@ -2,7 +2,7 @@ const LEGACY_TRANSIT_DESTINATIONS = new Set(['OVERNIGHT JOURNEY', 'FRESH UP', 'D
 
 const isStayEntry = item => {
     if (item?.entryType) {
-        return item.entryType === 'Stay'
+        return item.entryType === 'Stay' || item.entryType === 'TransitStay'
     }
 
     const destinationName = item?.destination?.name || item?.destination || ''

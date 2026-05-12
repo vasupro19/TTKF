@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { lazy, Suspense } from 'react'
+import { Navigate } from 'react-router-dom'
 
 import AuthGuard from '@app/guards/AuthGuard'
 import ClientGuard from '@app/guards/ClientGuard'
@@ -59,7 +60,6 @@ const GateEntryTable = lazy(() => import('@views/inbound/gateEntry'))
 const GateEntryForm = lazy(() => import('@views/inbound/gateEntry/create'))
 const ViewGateEntryForm = lazy(() => import('@views/inbound/gateEntry/view'))
 const MapBoxIds = lazy(() => import('@views/inbound/gateEntry/mapBoxIds'))
-const ClientLocationTable = lazy(() => import('@views/pages/clientLocation'))
 const PurchaseOrderTable = lazy(() => import('@views/inbound/purchaseOrder'))
 const PurchaseOrderForm = lazy(() => import('@views/inbound/purchaseOrder/create'))
 const ASNTable = lazy(() => import('@views/inbound/advancedShippingNotes'))
@@ -163,6 +163,10 @@ const protectedRoutes = {
                     <AdminDashboard />
                 </Suspense>
             )
+        },
+        {
+            path: '/select-client-location',
+            element: <Navigate to='/dashboard' replace />
         },
         {
             path: '/master/client',

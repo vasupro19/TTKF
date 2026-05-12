@@ -41,6 +41,8 @@ function LeadsForm() {
     const [createLead] = useCreateLeadMutation()
     const [updateLead] = useUpdateLeadMutation()
 
+    const clientUserId = users?.data?.find(teamUser => teamUser.email === user?.email)?.id || user?.id
+
     const userOptions =
         users?.data?.map(teamUser => ({
             label: teamUser.name, // change field accordingly
@@ -105,14 +107,14 @@ function LeadsForm() {
             try {
                 let response
                 if (!formId) {
-                    response = await createLead({ ...values, updatedBy: user?.id }).unwrap()
+                    response = await createLead({ ...values, updatedBy: clientUserId }).unwrap()
                     setLeadId(response.data.id)
                     navigate(-1)
 
                     setActiveTab(0)
                     enableTabsAfterValidation(1)
                 } else {
-                    response = await updateLead({ id: leadId, ...values, updatedBy: user?.id }).unwrap()
+                    response = await updateLead({ id: leadId, ...values, updatedBy: clientUserId }).unwrap()
                     formik.resetForm()
                     setActiveTab(0)
                     setTabsEnabled([true, false])
