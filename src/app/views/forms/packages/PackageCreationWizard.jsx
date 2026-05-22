@@ -57,6 +57,7 @@ const createActivityRow = (values = {}) => ({
     destinationId: '',
     entryType: 'Stay',
     image: '',
+    isAiPending: false,
     ...values
 })
 
@@ -78,11 +79,138 @@ const createInsertedActivityTitle = entryType => {
 
 const toNormalized = value => (value || '').toString().trim().toLowerCase()
 
+const getAiResponseText = response =>
+    response?.content?.[0]?.text || response?.data?.content?.[0]?.text || response?.text || ''
+
+const decodeAiFieldValue = value =>
+    (value || '')
+        .toString()
+        .replace(/^["'`\s]+|["'`\s]+$/g, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .trim()
+
 const parseAiJson = response => {
-    const text = response?.content?.[0]?.text || response?.data?.content?.[0]?.text || ''
+    const text = getAiResponseText(response)
     const clean = text.replace(/```json|```/g, '').trim()
-    return clean ? JSON.parse(clean) : {}
+
+    if (!clean) {
+        return {}
+    }
+
+    const candidates = [clean]
+    const firstObjectStart = clean.indexOf('{')
+    const lastObjectEnd = clean.lastIndexOf('}')
+
+    if (firstObjectStart !== -1 && lastObjectEnd !== -1 && lastObjectEnd > firstObjectStart) {
+        candidates.push(clean.slice(firstObjectStart, lastObjectEnd + 1))
+    }
+
+    const firstArrayStart = clean.indexOf('[')
+    const lastArrayEnd = clean.lastIndexOf(']')
+
+    if (firstArrayStart !== -1 && lastArrayEnd !== -1 && lastArrayEnd > firstArrayStart) {
+        candidates.push(clean.slice(firstArrayStart, lastArrayEnd + 1))
+    }
+
+    for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index]
+
+        try {
+            return JSON.parse(candidate)
+        } catch (error) {
+            // Keep trying looser JSON candidates.
+        }
+    }
+
+    return {}
 }
+
+const extractAiDraftPayload = response => {
+    const text = getAiResponseText(response)
+        .replace(/```json|```/g, '')
+        .trim()
+    const parsed = parseAiJson(response)
+
+    const parsedCandidate = Array.isArray(parsed) ? parsed[0] : parsed?.day || parsed?.data || parsed?.result || parsed
+
+    let title = decodeAiFieldValue(parsedCandidate?.title)
+    let description = decodeAiFieldValue(parsedCandidate?.description)
+
+    if (!title) {
+        const titleMatch =
+            text.match(/"title"\s*:\s*"([\s\S]*?)"(?:\s*,|\s*})/i) || text.match(/(?:^|\n)\s*title\s*[:-]\s*(.+)/i)
+        title = decodeAiFieldValue(titleMatch?.[1] || '')
+    }
+
+    if (!description) {
+        const descriptionMatch =
+            text.match(/"description"\s*:\s*"([\s\S]*?)"(?:\s*}\s*$|\s*,\s*"[a-z_]+")/i) ||
+            text.match(/(?:^|\n)\s*description\s*[:-]\s*([\s\S]+)/i)
+        description = decodeAiFieldValue(descriptionMatch?.[1] || '')
+    }
+
+    if ((!title || !description) && text) {
+        const lines = text
+            .split('\n')
+            .map(item => item.trim())
+            .filter(Boolean)
+
+        if (!title && lines.length) {
+            title = decodeAiFieldValue(lines[0])
+        }
+
+        if (!description && lines.length > 1) {
+            description = decodeAiFieldValue(lines.slice(1).join('\n\n'))
+        }
+    }
+
+    return {
+        title,
+        description
+    }
+}
+
+const MIN_AI_REQUEST_GAP_MS = 1400
+const MAX_AI_RETRY_ATTEMPTS = 5
+const MAX_ACTIVITY_DRAFT_CYCLES = 3
+
+const sleep = delay =>
+    new Promise(resolve => {
+        setTimeout(resolve, delay)
+    })
+
+const extractAiErrorMessage = error =>
+    error?.data?.error?.message || error?.error?.message || error?.data?.message || error?.message || ''
+
+const isAiRateLimitError = error => {
+    const code = error?.data?.error?.code || error?.error?.code || error?.code || ''
+    const message = extractAiErrorMessage(error)
+
+    return code === 'rate_limit_exceeded' || /rate limit reached/i.test(message)
+}
+
+const getAiRetryDelayMs = error => {
+    const message = extractAiErrorMessage(error)
+    const match = message.match(/Please try again in\s*([\d.]+)\s*(ms|s)/i)
+
+    if (!match) {
+        return 1800
+    }
+
+    const [, value, unit] = match
+    const numericValue = Number(value)
+
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+        return 1800
+    }
+
+    const baseDelay = unit?.toLowerCase() === 's' ? numericValue * 1000 : numericValue
+    return Math.ceil(baseDelay + 250)
+}
+
+const isGenericActivityTitle = title =>
+    /^(Arrival in .+|Transit Day|Transit \+ Stay Day|Fresh Up Day|New Stay Day)$/i.test((title || '').trim())
 
 const TRANSPORT_PATTERNS = [
     { regex: /\btempo\s*travell?er\b/i, label: 'Tempo Traveller' },
@@ -130,20 +258,28 @@ const buildTransferDescription = ({ fromLocation, toLocation, transportMode }) =
     const transportText = transportMode ? ` via ${transportMode}` : ''
 
     if (fromLocation) {
-        return `Guest pickup from ${fromLocation} and proceed towards ${toLocation}${transportText}. Enjoy a comfortable journey with time to take in the changing landscapes and route experiences along the way. On arrival, continue with the planned schedule for the day, whether it is local exploration, a refreshment break, or the next step of the holiday experience.`
+        return `Guest pickup from ${fromLocation} and proceed towards ${toLocation}${transportText} with a comfortable start to the journey. As the route unfolds, enjoy changing landscapes, pleasant halts, and the sense of anticipation that builds while moving toward the next destination. The day is planned to keep travel smooth, relaxed, and guest-friendly from departure onward.
+
+On arrival in ${toLocation}, continue with the scheduled plan for the day at an easy pace. Depending on timing, this may include a gentle local outing, a refreshment stop, or simply settling into the destination atmosphere before the next stage of the holiday experience begins.`
     }
 
-    return `Today the journey continues towards ${toLocation}${transportText}. Travel comfortably through the route while enjoying the scenery and smooth onward movement between destinations. On reaching ${toLocation}, continue with the planned itinerary for the day and settle into the next part of the travel experience with ease.`
+    return `Today the journey continues towards ${toLocation}${transportText}, keeping the travel flow smooth, comfortable, and well-paced for the guest. The route offers time to take in the scenery, enjoy the transition between destinations, and settle into the mood of the trip without feeling rushed.
+
+On reaching ${toLocation}, continue with the planned itinerary for the day in a relaxed and organized manner. The schedule is designed to help guests move naturally into the next part of the travel experience while maintaining comfort, convenience, and a pleasant overall rhythm.`
 }
 
 const buildTransitStayDescription = ({ fromLocation, toLocation, transportMode }) => {
     const transportText = transportMode ? ` via ${transportMode}` : ''
 
     if (fromLocation) {
-        return `Guest pickup from ${fromLocation} and proceed to ${toLocation}${transportText}. Enjoy the journey with a comfortable transfer plan and a smooth arrival into the destination. After reaching ${toLocation}, check in and unwind, with the remaining time available for light local exploration or relaxed leisure before the overnight stay.`
+        return `Guest pickup from ${fromLocation} and proceed to ${toLocation}${transportText}, beginning the day with a smooth and comfortable transfer experience. The route is planned to keep the journey relaxed, allowing guests to enjoy the changing surroundings, travel at an easy pace, and arrive feeling refreshed rather than rushed.
+
+After reaching ${toLocation}, check in and unwind while settling into the atmosphere of the destination. The remaining time can be used for light local exploration, a relaxed stroll, or peaceful leisure, creating a gentle and enjoyable transition into the overnight stay.`
     }
 
-    return `Travel onwards to ${toLocation}${transportText} and arrive comfortably at the destination. After arrival, settle into the stay and take the rest of the day at an easy pace with time to relax, enjoy the surroundings, or experience a gentle introduction to the place before the overnight halt.`
+    return `Travel onwards to ${toLocation}${transportText} and arrive comfortably at the destination, keeping the day balanced between movement and a smooth sense of arrival. The plan allows guests to travel without stress while gradually shifting into the experience and rhythm of the new place.
+
+After arrival, settle into the stay and enjoy the rest of the day at an easy pace. There is time to relax, enjoy the surroundings, or experience a soft introduction to the destination before the overnight halt, making the day feel complete without becoming tiring.`
 }
 
 const buildReturnTitle = ({ fromLocation, toLocation, transportMode }) => {
@@ -155,10 +291,14 @@ const buildReturnDescription = ({ fromLocation, toLocation, transportMode }) => 
     const transportText = transportMode ? ` via ${transportMode}` : ''
 
     if (fromLocation) {
-        return `After completing the holiday, depart from ${fromLocation} and proceed towards ${toLocation}${transportText}. Enjoy a smooth return transfer with time to relax and reflect on the journey before drop-off at the final location. This brings the trip to a comfortable and well-organized close.`
+        return `After completing the holiday, depart from ${fromLocation} and proceed towards ${toLocation}${transportText} with a smooth and comfortable return transfer. The day is kept easy and well-organized so guests can relax, enjoy the final leg of the route, and reflect on the memorable experiences of the journey.
+
+Before reaching the final drop location, the return movement is planned to feel convenient and unhurried. This helps the trip conclude on a polished and comfortable note, leaving guests with a pleasant final impression of the overall travel experience.`
     }
 
-    return `Proceed towards ${toLocation}${transportText} for the final drop. The return transfer is planned to keep the end of the journey smooth, comfortable, and convenient for the guest.`
+    return `Proceed towards ${toLocation}${transportText} for the final drop, keeping the last stage of the journey smooth, comfortable, and well-managed for the guest. The return movement is arranged at an easy pace so the holiday ends without rush or inconvenience.
+
+This final transfer is intended to close the trip gracefully, giving guests a relaxed end to their travel experience while maintaining comfort, convenience, and a sense of completion through the final drop.`
 }
 
 const parseDraftPrompt = prompt => {
@@ -225,81 +365,31 @@ const buildSuggestedPackageName = destinationRows => {
     return `${validNames.join(' - ')} ${totalDays}D/${totalNights}N`
 }
 
-const buildActivitiesFromDestinations = (destinationRows, originLocation = '', transportMode = '') => {
-    const activities = []
-    const validOrigin = originLocation.trim()
-    const validTransportMode = transportMode.trim()
-    const validDestinations = destinationRows.filter(item => item.name?.trim())
+const STAY_TITLE_PATTERNS = [
+    destinationName => `${destinationName} Local Highlights & Leisure`,
+    destinationName => `${destinationName} Scenic Spots & Market Walk`,
+    destinationName => `${destinationName} Culture Trail & Sunset Time`,
+    destinationName => `${destinationName} Landmarks & Evening Leisure`
+]
 
-    validDestinations.forEach((destination, index) => {
-        const nights = Number(destination.nights) || 1
-        const previousDestination = validDestinations[index - 1]
-        const transferFromLocation = index === 0 ? validOrigin : previousDestination?.name || ''
+const buildFallbackStayTitle = ({ destinationName, dayNumber = 1 }) => {
+    const safeDestination = destinationName?.trim() || 'Destination'
+    const titleBuilder = STAY_TITLE_PATTERNS[(Math.max(dayNumber, 1) - 1) % STAY_TITLE_PATTERNS.length]
+    return titleBuilder(safeDestination)
+}
 
-        if (transferFromLocation) {
-            activities.push(
-                createActivityRow({
-                    title: buildTransferTitle({
-                        fromLocation: transferFromLocation,
-                        toLocation: destination.name,
-                        transportMode: validTransportMode
-                    }),
-                    description: buildTransitStayDescription({
-                        fromLocation: transferFromLocation,
-                        toLocation: destination.name,
-                        transportMode: validTransportMode
-                    }),
-                    destinationName: destination.name,
-                    destinationId: '',
-                    entryType: 'TransitStay'
-                })
-            )
-        } else {
-            activities.push(
-                createActivityRow({
-                    title: `Arrival in ${destination.name}`,
-                    description: `Arrive in ${destination.name} and settle in comfortably after the journey. Depending on your arrival time, enjoy a relaxed local outing, market visit, or leisure moments while soaking in the atmosphere of the destination. The day is kept easy and welcoming so the trip begins on a pleasant and comfortable note before the overnight stay.`,
-                    destinationName: destination.name,
-                    destinationId: '',
-                    entryType: 'Stay'
-                })
-            )
-        }
+const buildFallbackStayDescription = ({ destinationName, dayNumber = 1, totalDaysAtDestination = 1 }) => {
+    const safeDestination = destinationName?.trim() || 'the destination'
 
-        for (let day = 1; day < nights; day += 1) {
-            activities.push(
-                createActivityRow({
-                    title: `Explore ${destination.name}`,
-                    description: `Spend the day exploring the highlights of ${destination.name} with time for sightseeing, local experiences, and memorable moments at a comfortable pace. Enjoy the character of the destination through its scenic spots, culture, and atmosphere, then return for a relaxed evening and overnight stay after a fulfilling day of travel experiences.`,
-                    destinationName: destination.name,
-                    destinationId: '',
-                    entryType: 'Stay'
-                })
-            )
-        }
-    })
+    if (totalDaysAtDestination <= 1) {
+        return `Spend a comfortable day discovering the charm of ${safeDestination}, with time to enjoy its atmosphere, signature local experiences, and well-paced sightseeing. The day is designed to feel relaxed yet fulfilling, giving guests enough space to absorb the character of the destination while still covering meaningful highlights in a smooth and enjoyable flow.
 
-    if (validOrigin && validDestinations.length) {
-        const lastDestination = validDestinations[validDestinations.length - 1]
-
-        activities.push(
-            createActivityRow({
-                title: buildReturnTitle({
-                    fromLocation: lastDestination.name,
-                    toLocation: validOrigin,
-                    transportMode: validTransportMode
-                }),
-                description: buildReturnDescription({
-                    fromLocation: lastDestination.name,
-                    toLocation: validOrigin,
-                    transportMode: validTransportMode
-                }),
-                entryType: 'Transit'
-            })
-        )
+From scenic spots to local moments that reflect the mood of the place, the experience is arranged to feel warm, polished, and guest-friendly throughout. By evening, return with a sense of having enjoyed the destination fully before settling in for a restful overnight stay.`
     }
 
-    return activities
+    return `Day ${dayNumber} in ${safeDestination} is planned with a comfortable mix of local exploration, signature experiences, and relaxed leisure so guests can enjoy the destination without feeling rushed. The flow of the day keeps sightseeing smooth and guest-friendly, allowing enough time to take in the local character, enjoy key highlights, and move through the schedule at a pleasant pace.
+
+The overall experience is designed to feel balanced and memorable, blending sightseeing, atmosphere, and moments of leisure into one polished day. By the end of the excursion, guests return with a fuller sense of the destination before winding down for a restful overnight stay.`
 }
 
 const buildDefaultDescription = ({ entryType, destinationName, title, originLocation, transportMode }) => {
@@ -353,6 +443,90 @@ const buildDefaultDescription = ({ entryType, destinationName, title, originLoca
     return 'Enjoy a comfortable and well-planned day filled with sightseeing, local experiences, and a smooth overall travel flow. The itinerary is arranged to keep the experience engaging yet relaxed, helping guests make the most of the destination while maintaining comfort throughout the journey.'
 }
 
+const buildActivitiesFromDestinations = (destinationRows, originLocation = '', transportMode = '') => {
+    const activities = []
+    const validOrigin = originLocation.trim()
+    const validTransportMode = transportMode.trim()
+    const validDestinations = destinationRows.filter(item => item.name?.trim())
+
+    validDestinations.forEach((destination, index) => {
+        const nights = Number(destination.nights) || 1
+        const previousDestination = validDestinations[index - 1]
+        const transferFromLocation = index === 0 ? validOrigin : previousDestination?.name || ''
+
+        if (transferFromLocation) {
+            activities.push(
+                createActivityRow({
+                    title: buildTransferTitle({
+                        fromLocation: transferFromLocation,
+                        toLocation: destination.name,
+                        transportMode: validTransportMode
+                    }),
+                    description: buildTransitStayDescription({
+                        fromLocation: transferFromLocation,
+                        toLocation: destination.name,
+                        transportMode: validTransportMode
+                    }),
+                    destinationName: destination.name,
+                    destinationId: '',
+                    entryType: 'TransitStay'
+                })
+            )
+        } else {
+            activities.push(
+                createActivityRow({
+                    title: `Arrival in ${destination.name}`,
+                    description: `Arrive in ${destination.name} and settle in comfortably after the journey. Depending on your arrival time, enjoy a relaxed local outing, market visit, or leisure moments while soaking in the atmosphere of the destination. The day is kept easy and welcoming so the trip begins on a pleasant and comfortable note before the overnight stay.`,
+                    destinationName: destination.name,
+                    destinationId: '',
+                    entryType: 'Stay'
+                })
+            )
+        }
+        for (let day = 1; day < nights; day += 1) {
+            activities.push(
+                createActivityRow({
+                    title: buildFallbackStayTitle({
+                        destinationName: destination.name,
+                        dayNumber: day + 1
+                    }),
+                    description: buildFallbackStayDescription({
+                        destinationName: destination.name,
+                        dayNumber: day + 1,
+                        totalDaysAtDestination: nights
+                    }),
+                    isAiPending: true,
+                    destinationName: destination.name,
+                    destinationId: '',
+                    entryType: 'Stay'
+                })
+            )
+        }
+    })
+
+    if (validOrigin && validDestinations.length) {
+        const lastDestination = validDestinations[validDestinations.length - 1]
+
+        activities.push(
+            createActivityRow({
+                title: buildReturnTitle({
+                    fromLocation: lastDestination.name,
+                    toLocation: validOrigin,
+                    transportMode: validTransportMode
+                }),
+                description: buildReturnDescription({
+                    fromLocation: lastDestination.name,
+                    toLocation: validOrigin,
+                    transportMode: validTransportMode
+                }),
+                entryType: 'Transit'
+            })
+        )
+    }
+
+    return activities
+}
+
 const copyHotelsFromDestination = (destination = {}) => ({
     delux_hotel: destination.delux_hotel || '',
     super_delux_hotel: destination.super_delux_hotel || '',
@@ -401,6 +575,11 @@ function PackageCreationWizard() {
     const destinationHotelTimeoutRef = useRef({})
     const activityDescriptionTimeoutRef = useRef({})
     const speechRecognitionRef = useRef(null)
+    const aiRequestQueueRef = useRef(Promise.resolve())
+    const aiLastRequestStartedAtRef = useRef(0)
+    const activityDraftRetryCountRef = useRef({})
+    const activityDraftInFlightRef = useRef({})
+    const destinationDraftInFlightRef = useRef({})
 
     const [packageForm, setPackageForm] = useState({
         name: '',
@@ -418,6 +597,33 @@ function PackageCreationWizard() {
     const [updateItenaryClient] = useUpdateItenaryClientMutation()
     const [createPackageItenaryClient] = useCreatePackageItenaryClientMutation()
     const [assistAi] = useAssistAiMutation()
+
+    const runQueuedAiRequest = useCallback(task => {
+        const runTaskWithRetry = async (attempt = 0) => {
+            const waitBeforeStart = Math.max(0, aiLastRequestStartedAtRef.current + MIN_AI_REQUEST_GAP_MS - Date.now())
+
+            if (waitBeforeStart > 0) {
+                await sleep(waitBeforeStart)
+            }
+
+            aiLastRequestStartedAtRef.current = Date.now()
+
+            try {
+                return await task()
+            } catch (error) {
+                if (!isAiRateLimitError(error) || attempt >= MAX_AI_RETRY_ATTEMPTS - 1) {
+                    throw error
+                }
+
+                await sleep(getAiRetryDelayMs(error))
+                return runTaskWithRetry(attempt + 1)
+            }
+        }
+
+        const queuedTask = aiRequestQueueRef.current.catch(() => null).then(() => runTaskWithRetry())
+        aiRequestQueueRef.current = queuedTask.catch(() => null)
+        return queuedTask
+    }, [])
 
     const totalStayNights = useMemo(
         () => destinations.reduce((sum, item) => sum + (Number(item.nights) || 0), 0),
@@ -510,34 +716,138 @@ function PackageCreationWizard() {
         ...copyHotelsFromDestination(getMatchedDestination(name))
     })
 
-    const shouldReplaceDescription = ({ previousRow, nextDescription, field, nextValue }) => {
-        if (!previousRow.description?.trim()) {
-            return true
-        }
+    const requestSingleActivityDraft = useCallback(
+        async ({ row, destinationName, dayNumber = 1, totalDaysAtDestination = 1, usedTitles = [] }) => {
+            const promptAttempts = [
+                {
+                    system: `You are a senior luxury travel writer crafting one day of itinerary content for a premium travel package.
 
-        const previousMatchedItenary = getMatchedItenary(previousRow.title)
-        const previousDefaultDescription = buildDefaultDescription({
-            entryType: previousRow.entryType,
-            destinationName: previousRow.destinationName,
-            title: previousRow.title,
-            originLocation: packageForm.originLocation,
-            transportMode: packageForm.transportMode
-        })
+Respond ONLY with a valid JSON object.
+Allowed keys:
+- title
+- description
 
-        if (previousRow.description === previousMatchedItenary?.description) {
-            return true
-        }
+TITLE RULES:
+1. Create a destination-specific, experience-rich title with 2 to 3 real places or experiences
+2. Never start with Explore, Visit, Tour, Discover, Day, Enjoy, or Experience
+3. Keep title under 10 words
+4. Do not repeat any title or place already used on other days
+5. Make the title exciting, polished, and quotation-ready
 
-        if (previousRow.description === previousDefaultDescription) {
-            return true
-        }
+DESCRIPTION RULES:
+1. Write 2 rich paragraphs separated by a blank line
+2. Total length: 150 to 190 words
+3. Paragraph 1 should set the scene and mood of the day at the destination
+4. Paragraph 2 should describe what guests actually do, see, eat, or experience at the specific places in the title
+5. End warmly with the guest returning for overnight stay
+6. No bullets, markdown, emojis, hotel names, or generic filler
 
-        if (field === 'description') {
-            return false
-        }
+Return JSON only.`,
+                    content: JSON.stringify({
+                        packageName: packageForm.name || '',
+                        originLocation: packageForm.originLocation || '',
+                        transportMode: packageForm.transportMode || '',
+                        destinationName,
+                        dayNumber,
+                        totalDaysAtDestination,
+                        entryType: row.entryType,
+                        currentTitle: row.title || '',
+                        currentDescription: row.description || '',
+                        alreadyUsedTitles: usedTitles
+                    })
+                },
+                {
+                    system: `You write one premium travel itinerary day for a high-quality holiday package.
 
-        return previousRow.description === nextDescription && nextValue !== previousRow[field]
-    }
+Return ONLY valid JSON with:
+- title
+- description
+
+Rules:
+1. Title must be specific, catchy, and destination-based
+2. Description must be two polished paragraphs totaling 125 to 160 words
+3. Avoid repeating any earlier title
+4. No markdown or bullets`,
+                    content: `Destination: ${destinationName}
+Day number: ${dayNumber} of ${totalDaysAtDestination}
+Transport mode: ${packageForm.transportMode || 'N/A'}
+Already used titles: ${usedTitles.join(' | ') || 'None'}`
+                }
+            ]
+
+            const runPromptAttempt = async (attemptIndex = 0) => {
+                if (attemptIndex >= promptAttempts.length) {
+                    return null
+                }
+
+                const attempt = promptAttempts[attemptIndex]
+                try {
+                    const response = await runQueuedAiRequest(() =>
+                        assistAi({
+                            system: attempt.system,
+                            messages: [{ role: 'user', content: attempt.content }]
+                        }).unwrap()
+                    )
+
+                    const { title: nextTitle, description: nextDescription } = extractAiDraftPayload(response)
+
+                    if (nextTitle || nextDescription) {
+                        return {
+                            title: nextTitle,
+                            description: nextDescription
+                        }
+                    }
+                } catch (error) {
+                    // Try the simpler retry prompt next.
+                }
+
+                return runPromptAttempt(attemptIndex + 1)
+            }
+
+            const draftedCopy = await runPromptAttempt()
+            if (draftedCopy) {
+                return draftedCopy
+            }
+
+            return {
+                title: '',
+                description: ''
+            }
+        },
+        [assistAi, packageForm.name, packageForm.originLocation, packageForm.transportMode, runQueuedAiRequest]
+    )
+
+    const shouldReplaceDescription = useCallback(
+        ({ previousRow, nextDescription, field, nextValue }) => {
+            if (!previousRow.description?.trim()) {
+                return true
+            }
+
+            const previousMatchedItenary = getMatchedItenary(previousRow.title)
+            const previousDefaultDescription = buildDefaultDescription({
+                entryType: previousRow.entryType,
+                destinationName: previousRow.destinationName,
+                title: previousRow.title,
+                originLocation: packageForm.originLocation,
+                transportMode: packageForm.transportMode
+            })
+
+            if (previousRow.description === previousMatchedItenary?.description) {
+                return true
+            }
+
+            if (previousRow.description === previousDefaultDescription) {
+                return true
+            }
+
+            if (field === 'description') {
+                return false
+            }
+
+            return previousRow.description === nextDescription && nextValue !== previousRow[field]
+        },
+        [getMatchedItenary, packageForm.originLocation, packageForm.transportMode]
+    )
 
     const scheduleImageAutofillForRow = row => {
         const keyword = (row.destinationName || row.title || '').trim()
@@ -573,95 +883,440 @@ function PackageCreationWizard() {
         }, 600)
     }
 
-    const scheduleActivityDescriptionAutofill = row => {
-        const title = row.title?.trim()
-        const destinationName = row.destinationName?.trim()
-        const matchedItenary = getMatchedItenary(title)
+    //     const scheduleActivityDescriptionAutofill = row => {
+    //         const title = row.title?.trim()
+    //         const destinationName = row.destinationName?.trim()
+    //         const matchedItenary = getMatchedItenary(title)
 
-        if (!title || matchedItenary?.description?.trim()) {
-            return
-        }
+    //         if (!title || matchedItenary?.description?.trim()) {
+    //             return
+    //         }
 
-        const existingTimeout = activityDescriptionTimeoutRef.current[row.id]
-        if (existingTimeout) {
-            clearTimeout(existingTimeout)
-        }
+    //         const existingTimeout = activityDescriptionTimeoutRef.current[row.id]
+    //         if (existingTimeout) {
+    //             clearTimeout(existingTimeout)
+    //         }
 
-        activityDescriptionTimeoutRef.current[row.id] = setTimeout(async () => {
-            setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: true }))
+    //         activityDescriptionTimeoutRef.current[row.id] = setTimeout(async () => {
+    //             setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: true }))
 
-            try {
-                const response = await assistAi({
-                    system: `You are a premium travel copywriter helping a package creation wizard draft day-wise itinerary descriptions.
+    //             try {
+    //                 const isPlaceholderTitle = /^Explore .+ – Day \d+$/.test(title)
 
-Respond ONLY with a valid JSON object.
-Allowed keys:
-- description
+    //                 const response = await assistAi({
+    //                     system: `You are an expert India travel itinerary writer who creates vivid, specific, experience-driven day titles and descriptions for package quotations.
 
-Rules:
-1. description must be one polished paragraph between 55 and 90 words
-2. write warm, guest-friendly travel language suitable for a package quotation
-3. include arrival, local sightseeing, stay, transfer, or fresh-up context based on the entryType
-4. if entryType is Stay or TransitStay and a destination is available, mention the destination naturally
-5. if transportMode is provided for a transfer-style day, weave it in naturally
-6. do not use bullet points, numbering, markdown, emojis, or headings
-7. do not mention hotel category names
-8. return JSON only`,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: JSON.stringify({
-                                packageName: packageForm.name || '',
-                                originLocation: packageForm.originLocation || '',
-                                transportMode: packageForm.transportMode || '',
-                                day: {
-                                    title,
-                                    destinationName,
-                                    entryType: row.entryType
-                                }
-                            })
-                        }
-                    ]
-                }).unwrap()
+    // Respond ONLY with a valid JSON object.
+    // Allowed keys:
+    // - title
+    // - description
 
-                const parsed = parseAiJson(response)
-                const nextDescription = parsed?.description?.toString?.().trim?.() || ''
+    // TITLE RULES (most important):
+    // 1. Titles must name SPECIFIC places, experiences, or vibes — never generic phrases like "Explore X" or "Day in X"
+    // 2. Think like a travel influencer — make it sound exciting and worth doing
+    // 3. Good title patterns:
+    //    - Place combo: "Baga Beach, Tito's Lane & Fort Aguada"
+    //    - Experience-led: "Dudhsagar Falls Trek & Spice Plantation Lunch"
+    //    - Vibe-led: "Sunset Cruise on Mandovi & Goan Seafood Trail"
+    //    - Cultural: "Old Goa Churches, Latin Quarter & Fontainhas Walk"
+    //    - Adventure: "Solang Valley Snow Activities & Hadimba Temple"
+    // 4. Max 8 words in title
+    // 5. Only generate a new title if current one is a placeholder like "Explore X – Day N". Otherwise return the existing title unchanged.
+    // 6. If multiple days exist for the same destination, each title MUST cover completely different parts of the destination — no overlap
 
-                if (!nextDescription) {
+    // DESCRIPTION RULES:
+    // 1. One polished paragraph, 60 to 85 words
+    // 2. Naturally weave in the specific places from the title
+    // 3. Mention 2 to 3 real activities or experiences guests will actually do
+    // 4. Warm, guest-friendly tone suitable for a premium package quotation
+    // 5. End with the return to stay and overnight halt
+    // 6. No bullets, no numbering, no markdown, no emojis, no hotel category names
+
+    // Return JSON only. No explanation. No markdown fences.`,
+    //                     messages: [
+    //                         {
+    //                             role: 'user',
+    //                             content: JSON.stringify({
+    //                                 packageName: packageForm.name || '',
+    //                                 originLocation: packageForm.originLocation || '',
+    //                                 transportMode: packageForm.transportMode || '',
+    //                                 day: {
+    //                                     currentTitle: title,
+    //                                     isPlaceholderTitle,
+    //                                     destinationName,
+    //                                     entryType: row.entryType,
+    //                                     dayIndex:
+    //                                         activities
+    //                                             .filter(
+    //                                                 a => a.destinationName === row.destinationName && a.entryType === 'Stay'
+    //                                             )
+    //                                             .findIndex(a => a.id === row.id) + 1,
+    //                                     totalDaysAtDestination: activities.filter(
+    //                                         a => a.destinationName === row.destinationName && a.entryType === 'Stay'
+    //                                     ).length,
+    //                                     otherDayTitlesAtSameDestination: activities
+    //                                         .filter(
+    //                                             a =>
+    //                                                 a.destinationName === row.destinationName &&
+    //                                                 a.entryType === 'Stay' &&
+    //                                                 a.id !== row.id
+    //                                         )
+    //                                         .map(a => a.title)
+    //                                 }
+    //                             })
+    //                         }
+    //                     ]
+    //                 }).unwrap()
+    //                 const parsed = parseAiJson(response)
+    //                 const nextDescription = parsed?.description?.toString?.().trim?.() || ''
+    //                 const nextTitle = parsed?.title?.toString?.().trim?.() || ''
+
+    //                 if (!nextDescription && !nextTitle) {
+    //                     return
+    //                 }
+
+    //                 setActivities(prev =>
+    //                     prev.map(item => {
+    //                         if (item.id !== row.id) {
+    //                             return item
+    //                         }
+
+    //                         const updatedItem = { ...item }
+
+    //                         // Only replace title if it's still a placeholder
+    //                         if (nextTitle && /^Explore .+ – Day \d+$/.test(item.title)) {
+    //                             updatedItem.title = nextTitle
+    //                         }
+
+    //                         if (
+    //                             nextDescription &&
+    //                             shouldReplaceDescription({
+    //                                 previousRow: item,
+    //                                 nextDescription,
+    //                                 field: 'title',
+    //                                 nextValue: updatedItem.title
+    //                             })
+    //                         ) {
+    //                             updatedItem.description = nextDescription
+    //                         }
+
+    //                         return updatedItem
+    //                     })
+    //                 )
+    //             } catch (error) {
+    //                 // Keep the wizard editable even if AI description generation fails.
+    //             } finally {
+    //                 setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: false }))
+    //                 delete activityDescriptionTimeoutRef.current[row.id]
+    //             }
+    //         }, 500)
+    //     }
+    const pendingDestinationBatchRef = useRef({})
+    const destinationBatchTimeoutRef = useRef({})
+
+    const scheduleActivityDescriptionAutofill = useCallback(
+        row => {
+            const title = row.title?.trim()
+            const destinationName = row.destinationName?.trim()
+            const isPlaceholder = row.isAiPending === true
+
+            // For AI pending rows skip the title check — they intentionally have no title yet
+            if (!isPlaceholder) {
+                const matchedItenary = getMatchedItenary(title)
+                if (!title || matchedItenary?.description?.trim()) {
+                    return
+                }
+            }
+
+            // Non-placeholder rows — transit, arrival, freshup — fire individually
+            if (!isPlaceholder || !destinationName) {
+                if (activityDraftInFlightRef.current[row.id]) {
                     return
                 }
 
-                setActivities(prev =>
-                    prev.map(item => {
-                        if (item.id !== row.id) {
-                            return item
-                        }
+                const existingTimeout = activityDescriptionTimeoutRef.current[row.id]
+                if (existingTimeout) clearTimeout(existingTimeout)
 
-                        if (
-                            !shouldReplaceDescription({
-                                previousRow: item,
-                                nextDescription,
-                                field: 'title',
-                                nextValue: item.title
+                activityDescriptionTimeoutRef.current[row.id] = setTimeout(async () => {
+                    activityDraftInFlightRef.current[row.id] = true
+                    setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: true }))
+                    try {
+                        const response = await runQueuedAiRequest(() =>
+                            assistAi({
+                                system: `You are a senior luxury travel writer crafting day-wise itinerary content for premium holiday packages.
+
+Respond ONLY with a valid JSON object.
+Allowed keys:
+- title
+- description
+
+TITLE RULES:
+1. Name 2 to 3 SPECIFIC real places or experiences relevant to the entryType and destination
+2. Use "&" to join — e.g. "Shimla Arrival & Mall Road Evening Stroll"
+3. For Transit days name the route and mode — e.g. "Delhi to Goa via Flight"
+4. For FreshUp — e.g. "Quick Freshen Up & Leisure Time"
+5. For Arrival days name the destination and first experience — e.g. "Goa Arrival & Calangute Beach Evening"
+6. NEVER use: Explore, Visit, Tour, Discover, Day at the start
+7. Only replace title if current one is generic like "Arrival in X", "Transit Day", "Fresh Up Day", "New Stay Day"
+8. Max 10 words
+
+DESCRIPTION RULES:
+1. Write TWO paragraphs with a blank line between them
+2. Paragraph 1 (70-85 words): Set the scene — the journey mood, destination atmosphere, or nature of the day. Make guests feel they are already there. Be vivid and specific to this destination
+3. Paragraph 2 (70-85 words): Walk through what guests actually experience — transfer comfort, arrival feeling, first impressions, local sights on the way, or the ease of the day. End warmly with check-in or overnight halt
+4. If entryType is TransitStay or Stay mention the destination and specific local details naturally
+5. If transportMode is provided weave it naturally into the narrative
+6. Tone: warm, vivid, aspirational — like a seasoned travel writer
+7. No bullets, numbering, markdown, emojis, or hotel names
+8. Return JSON only`,
+                                messages: [
+                                    {
+                                        role: 'user',
+                                        content: JSON.stringify({
+                                            packageName: packageForm.name || '',
+                                            originLocation: packageForm.originLocation || '',
+                                            transportMode: packageForm.transportMode || '',
+                                            day: {
+                                                currentTitle: title,
+                                                destinationName,
+                                                entryType: row.entryType
+                                            }
+                                        })
+                                    }
+                                ]
+                            }).unwrap()
+                        )
+
+                        const { title: nextTitle, description: nextDescription } = extractAiDraftPayload(response)
+
+                        if (!nextTitle && !nextDescription) return
+
+                        setActivities(prev =>
+                            prev.map(item => {
+                                if (item.id !== row.id) return item
+
+                                const updatedItem = { ...item }
+
+                                if (nextTitle && isGenericActivityTitle(item.title)) {
+                                    updatedItem.title = nextTitle
+                                }
+
+                                if (
+                                    nextDescription &&
+                                    shouldReplaceDescription({
+                                        previousRow: item,
+                                        nextDescription,
+                                        field: 'title',
+                                        nextValue: updatedItem.title
+                                    })
+                                ) {
+                                    updatedItem.description = nextDescription
+                                }
+
+                                updatedItem.isAiPending = false
+
+                                return updatedItem
                             })
-                        ) {
-                            return item
+                        )
+                    } catch (error) {
+                        if (isAiRateLimitError(error)) {
+                            setTimeout(() => {
+                                scheduleActivityDescriptionAutofill(row)
+                            }, getAiRetryDelayMs(error))
+                        }
+                    } finally {
+                        delete activityDraftInFlightRef.current[row.id]
+                        setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: false }))
+                        delete activityDescriptionTimeoutRef.current[row.id]
+                    }
+                }, 500)
+                return
+            }
+
+            // Placeholder Stay rows — queue by destination, then draft each day sequentially for reliability.
+            if (destinationDraftInFlightRef.current[destinationName]) {
+                return
+            }
+
+            if (!pendingDestinationBatchRef.current[destinationName]) {
+                pendingDestinationBatchRef.current[destinationName] = []
+            }
+
+            const alreadyQueued = pendingDestinationBatchRef.current[destinationName].some(r => r.id === row.id)
+            if (!alreadyQueued) {
+                pendingDestinationBatchRef.current[destinationName].push(row)
+            }
+
+            if (destinationBatchTimeoutRef.current[destinationName]) {
+                clearTimeout(destinationBatchTimeoutRef.current[destinationName])
+            }
+
+            destinationBatchTimeoutRef.current[destinationName] = setTimeout(async () => {
+                destinationDraftInFlightRef.current[destinationName] = true
+                const batchRows = pendingDestinationBatchRef.current[destinationName] || []
+                delete pendingDestinationBatchRef.current[destinationName]
+                delete destinationBatchTimeoutRef.current[destinationName]
+
+                if (!batchRows.length) return
+
+                batchRows.forEach(r => {
+                    setDescriptionLoadingByRow(prev => ({ ...prev, [r.id]: true }))
+                })
+
+                try {
+                    const generatedRows = []
+                    const alreadyUsedTitles = activities
+                        .filter(
+                            item =>
+                                item.destinationName?.trim() === destinationName &&
+                                item.id &&
+                                !batchRows.some(batchRow => batchRow.id === item.id) &&
+                                item.title?.trim()
+                        )
+                        .map(item => item.title.trim())
+
+                    // eslint-disable-next-line no-restricted-syntax
+                    for (const [index, batchRow] of batchRows.entries()) {
+                        // eslint-disable-next-line no-await-in-loop
+                        const generated = await requestSingleActivityDraft({
+                            row: batchRow,
+                            destinationName,
+                            dayNumber: index + 1,
+                            totalDaysAtDestination: batchRows.length,
+                            usedTitles: [...alreadyUsedTitles, ...generatedRows.map(item => item.title).filter(Boolean)]
+                        })
+
+                        generatedRows.push({
+                            id: batchRow.id,
+                            title: generated.title,
+                            description: generated.description
+                        })
+                    }
+
+                    const generatedSuccessRows = generatedRows.filter(item => item.title || item.description)
+                    const failedRows = batchRows.filter(
+                        batchRow => !generatedSuccessRows.some(generatedRow => generatedRow.id === batchRow.id)
+                    )
+
+                    setActivities(prev =>
+                        prev.map(item => {
+                            const generated = generatedRows.find(result => result.id === item.id)
+
+                            if (!generated) {
+                                return item
+                            }
+
+                            if (!generated.title && !generated.description) {
+                                return item
+                            }
+
+                            return {
+                                ...item,
+                                title: generated.title || item.title,
+                                description: generated.description || item.description,
+                                isAiPending: false
+                            }
+                        })
+                    )
+
+                    generatedSuccessRows.forEach(item => {
+                        delete activityDraftRetryCountRef.current[item.id]
+                    })
+
+                    if (failedRows.length) {
+                        const fallbackRows = []
+                        const retryRows = []
+
+                        failedRows.forEach((failedRow, index) => {
+                            const nextAttemptCount = (activityDraftRetryCountRef.current[failedRow.id] || 0) + 1
+                            activityDraftRetryCountRef.current[failedRow.id] = nextAttemptCount
+
+                            if (nextAttemptCount >= MAX_ACTIVITY_DRAFT_CYCLES) {
+                                fallbackRows.push({ row: failedRow, dayNumber: index + 1 })
+                            } else {
+                                retryRows.push(failedRow)
+                            }
+                        })
+
+                        if (fallbackRows.length) {
+                            setActivities(prev =>
+                                prev.map(item => {
+                                    const fallbackRow = fallbackRows.find(entry => entry.row.id === item.id)
+                                    if (!fallbackRow) {
+                                        return item
+                                    }
+
+                                    delete activityDraftRetryCountRef.current[item.id]
+
+                                    return {
+                                        ...item,
+                                        title:
+                                            item.title?.trim() ||
+                                            buildFallbackStayTitle({
+                                                destinationName,
+                                                dayNumber: fallbackRow.dayNumber
+                                            }),
+                                        description:
+                                            item.description?.trim() ||
+                                            buildFallbackStayDescription({
+                                                destinationName,
+                                                dayNumber: fallbackRow.dayNumber,
+                                                totalDaysAtDestination: batchRows.length
+                                            }),
+                                        isAiPending: false
+                                    }
+                                })
+                            )
                         }
 
-                        return {
-                            ...item,
-                            description: nextDescription
+                        if (retryRows.length) {
+                            setTimeout(() => {
+                                retryRows.forEach(scheduleActivityDescriptionAutofill)
+                            }, 1600)
                         }
+                    }
+                } catch (error) {
+                    if (isAiRateLimitError(error)) {
+                        setTimeout(() => {
+                            batchRows.forEach(scheduleActivityDescriptionAutofill)
+                        }, getAiRetryDelayMs(error))
+                        return
+                    }
+
+                    dispatch(
+                        openSnackbar({
+                            open: true,
+                            message: `AI could not draft day copy for ${destinationName} right now. You can type it manually and continue.`,
+                            variant: 'alert',
+                            alert: { color: 'warning' },
+                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                        })
+                    )
+                } finally {
+                    delete destinationDraftInFlightRef.current[destinationName]
+                    batchRows.forEach(r => {
+                        setDescriptionLoadingByRow(prev => ({ ...prev, [r.id]: false }))
                     })
-                )
-            } catch (error) {
-                // Keep the wizard editable even if AI description generation fails.
-            } finally {
-                setDescriptionLoadingByRow(prev => ({ ...prev, [row.id]: false }))
-                delete activityDescriptionTimeoutRef.current[row.id]
-            }
-        }, 500)
-    }
+                }
+            }, 800)
+        },
+        [
+            activities,
+            assistAi,
+            dispatch,
+            getMatchedItenary,
+            packageForm.name,
+            packageForm.originLocation,
+            packageForm.transportMode,
+            requestSingleActivityDraft,
+            runQueuedAiRequest,
+            shouldReplaceDescription
+        ]
+    )
+    useEffect(() => {
+        const timeouts = destinationBatchTimeoutRef.current
+        return () => Object.values(timeouts).forEach(id => clearTimeout(id))
+    }, [])
 
     const scheduleDestinationHotelAutofill = row => {
         const destinationName = row.name?.trim()
@@ -688,8 +1343,9 @@ Rules:
             setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: true }))
 
             try {
-                const response = await assistAi({
-                    system: `You are a destination research assistant for an India travel package wizard.
+                const response = await runQueuedAiRequest(() =>
+                    assistAi({
+                        system: `You are a destination research assistant for a travel package wizard.
 
 Respond ONLY with a valid JSON object.
 Allowed keys:
@@ -710,13 +1366,14 @@ Rules:
    - luxury_hotel: recognized luxury properties
    - premium_hotel: top-tier premium, iconic, or high-end boutique properties
 7. If exact certainty is limited, still give the best-fit plausible hotel names for that destination`,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: `Destination: ${destinationName}. Suggest 4 hotel names for each category.`
-                        }
-                    ]
-                }).unwrap()
+                        messages: [
+                            {
+                                role: 'user',
+                                content: `Destination: ${destinationName}. Suggest 4 hotel names for each category.`
+                            }
+                        ]
+                    }).unwrap()
+                )
 
                 const parsed = parseAiJson(response)
                 const nextDeluxHotel = normalizeHotelSuggestions(
@@ -744,7 +1401,11 @@ Rules:
                     })
                 )
             } catch (error) {
-                // Keep wizard usable even if AI hotel suggestions fail.
+                if (isAiRateLimitError(error)) {
+                    setTimeout(() => {
+                        scheduleDestinationHotelAutofill(row)
+                    }, getAiRetryDelayMs(error))
+                }
             } finally {
                 setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: false }))
                 delete destinationHotelTimeoutRef.current[row.id]
@@ -813,9 +1474,15 @@ Rules:
                 }
 
                 const updated = { ...item, [field]: value }
+
+                if ((field === 'title' || field === 'description') && value?.toString?.().trim?.()) {
+                    updated.isAiPending = false
+                }
+
                 if (field === 'entryType' && value !== 'Stay' && value !== 'TransitStay') {
                     updated.destinationName = ''
                     updated.destinationId = ''
+                    updated.isAiPending = false
                 }
 
                 const matchedItenary = getMatchedItenary(field === 'title' ? value : updated.title)
@@ -980,6 +1647,18 @@ Rules:
     }
 
     const handleGenerateFromPrompt = () => {
+        if (!packageForm.originLocation || packageForm.transportMode === 'On Own Vehicles') {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Please enter a origin location and transport mode.',
+                    variant: 'alert',
+                    alert: { color: 'warning' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
+        }
         const parsedPrompt = parsePromptWithFallbackOrigin(draftPrompt, packageForm.originLocation)
         const hydratedDestinations = parsedPrompt.destinations.map(item =>
             buildDestinationRowFromValue(item.name, item.nights)
@@ -1039,8 +1718,9 @@ Rules:
             try {
                 setVoiceDrafting(true)
 
-                const response = await assistAi({
-                    system: `You convert spoken travel package requests into structured JSON for a package wizard.
+                const response = await runQueuedAiRequest(() =>
+                    assistAi({
+                        system: `You convert spoken travel package requests into structured JSON for a package wizard.
 
 Respond ONLY with valid JSON.
 Allowed keys:
@@ -1059,13 +1739,14 @@ Rules:
 5. Keep originLocation empty if not clearly mentioned
 6. packageName should be concise and travel-friendly
 7. Never return explanation text or markdown`,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: trimmedPrompt
-                        }
-                    ]
-                }).unwrap()
+                        messages: [
+                            {
+                                role: 'user',
+                                content: trimmedPrompt
+                            }
+                        ]
+                    }).unwrap()
+                )
 
                 const parsed = parseAiJson(response)
                 const aiDestinations = Array.isArray(parsed?.destinations) ? parsed.destinations : []
@@ -1121,6 +1802,7 @@ Rules:
             handleGenerateFromPrompt,
             packageForm.originLocation,
             packageForm.transportMode,
+            runQueuedAiRequest,
             scheduleActivityDescriptionAutofill,
             scheduleDestinationHotelAutofill
         ]
@@ -1133,8 +1815,10 @@ Rules:
             packageForm.originLocation,
             packageForm.transportMode
         ).map(item => {
-            const matchedItenary = getMatchedItenary(item.title)
+            // Leave AI pending rows untouched — batch autofill will handle them
+            if (item.isAiPending) return item
 
+            const matchedItenary = getMatchedItenary(item.title)
             return {
                 ...item,
                 description:
@@ -1263,7 +1947,7 @@ Rules:
         }
 
         if (activeStep === 2) {
-            return activities.some(item => item.title.trim())
+            return activities.some(item => item.title.trim() || item.isAiPending)
         }
 
         return true
@@ -1290,6 +1974,24 @@ Rules:
 
     const saveWizard = async () => {
         try {
+            const unresolvedAiRows = activities.filter(
+                item => item.isAiPending && (!item.title?.trim() || !item.description?.trim())
+            )
+
+            if (unresolvedAiRows.length) {
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message:
+                            'A few day titles or descriptions are still pending. Please wait for AI or fill them manually before saving.',
+                        variant: 'alert',
+                        alert: { color: 'warning' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
+                return
+            }
+
             setSaving(true)
 
             const packageResponse = await createPackageClient({
@@ -1349,6 +2051,7 @@ Rules:
 
             const destinationMap = Object.fromEntries(destinationResults)
 
+            // const validActivities = activities.filter(item => item.title.trim())
             const validActivities = activities.filter(item => item.title.trim())
             const uniqueActivityTitles = [...new Set(validActivities.map(item => item.title.trim()))]
 
@@ -1358,7 +2061,15 @@ Rules:
                     const sourceActivity = validActivities.find(
                         item => toNormalized(item.title) === toNormalized(title)
                     )
-                    const nextDescription = sourceActivity?.description?.trim() || ''
+                    const nextDescription =
+                        sourceActivity?.description?.trim() ||
+                        buildDefaultDescription({
+                            entryType: sourceActivity?.entryType,
+                            destinationName: sourceActivity?.destinationName,
+                            title: sourceActivity?.title,
+                            originLocation: packageForm.originLocation,
+                            transportMode: packageForm.transportMode
+                        })
 
                     if (existing) {
                         const existingDescription = existing?.description?.trim?.() || ''
@@ -1769,7 +2480,10 @@ Rules:
                                                 </CustomButton>
                                             </Stack>
                                             <Stack direction='row' justifyContent='space-between' alignItems='center'>
-                                                <Typography variant='h5'>Day {index + 1}</Typography>
+                                                <Typography variant='h5'>
+                                                    Day {index + 1}
+                                                    {row.title ? ` – ${row.title}` : ''}
+                                                </Typography>
                                                 {activities.length > 1 && (
                                                     <Button
                                                         color='error'
@@ -1789,6 +2503,7 @@ Rules:
                                                         onChange={event =>
                                                             updateActivityRow(row.id, 'title', event.target.value)
                                                         }
+                                                        placeholder={row.isAiPending ? 'Generating title...' : ''}
                                                     />
                                                 </Grid>
                                                 <Grid item xs={12} md={3}>

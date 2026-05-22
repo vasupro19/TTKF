@@ -168,7 +168,7 @@ export default function PackageItenaryView() {
     const formattedItineraries = itenaryData.map(item => ({
         id: item.id,
         title: item.title || item.itenary?.title || 'Untitled Activity',
-        description: item.description || item.itenary?.description || buildPackageActivityFallbackDescription(item),
+        description: item.itenary?.description || item.description || buildPackageActivityFallbackDescription(item),
         image: item.image || '',
         destination: item?.destination?.name || 'Transit',
         entryType: item.entryType || 'Stay',
