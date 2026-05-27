@@ -301,6 +301,9 @@ Before reaching the final drop location, the return movement is planned to feel 
 This final transfer is intended to close the trip gracefully, giving guests a relaxed end to their travel experience while maintaining comfort, convenience, and a sense of completion through the final drop.`
 }
 
+const buildArrivalStayDescription = destinationName =>
+    `Arrive in ${destinationName} and settle in comfortably after the journey. Depending on your arrival time, enjoy a relaxed local outing, market visit, or leisure moments while soaking in the atmosphere of the destination. The day is kept easy and welcoming so the trip begins on a pleasant and comfortable note before the overnight stay.`
+
 const parseDraftPrompt = prompt => {
     const normalizedPrompt = prompt.replace(/\s+/g, ' ').trim()
     const originMatch =
@@ -416,11 +419,18 @@ const buildDefaultDescription = ({ entryType, destinationName, title, originLoca
 
     if (entryType === 'TransitStay') {
         if (originLocation && destinationName) {
-            return `Guest pickup from ${originLocation} and proceed to ${destinationName}${transportMode ? ` via ${transportMode}` : ''}. Enjoy the journey with a comfortable transfer plan and a smooth arrival into the destination. After reaching ${destinationName}, check in and unwind, with the remaining time available for light local exploration or relaxed leisure before the overnight stay.`
+            return buildTransitStayDescription({
+                fromLocation: originLocation,
+                toLocation: destinationName,
+                transportMode
+            })
         }
 
         if (destinationName) {
-            return `Travel onwards to ${destinationName}${transportMode ? ` via ${transportMode}` : ''} and arrive comfortably at the destination. After arrival, settle into the stay and take the rest of the day at an easy pace with time to relax, enjoy the surroundings, or experience a gentle introduction to the place before the overnight halt.`
+            return buildTransitStayDescription({
+                toLocation: destinationName,
+                transportMode
+            })
         }
 
         return transportMode
@@ -441,6 +451,120 @@ const buildDefaultDescription = ({ entryType, destinationName, title, originLoca
     }
 
     return 'Enjoy a comfortable and well-planned day filled with sightseeing, local experiences, and a smooth overall travel flow. The itinerary is arranged to keep the experience engaging yet relaxed, helping guests make the most of the destination while maintaining comfort throughout the journey.'
+}
+
+const parseRouteTitle = title => {
+    const cleanTitle = (title || '').toString().trim()
+
+    let match = cleanTitle.match(/^Transfer\s+from\s+(.+?)\s+to\s+(.+?)(?:\s+via\s+(.+))?$/i)
+    if (match) {
+        return {
+            kind: 'transfer',
+            fromLocation: match[1]?.trim() || '',
+            toLocation: match[2]?.trim() || '',
+            transportMode: match[3]?.trim() || ''
+        }
+    }
+
+    match = cleanTitle.match(/^Drop\s+from\s+(.+?)\s+to\s+(.+?)(?:\s+via\s+(.+))?$/i)
+    if (match) {
+        return {
+            kind: 'return',
+            fromLocation: match[1]?.trim() || '',
+            toLocation: match[2]?.trim() || '',
+            transportMode: match[3]?.trim() || ''
+        }
+    }
+
+    match = cleanTitle.match(/^Transfer\s+to\s+(.+?)(?:\s+via\s+(.+))?$/i)
+    if (match) {
+        return {
+            kind: 'transfer',
+            fromLocation: '',
+            toLocation: match[1]?.trim() || '',
+            transportMode: match[2]?.trim() || ''
+        }
+    }
+
+    match = cleanTitle.match(/^Drop\s+to\s+(.+?)(?:\s+via\s+(.+))?$/i)
+    if (match) {
+        return {
+            kind: 'return',
+            fromLocation: '',
+            toLocation: match[1]?.trim() || '',
+            transportMode: match[2]?.trim() || ''
+        }
+    }
+
+    return null
+}
+
+const isReplaceableActivityTitle = title => {
+    const normalizedTitle = (title || '').toString().trim()
+
+    if (!normalizedTitle) {
+        return true
+    }
+
+    return (
+        isGenericActivityTitle(normalizedTitle) ||
+        /^Arrival in /i.test(normalizedTitle) ||
+        /^Transfer\s+(?:from|to)\s+/i.test(normalizedTitle) ||
+        /^Drop\s+(?:from|to)\s+/i.test(normalizedTitle)
+    )
+}
+
+const getReplaceableDescriptionCandidates = ({ row, originLocation, transportMode }) => {
+    const candidates = [
+        buildDefaultDescription({
+            entryType: row.entryType,
+            destinationName: row.destinationName,
+            title: row.title,
+            originLocation,
+            transportMode
+        })
+    ]
+
+    if (row.entryType === 'Stay' && row.destinationName && row.title?.trim() === `Arrival in ${row.destinationName}`) {
+        candidates.push(buildArrivalStayDescription(row.destinationName))
+    }
+
+    const parsedRoute = parseRouteTitle(row.title)
+    if (parsedRoute?.toLocation) {
+        const nextTransportMode = parsedRoute.transportMode || transportMode
+
+        if (row.entryType === 'TransitStay') {
+            candidates.push(
+                buildTransitStayDescription({
+                    fromLocation: parsedRoute.fromLocation,
+                    toLocation: parsedRoute.toLocation,
+                    transportMode: nextTransportMode
+                })
+            )
+        }
+
+        if (row.entryType === 'Transit') {
+            if (parsedRoute.kind === 'return') {
+                candidates.push(
+                    buildReturnDescription({
+                        fromLocation: parsedRoute.fromLocation,
+                        toLocation: parsedRoute.toLocation,
+                        transportMode: nextTransportMode
+                    })
+                )
+            } else {
+                candidates.push(
+                    buildTransferDescription({
+                        fromLocation: parsedRoute.fromLocation,
+                        toLocation: parsedRoute.toLocation,
+                        transportMode: nextTransportMode
+                    })
+                )
+            }
+        }
+    }
+
+    return candidates.map(item => item?.trim()).filter(Boolean)
 }
 
 const buildActivitiesFromDestinations = (destinationRows, originLocation = '', transportMode = '') => {
@@ -476,7 +600,7 @@ const buildActivitiesFromDestinations = (destinationRows, originLocation = '', t
             activities.push(
                 createActivityRow({
                     title: `Arrival in ${destination.name}`,
-                    description: `Arrive in ${destination.name} and settle in comfortably after the journey. Depending on your arrival time, enjoy a relaxed local outing, market visit, or leisure moments while soaking in the atmosphere of the destination. The day is kept easy and welcoming so the trip begins on a pleasant and comfortable note before the overnight stay.`,
+                    description: buildArrivalStayDescription(destination.name),
                     destinationName: destination.name,
                     destinationId: '',
                     entryType: 'Stay'
@@ -534,8 +658,17 @@ const copyHotelsFromDestination = (destination = {}) => ({
     premium_hotel: destination.premium_hotel || ''
 })
 
-const normalizeHotelSuggestions = value => {
-    const rawList = Array.isArray(value) ? value : (value || '').toString().split(/\n|;|\||,/)
+const HOTEL_NOISE_PATTERN =
+    /(amenities|room details|pricing hints|starting from|per night|facilities|inclusions|price range)/i
+
+const extractHotelNameList = value => {
+    let rawList = (value || '').toString().split(/\n|;|\||,/)
+
+    if (Array.isArray(value)) {
+        rawList = value
+    } else if (typeof value === 'object' && value !== null) {
+        rawList = Object.values(value)
+    }
 
     const cleaned = rawList
         .map(item =>
@@ -543,11 +676,37 @@ const normalizeHotelSuggestions = value => {
                 ?.toString?.()
                 ?.replace(/^\s*\d+[).\s-]*/g, '')
                 ?.replace(/^[-*•]\s*/g, '')
+                ?.replace(/\s{2,}/g, ' ')
                 ?.trim?.()
         )
+        .map(item => item?.split(/amenities:|room details:|pricing hints:|starting from:/i)?.[0]?.trim?.())
         .filter(Boolean)
+        .filter(item => !HOTEL_NOISE_PATTERN.test(item))
+        .filter(item => item.length >= 3 && item.length <= 80)
 
-    return cleaned.slice(0, 4).join(' | ')
+    return [...new Set(cleaned)]
+}
+
+const normalizeHotelSuggestions = value => extractHotelNameList(value).slice(0, 4).join(' | ')
+const hasFourHotels = value => extractHotelNameList(value).length >= 4
+const mergeHotelSuggestions = (...values) => [...new Set(values.flatMap(extractHotelNameList))].slice(0, 4).join(' | ')
+const ensureFourHotels = (value, destinationName, categoryLabel) => {
+    const base = extractHotelNameList(value).slice(0, 4)
+    const destinationPrefix = destinationName?.trim() || 'Destination'
+    const fallback = [
+        `${destinationPrefix} ${categoryLabel} Hotel 1`,
+        `${destinationPrefix} ${categoryLabel} Hotel 2`,
+        `${destinationPrefix} ${categoryLabel} Hotel 3`,
+        `${destinationPrefix} ${categoryLabel} Hotel 4`
+    ]
+
+    fallback.forEach(item => {
+        if (base.length < 4 && !base.includes(item)) {
+            base.push(item)
+        }
+    })
+
+    return base.slice(0, 4).join(' | ')
 }
 
 function PackageCreationWizard() {
@@ -836,7 +995,16 @@ Already used titles: ${usedTitles.join(' | ') || 'None'}`
                 return true
             }
 
-            if (previousRow.description === previousDefaultDescription) {
+            const replaceableDescriptionCandidates = getReplaceableDescriptionCandidates({
+                row: previousRow,
+                originLocation: packageForm.originLocation,
+                transportMode: packageForm.transportMode
+            })
+
+            if (
+                previousRow.description === previousDefaultDescription ||
+                replaceableDescriptionCandidates.includes(previousRow.description?.trim())
+            ) {
                 return true
             }
 
@@ -1053,22 +1221,25 @@ Allowed keys:
 TITLE RULES:
 1. Name 2 to 3 SPECIFIC real places or experiences relevant to the entryType and destination
 2. Use "&" to join — e.g. "Shimla Arrival & Mall Road Evening Stroll"
-3. For Transit days name the route and mode — e.g. "Delhi to Goa via Flight"
+3. For Transit or TransitStay days, name the route and travel style clearly — e.g. "Delhi to Manali Overnight Volvo Journey" or "Manali to Shimla Scenic Road Transfer"
 4. For FreshUp — e.g. "Quick Freshen Up & Leisure Time"
 5. For Arrival days name the destination and first experience — e.g. "Goa Arrival & Calangute Beach Evening"
 6. NEVER use: Explore, Visit, Tour, Discover, Day at the start
-7. Only replace title if current one is generic like "Arrival in X", "Transit Day", "Fresh Up Day", "New Stay Day"
+7. If currentTitle is a plain system title like "Arrival in X", "Transfer from A to B", or "Drop from A to B", upgrade it to a more polished, quotation-ready title
 8. Max 10 words
 
 DESCRIPTION RULES:
 1. Write TWO paragraphs with a blank line between them
-2. Paragraph 1 (70-85 words): Set the scene — the journey mood, destination atmosphere, or nature of the day. Make guests feel they are already there. Be vivid and specific to this destination
-3. Paragraph 2 (70-85 words): Walk through what guests actually experience — transfer comfort, arrival feeling, first impressions, local sights on the way, or the ease of the day. End warmly with check-in or overnight halt
+2. Paragraph 1 (75-95 words): Set the scene — the journey mood, route atmosphere, or destination vibe. Make guests feel they are already there. Be vivid and specific
+3. Paragraph 2 (75-95 words): Walk through what guests actually experience — transfer comfort, departure rhythm, likely arrival part of day, first impressions, nearby evening outing, or the ease of the plan. End warmly with check-in or overnight halt
 4. If entryType is TransitStay or Stay mention the destination and specific local details naturally
 5. If transportMode is provided weave it naturally into the narrative
-6. Tone: warm, vivid, aspirational — like a seasoned travel writer
-7. No bullets, numbering, markdown, emojis, or hotel names
-8. Return JSON only`,
+6. If this is a bus or Volvo route day, naturally mention whether it feels like an overnight departure, a scenic road journey, or a comfortable return, whichever suits the route context
+7. For return days, mention the smooth wrap-up of the holiday and arrival back to origin
+8. Do not invent exact bus operators, fares, or timings unless clearly provided in context
+9. Tone: warm, vivid, aspirational — like a seasoned travel writer
+10. No bullets, numbering, markdown, emojis, or hotel names
+11. Return JSON only`,
                                 messages: [
                                     {
                                         role: 'user',
@@ -1079,7 +1250,11 @@ DESCRIPTION RULES:
                                             day: {
                                                 currentTitle: title,
                                                 destinationName,
-                                                entryType: row.entryType
+                                                entryType: row.entryType,
+                                                isReturnDay: /^Drop\s+/i.test(title || ''),
+                                                isRouteDay:
+                                                    row.entryType === 'Transit' || row.entryType === 'TransitStay',
+                                                titleNeedsUpgrade: isReplaceableActivityTitle(title)
                                             }
                                         })
                                     }
@@ -1097,7 +1272,7 @@ DESCRIPTION RULES:
 
                                 const updatedItem = { ...item }
 
-                                if (nextTitle && isGenericActivityTitle(item.title)) {
+                                if (nextTitle && isReplaceableActivityTitle(item.title)) {
                                     updatedItem.title = nextTitle
                                 }
 
@@ -1318,34 +1493,35 @@ DESCRIPTION RULES:
         return () => Object.values(timeouts).forEach(id => clearTimeout(id))
     }, [])
 
-    const scheduleDestinationHotelAutofill = row => {
-        const destinationName = row.name?.trim()
-        if (!destinationName || getMatchedDestination(destinationName)) {
-            return
-        }
+    const scheduleDestinationHotelAutofill = useCallback(
+        row => {
+            const destinationName = row.name?.trim()
+            if (!destinationName) {
+                return
+            }
 
-        const hasAllHotels =
-            row.delux_hotel?.trim() &&
-            row.super_delux_hotel?.trim() &&
-            row.luxury_hotel?.trim() &&
-            row.premium_hotel?.trim()
+            const hasAllHotels =
+                hasFourHotels(row.delux_hotel) &&
+                hasFourHotels(row.super_delux_hotel) &&
+                hasFourHotels(row.luxury_hotel) &&
+                hasFourHotels(row.premium_hotel)
 
-        if (hasAllHotels) {
-            return
-        }
+            if (hasAllHotels) {
+                return
+            }
 
-        const existingTimeout = destinationHotelTimeoutRef.current[row.id]
-        if (existingTimeout) {
-            clearTimeout(existingTimeout)
-        }
+            const existingTimeout = destinationHotelTimeoutRef.current[row.id]
+            if (existingTimeout) {
+                clearTimeout(existingTimeout)
+            }
 
-        destinationHotelTimeoutRef.current[row.id] = setTimeout(async () => {
-            setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: true }))
+            destinationHotelTimeoutRef.current[row.id] = setTimeout(async () => {
+                setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: true }))
 
-            try {
-                const response = await runQueuedAiRequest(() =>
-                    assistAi({
-                        system: `You are a destination research assistant for a travel package wizard.
+                try {
+                    const response = await runQueuedAiRequest(() =>
+                        assistAi({
+                            system: `You are a destination research assistant for a travel package wizard.
 
 Respond ONLY with a valid JSON object.
 Allowed keys:
@@ -1366,52 +1542,138 @@ Rules:
    - luxury_hotel: recognized luxury properties
    - premium_hotel: top-tier premium, iconic, or high-end boutique properties
 7. If exact certainty is limited, still give the best-fit plausible hotel names for that destination`,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: `Destination: ${destinationName}. Suggest 4 hotel names for each category.`
+                            messages: [
+                                {
+                                    role: 'user',
+                                    content: JSON.stringify({
+                                        destination: destinationName,
+                                        existingHotels: {
+                                            delux_hotel: extractHotelNameList(row.delux_hotel),
+                                            super_delux_hotel: extractHotelNameList(row.super_delux_hotel),
+                                            luxury_hotel: extractHotelNameList(row.luxury_hotel),
+                                            premium_hotel: extractHotelNameList(row.premium_hotel)
+                                        },
+                                        instruction:
+                                            'Keep useful existing hotel names if present, and add enough more destination-specific hotel names so every category has exactly 4 names.'
+                                    })
+                                }
+                            ]
+                        }).unwrap()
+                    )
+
+                    const parsed = parseAiJson(response)
+                    const nextDeluxHotel = normalizeHotelSuggestions(
+                        parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
+                    )
+                    const nextSuperDeluxHotel = normalizeHotelSuggestions(
+                        parsed.super_delux_hotel || parsed.superDeluxeHotel || parsed.super_deluxe_hotel || ''
+                    )
+                    const nextLuxuryHotel = normalizeHotelSuggestions(parsed.luxury_hotel || parsed.luxuryHotel || '')
+                    const nextPremiumHotel = normalizeHotelSuggestions(
+                        parsed.premium_hotel || parsed.premiumHotel || ''
+                    )
+
+                    let finalDeluxHotel = mergeHotelSuggestions(row.delux_hotel, nextDeluxHotel)
+                    let finalSuperDeluxHotel = mergeHotelSuggestions(row.super_delux_hotel, nextSuperDeluxHotel)
+                    let finalLuxuryHotel = mergeHotelSuggestions(row.luxury_hotel, nextLuxuryHotel)
+                    let finalPremiumHotel = mergeHotelSuggestions(row.premium_hotel, nextPremiumHotel)
+
+                    let strictRetryCount = 0
+                    while (
+                        strictRetryCount < 3 &&
+                        (!hasFourHotels(finalDeluxHotel) ||
+                            !hasFourHotels(finalSuperDeluxHotel) ||
+                            !hasFourHotels(finalLuxuryHotel) ||
+                            !hasFourHotels(finalPremiumHotel))
+                    ) {
+                        // eslint-disable-next-line no-await-in-loop
+                        const strictResponse = await runQueuedAiRequest(() =>
+                            assistAi({
+                                system: `Return ONLY valid JSON with exactly these keys:
+delux_hotel, super_delux_hotel, luxury_hotel, premium_hotel.
+
+Each key must contain exactly 4 hotel names.
+Output format per key: "Hotel 1 | Hotel 2 | Hotel 3 | Hotel 4"
+No descriptions. No prices. No amenities. No bullets. No markdown.`,
+                                messages: [
+                                    {
+                                        role: 'user',
+                                        content: `Destination: ${destinationName}. Return exactly 4 hotel names in each category.`
+                                    }
+                                ]
+                            }).unwrap()
+                        )
+
+                        const strictParsed = parseAiJson(strictResponse)
+                        if (!hasFourHotels(finalDeluxHotel)) {
+                            finalDeluxHotel = mergeHotelSuggestions(
+                                finalDeluxHotel,
+                                strictParsed.delux_hotel || strictParsed.deluxe_hotel || strictParsed.deluxeHotel || ''
+                            )
+                        }
+                        if (!hasFourHotels(finalSuperDeluxHotel)) {
+                            finalSuperDeluxHotel = mergeHotelSuggestions(
+                                finalSuperDeluxHotel,
+                                strictParsed.super_delux_hotel ||
+                                    strictParsed.superDeluxeHotel ||
+                                    strictParsed.super_deluxe_hotel ||
+                                    ''
+                            )
+                        }
+                        if (!hasFourHotels(finalLuxuryHotel)) {
+                            finalLuxuryHotel = mergeHotelSuggestions(
+                                finalLuxuryHotel,
+                                strictParsed.luxury_hotel || strictParsed.luxuryHotel || ''
+                            )
+                        }
+                        if (!hasFourHotels(finalPremiumHotel)) {
+                            finalPremiumHotel = mergeHotelSuggestions(
+                                finalPremiumHotel,
+                                strictParsed.premium_hotel || strictParsed.premiumHotel || ''
+                            )
+                        }
+
+                        strictRetryCount += 1
+                    }
+
+                    const resolvedDeluxHotel = ensureFourHotels(finalDeluxHotel, destinationName, 'Delux')
+                    const resolvedSuperDeluxHotel = ensureFourHotels(
+                        finalSuperDeluxHotel,
+                        destinationName,
+                        'Super Delux'
+                    )
+                    const resolvedLuxuryHotel = ensureFourHotels(finalLuxuryHotel, destinationName, 'Luxury')
+                    const resolvedPremiumHotel = ensureFourHotels(finalPremiumHotel, destinationName, 'Premium')
+
+                    setDestinations(prev =>
+                        prev.map(item => {
+                            if (item.id !== row.id) {
+                                return item
                             }
-                        ]
-                    }).unwrap()
-                )
 
-                const parsed = parseAiJson(response)
-                const nextDeluxHotel = normalizeHotelSuggestions(
-                    parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
-                )
-                const nextSuperDeluxHotel = normalizeHotelSuggestions(
-                    parsed.super_delux_hotel || parsed.superDeluxeHotel || parsed.super_deluxe_hotel || ''
-                )
-                const nextLuxuryHotel = normalizeHotelSuggestions(parsed.luxury_hotel || parsed.luxuryHotel || '')
-                const nextPremiumHotel = normalizeHotelSuggestions(parsed.premium_hotel || parsed.premiumHotel || '')
-
-                setDestinations(prev =>
-                    prev.map(item => {
-                        if (item.id !== row.id) {
-                            return item
-                        }
-
-                        return {
-                            ...item,
-                            delux_hotel: item.delux_hotel || nextDeluxHotel || item.delux_hotel,
-                            super_delux_hotel: item.super_delux_hotel || nextSuperDeluxHotel || item.super_delux_hotel,
-                            luxury_hotel: item.luxury_hotel || nextLuxuryHotel || item.luxury_hotel,
-                            premium_hotel: item.premium_hotel || nextPremiumHotel || item.premium_hotel
-                        }
-                    })
-                )
-            } catch (error) {
-                if (isAiRateLimitError(error)) {
-                    setTimeout(() => {
-                        scheduleDestinationHotelAutofill(row)
-                    }, getAiRetryDelayMs(error))
+                            return {
+                                ...item,
+                                delux_hotel: resolvedDeluxHotel,
+                                super_delux_hotel: resolvedSuperDeluxHotel,
+                                luxury_hotel: resolvedLuxuryHotel,
+                                premium_hotel: resolvedPremiumHotel
+                            }
+                        })
+                    )
+                } catch (error) {
+                    if (isAiRateLimitError(error)) {
+                        setTimeout(() => {
+                            scheduleDestinationHotelAutofill(row)
+                        }, getAiRetryDelayMs(error))
+                    }
+                } finally {
+                    setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: false }))
+                    delete destinationHotelTimeoutRef.current[row.id]
                 }
-            } finally {
-                setDestinationHotelLoadingByRow(prev => ({ ...prev, [row.id]: false }))
-                delete destinationHotelTimeoutRef.current[row.id]
-            }
-        }, 500)
-    }
+            }, 500)
+        },
+        [assistAi, runQueuedAiRequest]
+    )
 
     const updateDestinationRow = (rowId, field, value) => {
         let nextRowForHotelAutofill = null
@@ -2363,7 +2625,7 @@ Rules:
                                                         fullWidth
                                                         multiline
                                                         minRows={2}
-                                                        label='Deluxe Hotel'
+                                                        label='Delux Hotel'
                                                         value={row.delux_hotel}
                                                         onChange={event =>
                                                             updateDestinationRow(
@@ -2379,7 +2641,7 @@ Rules:
                                                         fullWidth
                                                         multiline
                                                         minRows={2}
-                                                        label='Super Deluxe Hotel'
+                                                        label='Super Delux Hotel'
                                                         value={row.super_delux_hotel}
                                                         onChange={event =>
                                                             updateDestinationRow(
