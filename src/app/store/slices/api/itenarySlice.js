@@ -65,10 +65,17 @@ export const itenarySlice = apiSliceConfig.injectEndpoints({
             query: payload => {
                 const KEY = 'uploadItinerariesKey'
                 dispatchLoaderEvent(KEY)
+                // `payload` is { file, campaignId }; see the note in
+                // campaignSlice.js on why the raw file is sent rather than a
+                // browser-parsed JSON array.
+                const formData = new FormData()
+                formData.append('file', payload.file)
+                formData.append('campaignId', payload.campaignId)
+
                 return {
                     url: '/campaign/itenary/upload-excel',
                     method: 'POST',
-                    body: payload,
+                    body: formData,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },

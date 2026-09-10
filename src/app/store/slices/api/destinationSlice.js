@@ -67,10 +67,17 @@ export const destinationSlice = apiSliceConfig.injectEndpoints({
                 // Trigger global loader event based on your project's loading pattern
                 dispatchLoaderEvent(KEY)
 
+                // `payload` is { file, campaignId }; see the note in
+                // campaignSlice.js on why the raw file is sent rather than a
+                // browser-parsed JSON array.
+                const formData = new FormData()
+                formData.append('file', payload.file)
+                formData.append('campaignId', payload.campaignId)
+
                 return {
-                    url: 'campaign/destination/upload-excel', // Ensure this matches your backend route
+                    url: 'campaign/destination/upload-excel',
                     method: 'POST',
-                    body: payload,
+                    body: formData,
                     responseHandler: async result =>
                         customResponseHandler({
                             result,

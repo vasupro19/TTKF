@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 
 import { Box, IconButton, Button, Tooltip, Menu, MenuItem, Typography, CircularProgress } from '@mui/material'
-import * as XLSX from 'xlsx'
+import { validateSpreadsheetFile } from '@/utilities/spreadsheet'
 import Stack from '@mui/material/Stack'
 import { Add, Edit, Delete, FilterAltOff, MoreVert, CloudUpload } from '@mui/icons-material'
 
@@ -185,37 +185,57 @@ function MasterItenaryTable() {
             handleAdd()
         }
     })
-    const handleFileUpload = e => {
+    // Uploads the workbook itself; the API parses and validates it. See the
+    // note in src/utilities/spreadsheet.js on why browser-side parsing (and
+    // the `xlsx` dependency) was removed.
+    const handleFileUpload = async e => {
         const file = e.target.files[0]
         if (!file) return
 
-        const reader = new FileReader()
-        reader.onload = async event => {
-            const workbook = XLSX.read(event.target.result, { type: 'binary' })
-            const sheet = workbook.Sheets[workbook.SheetNames[0]]
-            const parsedData = XLSX.utils.sheet_to_json(sheet)
-
-            // Logic for formatting data (based on your specific model)
-            const formattedData = parsedData.map(row => ({
-                title: row.Title || row.title,
-                description: row.Description || row.description
-            }))
-
-            try {
-                // The loading state 'isLoading' becomes true once this is called
-                await uploadTrigger({
-                    itineraries: formattedData, // or destinations
-                    campaignId: params.id
-                }).unwrap()
-
-                // Reset input value so same file can be uploaded again if needed
-                e.target.value = ''
-            } catch (err) {
-                console.error('Upload failed:', err)
-            }
+        const check = validateSpreadsheetFile(file)
+        if (!check.ok) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: check.message,
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
         }
-        reader.readAsBinaryString(file)
+
+        try {
+            const response = await uploadTrigger({ file, campaignId: params.id }).unwrap()
+            const { count = 0, rejected = [] } = response.data || {}
+
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: rejected.length
+                        ? `${count} itineraries uploaded, ${rejected.length} row(s) skipped`
+                        : `${count} itineraries uploaded successfully!`,
+                    variant: 'alert',
+                    alert: { color: rejected.length ? 'warning' : 'success' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } catch (err) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: err?.data?.message || 'Upload failed. Please check the file and try again.',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } finally {
+            e.target.value = ''
+        }
     }
+
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -332,7 +352,7 @@ function MasterItenaryTable() {
                                 {isLoading ? 'Uploading...' : `Upload Excel`}
 
                                 {/* Hidden File Input */}
-                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                                <input type='file' hidden accept='.xlsx,.xls,.csv' onChange={handleFileUpload} />
 
                                 {/* Circular Progress Overlay */}
                                 {isLoading && (

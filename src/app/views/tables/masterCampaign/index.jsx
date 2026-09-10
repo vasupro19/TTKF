@@ -7,7 +7,7 @@ import { Box, IconButton, Tooltip, Menu, MenuItem, Typography, Button, Stack, Ci
 // import IconButton from '@mui/material/IconButton'
 // import TextField from '@mui/material/TextField'
 import { Add, Edit, Delete, FilterAltOff, MoreVert, CloudUpload, Download } from '@mui/icons-material'
-import * as XLSX from 'xlsx'
+import { downloadCsvTemplate, validateSpreadsheetFile } from '@/utilities/spreadsheet'
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -80,91 +80,82 @@ function MasterCampaignTable() {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const editHandler = useCallback(async id => navigate(`/master/campaigns/edit/${id}`), [])
-    // 1. Function to create a sample Excel file for the Admin
+    // 1. Sample template for the admin to fill in.
+    //
+    // Generated as CSV with a Blob rather than through the `xlsx` package —
+    // see src/utilities/spreadsheet.js for why that dependency was removed.
+    // Excel and Sheets both open CSV, and the API accepts either these column
+    // names or the readable headings.
     const downloadSample = () => {
-        const sampleData = [
-            {
-                title: 'Manali Summer 2026',
-                description: '6 Days in Hills',
-                inclusions: 'Hotel | Cab | Breakfast',
-                exclusions: 'Flight | Personal Expenses',
-                // 🚀 Added new fields
-                importantNote: 'Check-in is at 12 PM. Carry valid ID proof.',
-                bankDetails: 'Bank: SBI | A/C: 123456789 | IFSC: SBIN0001'
-            }
-        ]
-
-        const worksheet = XLSX.utils.json_to_sheet(sampleData)
-        const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Campaigns')
-
-        // Auto-adjust column width so it's easier to read
-        const wscols = [
-            { wch: 20 }, // title
-            { wch: 30 }, // description
-            { wch: 30 }, // inclusions
-            { wch: 30 }, // exclusions
-            { wch: 40 }, // importantNote
-            { wch: 40 } // bankDetails
-        ]
-        worksheet['!cols'] = wscols
-
-        XLSX.writeFile(workbook, 'Campaign_Upload_Sample.xlsx')
+        downloadCsvTemplate(
+            'Campaign_Upload_Sample.csv',
+            ['title', 'description', 'inclusions', 'exclusions', 'importantNote', 'bankDetails'],
+            [
+                {
+                    title: 'Manali Summer 2026',
+                    description: '6 Days in Hills',
+                    inclusions: 'Hotel | Cab | Breakfast',
+                    exclusions: 'Flight | Personal Expenses',
+                    importantNote: 'Check-in is at 12 PM. Carry valid ID proof.',
+                    bankDetails: 'Bank: SBI | A/C: 123456789 | IFSC: SBIN0001'
+                }
+            ]
+        )
     }
 
-    // 2. Function to read Excel and convert to JSON
-    const handleFileUpload = e => {
+    // 2. Upload the file itself.
+    //
+    // The workbook used to be parsed here and posted as JSON. It now goes to
+    // the API as multipart, which parses and validates it server-side — so row
+    // validation can no longer be bypassed by posting a hand-written array,
+    // and the browser is not parsing untrusted files.
+    const handleFileUpload = async e => {
         const file = e.target.files[0]
         if (!file) return
+
+        const check = validateSpreadsheetFile(file)
+        if (!check.ok) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: check.message,
+                    variant: 'alert',
+                    alert: { color: 'error' }
+                })
+            )
+            return
+        }
+
         setFileName(file.name)
 
-        const reader = new FileReader()
-        reader.onload = async evt => {
-            try {
-                const bstr = evt.target.result
-                const wb = XLSX.read(bstr, { type: 'binary' })
-                const wsname = wb.SheetNames[0]
-                const ws = wb.Sheets[wsname]
+        try {
+            const response = await uploadCampaigns(file).unwrap()
+            const { count = 0, rejected = [] } = response.data || {}
 
-                // Convert to JSON
-                const rawData = XLSX.utils.sheet_to_json(ws)
-
-                if (rawData.length === 0) throw new Error('Excel file is empty')
-
-                // 🚀 Format data to match your new Prisma Model fields
-                const formattedData = rawData.map(row => ({
-                    title: row.title || '',
-                    description: row.description || '',
-                    inclusions: row.inclusions || '',
-                    exclusions: row.exclusions || '',
-                    importantNote: row.importantNote || '', // Matches schema
-                    bankDetails: row.bankDetails || '' // Matches schema
-                }))
-
-                // Send to Backend
-                const response = await uploadCampaigns(formattedData).unwrap()
-
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: `${response.data.count} Campaigns imported!`,
-                        variant: 'alert',
-                        alert: { color: 'success' }
-                    })
-                )
-            } catch (error) {
-                console.error('Upload error:', error)
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: error.data?.message || error.message || 'Invalid Excel Format',
-                        variant: 'alert',
-                        alert: { color: 'error' }
-                    })
-                )
-            }
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: rejected.length
+                        ? `${count} campaigns imported, ${rejected.length} row(s) skipped`
+                        : `${count} campaigns imported!`,
+                    variant: 'alert',
+                    alert: { color: rejected.length ? 'warning' : 'success' }
+                })
+            )
+        } catch (error) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message:
+                        error.data?.message || error.message || 'Import failed. Please check the file and try again.',
+                    variant: 'alert',
+                    alert: { color: 'error' }
+                })
+            )
+        } finally {
+            // Reset the input so the same file can be re-selected after a fix
+            e.target.value = ''
         }
-        reader.readAsBinaryString(file)
     }
 
     const handleExcelClick = () => {
@@ -434,7 +425,7 @@ function MasterCampaignTable() {
                                     disabled={isLoading}
                                 >
                                     {isLoading ? 'Uploading...' : 'Upload Excel'}
-                                    <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                                    <input type='file' hidden accept='.xlsx,.xls,.csv' onChange={handleFileUpload} />
                                 </Button>
                             </Stack>
 

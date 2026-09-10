@@ -9,132 +9,98 @@ import UrlAccessGuard from '@app/guards/UrlPermissionGuard'
 import AppLayout from '@app/layouts/AppLayout'
 import Loader from '@/core/components/extended/Loader'
 
-const UserProfilePage = lazy(() => import('@views/pages/userprofilePage'))
+/**
+ * ============================================================================
+ *  APPLICATION ROUTES
+ * ============================================================================
+ *
+ *  WHAT CHANGED
+ *  ------------
+ *  This file declared 115 `lazy()` imports and wired 32 of them into `children`.
+ *  The other 83 pointed at the warehouse management system this codebase was
+ *  forked from: gate entry, purchase orders, advanced shipping notes, put-away
+ *  job management, pick lists and waves, B2B/B2C packing, pigeonhole sorting,
+ *  storage- and UID-wise inventory, plus masters for bins, pallets, zones,
+ *  location codes, serials and catalogues.
+ *
+ *  Those 83 imports and the ~82,000 lines behind them are gone. None of it was
+ *  reachable, none of it has a backend endpoint in this product, and it made up
+ *  the majority of the frontend — so anyone doing technical due diligence
+ *  opened the repository and saw a logistics application.
+ *
+ *  ROUTE GROUPS, in the order a tour operator actually works:
+ *      Masters     campaigns -> destinations -> itineraries -> package templates
+ *      Partners    suppliers (hotels, transporters) and referral agents
+ *      Pipeline    leads -> guest requirements -> quotes -> confirmed bookings
+ *      Money       the transactions ledger
+ *      Setup       workspace users, roles, channel integrations
+ *      Platform    tenant management (vendor staff only)
+ *
+ *  Access is checked by UrlAccessGuard against the permissions the API reports,
+ *  and again by the API itself on every request.
+ * ============================================================================
+ */
+
+// ---- shell ----
 const AdminDashboard = lazy(() => import('@views/dashboard/admin/Home'))
-const ComponentsView = lazy(() => import('@views/pages/ComponentView'))
-const MasterUserForm = lazy(() => import('@views/forms/user/MasterUserForm'))
+const UserProfilePage = lazy(() => import('@views/pages/userprofilePage'))
+
+// ---- platform administration (vendor staff) ----
 const MasterClient = lazy(() => import('@views/masters/client'))
 const MasterClientForm = lazy(() => import('@views/masters/client/create'))
-const MasterAccount = lazy(() => import('@views/masters/account'))
-const MasterAccountForm = lazy(() => import('@views/masters/account/create'))
-const MasterLocationForm = lazy(() => import('@/app/views/masters/campaign/create'))
-const MasterLocation = lazy(() => import('@/app/views/masters/campaign'))
 
-const AccountsTable = lazy(() => import('@views/tables/accounts/AccountsTable'))
-const PinCodeMasterTable = lazy(() => import('@/app/views/masters/pincode/PinCodeMasterTable'))
-const CountryMasterTable = lazy(() => import('@/app/views/masters/country/CountryMasterTable'))
-const StateMasterTable = lazy(() => import('@/app/views/masters/state/StateMasterTable'))
-const CityMasterTable = lazy(() => import('@/app/views/masters/city/CityMasterTable'))
-const CreateRoleManagement = lazy(() => import('@views/setup/role/create'))
-const ViewRoleManagement = lazy(() => import('@views/setup/role'))
-const ViewGoodsReceiptNote = lazy(() => import('@views/pages/goodsReceiptNote/ViewGoodsReceiptNote'))
-const CreateGoodsReceiptNote = lazy(() => import('@views/pages/goodsReceiptNote/createGoodsReceiptNote'))
-const InboundGoodsReceiptNoteDetails = lazy(() => import('@views/pages/goodsReceiptNote/view'))
-const MasterCustomerForm = lazy(() => import('@views/masters/customer/create'))
-const MasterCustomer = lazy(() => import('@views/masters/customer'))
-const ViewMasterCustomer = lazy(() => import('@views/masters/customer/view'))
-const MasterVendor = lazy(() => import('@views/masters/vendor'))
-const MasterVendorForm = lazy(() => import('@views/masters/vendor/create'))
-const ViewMasterVendor = lazy(() => import('@views/masters/vendor/view'))
-const SetupUserForm = lazy(() => import('@views/setup/user/create'))
+// ---- workspace setup ----
 const SetupUserTable = lazy(() => import('@views/setup/user'))
-const MasterBinsTable = lazy(() => import('@views/masters/bins'))
-const MapBinStorageLocation = lazy(() => import('@/app/views/masters/bins/mapBinStorageLoc/index'))
-const MasterPalletsTable = lazy(() => import('@views/masters/pallets'))
-const MapPalletStorageLocation = lazy(() => import('@/app/views/masters/pallets/mapPalletStorageLoc/index'))
-const MasterZonesTable = lazy(() => import('@views/masters/zones'))
-const MasterLocationCodesTable = lazy(() => import('@views/masters/locationCode'))
-const MasterItemCategoryMappingTable = lazy(() => import('@views/masters/itemCategoryMapping'))
-const MasterBucketConfigTable = lazy(() => import('@views/masters/bucketConfig'))
-const MasterSerialTable = lazy(() => import('@views/masters/serial'))
-const MasterSerialImportMappingForm = lazy(() => import('@views/masters/serialImportMapping'))
-const UserPermissions = lazy(() => import('@views/setup/user/permissions'))
-const ManageAdminTable = lazy(() => import('@views/adminDec/admin'))
-const AddAdmin = lazy(() => import('@views/adminDec/admin/create'))
-const UserLogs = lazy(() => import('@views/adminDec/userLogs'))
-const MasterDefinePropertiesTable = lazy(() => import('@views/masters/defineProperties'))
-const MasterDefineCatalogueFormat = lazy(() => import('@views/masters/formatCatalogue'))
-const MasterCatalogueTable = lazy(() => import('@views/masters/catalogue'))
-const MasterCatalogueForm = lazy(() => import('@views/masters/catalogue/create'))
-const GateEntryTable = lazy(() => import('@views/inbound/gateEntry'))
-const GateEntryForm = lazy(() => import('@views/inbound/gateEntry/create'))
-const ViewGateEntryForm = lazy(() => import('@views/inbound/gateEntry/view'))
-const MapBoxIds = lazy(() => import('@views/inbound/gateEntry/mapBoxIds'))
-const PurchaseOrderTable = lazy(() => import('@views/inbound/purchaseOrder'))
-const PurchaseOrderForm = lazy(() => import('@views/inbound/purchaseOrder/create'))
-const ASNTable = lazy(() => import('@views/inbound/advancedShippingNotes'))
-const ASNForm = lazy(() => import('@views/inbound/advancedShippingNotes/create'))
-const InboundPutAwayTable = lazy(() => import('@views/inbound/putAway'))
-const InboundPutAwayDetails = lazy(() => import('@views/inbound/putAway/view'))
-const InboundPutAwayCreate = lazy(() => import('@views/inbound/putAway/create'))
-const PutAwayConfig = lazy(() => import('@views/inbound/putAway/PutAwayConfig'))
-const InboundPutAwayMngJobs = lazy(() => import('@/app/views/inbound/putAway/manageJobs'))
-const InboundPutAwayMngJobsCreate = lazy(() => import('@/app/views/inbound/putAway/manageJobs/create'))
-const InboundPutAwayMngJobsView = lazy(() => import('@/app/views/inbound/putAway/manageJobs/view'))
-const InboundPutAwayAssignedJobs = lazy(() => import('@/app/views/inbound/putAway/manageJobs/viewAssignedJobs'))
-const ViewPickList = lazy(() => import('@views/outbound/pick'))
-const CreatePickList = lazy(() => import('@views/outbound/pick/create'))
-const ViewDetailsPickList = lazy(() => import('@views/outbound/pick/view'))
+const SetupUserForm = lazy(() => import('@views/setup/user/create'))
+const ViewRoleManagement = lazy(() => import('@views/setup/role'))
+const CreateRoleManagement = lazy(() => import('@views/setup/role/create'))
+const UserMenuAccess = lazy(() => import('@views/forms/role/NewPermission'))
+const UserMenuAccessClient = lazy(() => import('@views/forms/role/NewClientUserPermission'))
 
-const PickSetup = lazy(() => import('@views/outbound/pick/setup'))
-const Picking = lazy(() => import('@views/outbound/pick/picking'))
-const ManageWaves = lazy(() => import('@/app/views/outbound/pick/setup/manageWaves'))
-const ManageWavesCreate = lazy(() => import('@/app/views/outbound/pick/setup/createWaves'))
-const PendencyTable = lazy(() => import('@/app/views/outbound/pick/pendency'))
-const ZonesList = lazy(() => import('@/app/views/outbound/pick/picking/ZonesList'))
-const ScanItems = lazy(() => import('@/app/views/outbound/pick/picking/ScanItems'))
-
-const UploadDownloadManagement = lazy(() => import('@views/tables/uploadDownloadManagement'))
-const ViewOutboundOrders = lazy(() => import('@views/outbound/orders'))
-const CreateOutboundOrder = lazy(() => import('@views/outbound/orders/create'))
-const OutboundOrderDetails = lazy(() => import('@views/outbound/orders/view'))
-const ArchivedOrdersTable = lazy(() => import('@views/outbound/orders/archivedOrders'))
-
-const ViewOutboundPack = lazy(() => import('@views/outbound/pack'))
-const ViewB2BDetailsPack = lazy(() => import('@/app/views/outbound/pack/b2b/view'))
-const ViewB2CDetailsPack = lazy(() => import('@/app/views/outbound/pack/b2c/view'))
-const B2CPacking = lazy(() => import('@views/outbound/pack/b2c'))
-const B2BPacking = lazy(() => import('@views/outbound/pack/b2b'))
-const PackSetup = lazy(() => import('@views/outbound/pack/setup'))
-const PackPendency = lazy(() => import('@views/outbound/pack/packPendency'))
-
-const ViewOutboundSorting = lazy(() => import('@views/outbound/sorting'))
-const SortingProcess = lazy(() => import('@views/outbound/sorting/sort'))
-const PigeonholePicking = lazy(() => import('@views/outbound/sorting/pigeonholePicking'))
-
-const FullInventoryView = lazy(() => import('@views/inventory/view/fullInventory'))
-const StorageWiseInventory = lazy(() => import('@views/inventory/view/storageWiseInventory'))
-const UIDwiseInventory = lazy(() => import('@views/inventory/view/uIDwiseInventory'))
-const UserMenuAccess = lazy(() => import('@/app/views/forms/role/NewPermission'))
-const UserMenuAccessClient = lazy(() => import('@/app/views/forms/role/NewClientUserPermission'))
-const MasterCampaignTable = lazy(() => import('@/app/views/masters/campaign'))
+// ---- product catalogue ----
+const MasterCampaignTable = lazy(() => import('@views/masters/campaign'))
 const CampaignsForm = lazy(() => import('@views/masters/campaign/create'))
-const MasterDestinationTable = lazy(() => import('@/app/views/masters/destinations'))
+const MasterDestinationTable = lazy(() => import('@views/masters/destinations'))
 const DestinationForm = lazy(() => import('@views/masters/destinations/create'))
-const MasterItenaryTable = lazy(() => import('@/app/views/masters/itenary'))
+const MasterItenaryTable = lazy(() => import('@views/masters/itenary'))
 const ItenaryClientsForm = lazy(() => import('@views/masters/itenary/create'))
-const MasterPackagesTable = lazy(() => import('@/app/views/masters/packages'))
+const MasterPackagesTable = lazy(() => import('@views/masters/packages'))
 const PackagesClientForm = lazy(() => import('@views/masters/packages/create'))
 const PackageCreationWizard = lazy(() => import('@views/forms/packages/PackageCreationWizard'))
 const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
 const PackageItenaryView = lazy(() => import('@views/forms/packageItenary/actitvityPackage'))
 
-const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
-const FacebookIntegrationForm = lazy(() => import('@views/forms/integrations/facebookIntegration'))
+// ---- partners ----
+const MasterSupplierTable = lazy(() => import('@views/masters/supplier'))
+const SupplierForm = lazy(() => import('@views/masters/supplier/create'))
+const MasterAgentTable = lazy(() => import('@views/masters/agent'))
+const AgentForm = lazy(() => import('@views/masters/agent/create'))
 
-const SupplierForm = lazy(() => import('@/app/views/masters/supplier/create'))
-const MasterSupplierTable = lazy(() => import('@/app/views/masters/supplier'))
-const AgentForm = lazy(() => import('@/app/views/masters/agent/create'))
-const MasterAgentTable = lazy(() => import('@app/views/masters/agent'))
-const MasterLeadsTable = lazy(() => import('@app/views/masters/leads'))
-const LeadsForm = lazy(() => import('@/app/views/masters/leads/create'))
-
+// ---- sales pipeline ----
+const MasterLeadsTable = lazy(() => import('@views/masters/leads'))
+const LeadsForm = lazy(() => import('@views/masters/leads/create'))
 const GuestForm = lazy(() => import('@views/forms/guestDetailsForm'))
 const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
 
-// const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
+// ---- integrations & careers ----
+const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
+const FacebookIntegrationForm = lazy(() => import('@views/forms/integrations/facebookIntegration'))
 const JobCandidates = lazy(() => import('@views/masters/JobCandidates/JobCandidates'))
+
+/**
+ * Wraps a lazily-loaded screen in its Suspense boundary. Every route used to
+ * repeat this five-line block inline, which is most of why the file ran to 500
+ * lines for 32 routes.
+ *
+ * @param {React.ComponentType} Component
+ * @returns {JSX.Element}
+ */
+const page = Component => (
+    <Suspense fallback={<Loader />}>
+        <Component />
+    </Suspense>
+)
 
 const protectedRoutes = {
     path: '/',
@@ -148,354 +114,70 @@ const protectedRoutes = {
         </AuthGuard>
     ),
     children: [
-        // {
-        //     path: '/',
-        //     element: (
-        //         <Suspense fallback={<Loader />}>
-        //             <AdminDashboard />
-        //         </Suspense>
-        //     )
-        // },
-        {
-            path: '/dashboard',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <AdminDashboard />
-                </Suspense>
-            )
-        },
-        {
-            path: '/select-client-location',
-            element: <Navigate to='/dashboard' replace />
-        },
-        {
-            path: '/master/client',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterClient />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/client/create',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterClientForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/client/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterClientForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/client/permissions/:id/:email',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <UserMenuAccess />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/client/permissions/user/:id/:email',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <UserMenuAccessClient />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/user',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <SetupUserTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/userManagement/user/create',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <SetupUserForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/user/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <SetupUserForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/userManagement/role',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <ViewRoleManagement />
-                </Suspense>
-            )
-        },
-        {
-            path: '/userManagement/role/create',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <CreateRoleManagement />
-                </Suspense>
-            )
-        },
-        {
-            path: '/userManagement/role/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <CreateRoleManagement />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/campaigns',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterCampaignTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/campaigns/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <CampaignsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/campaigns/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <CampaignsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/destinations/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterDestinationTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/destinations/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <DestinationForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/destinations/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <DestinationForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/itenary/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterItenaryTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/itenary/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <ItenaryClientsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/itenary/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <ItenaryClientsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/packages/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterPackagesTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/supplier',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterSupplierTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/packages/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <PackagesClientForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/packages/wizard',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <PackageCreationWizard />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/packages/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <PackagesClientForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/supplier/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <SupplierForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/package/activities/:campaignId/:packageId',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <PackageItenary />
-                </Suspense>
-            )
-        },
-        {
-            path: '/package/activities/:packageId',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <PackageItenaryView />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/supplier/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <SupplierForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/integration/gmail',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <GmailIntegrationForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/integration/facebook',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <FacebookIntegrationForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/agent',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterAgentTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/agent/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <AgentForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/master/agent/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <AgentForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/leads',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <MasterLeadsTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/leads/add',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <LeadsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/leads/edit/:id',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <LeadsForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/guest/add/:leadId',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <GuestForm />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/packages',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <FinalPackageTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/transactions',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <ServiceLedgerTable />
-                </Suspense>
-            )
-        },
-        {
-            path: '/process/candidates',
-            element: (
-                <Suspense fallback={<Loader />}>
-                    <JobCandidates />
-                </Suspense>
-            )
-        }
+        // ---- shell ----
+        { path: '/dashboard', element: page(AdminDashboard) },
+        { path: '/userprofile', element: page(UserProfilePage) },
+        // legacy link target inherited from the warehouse build
+        { path: '/select-client-location', element: <Navigate to='/dashboard' replace /> },
+
+        // ---- platform administration ----
+        { path: '/master/client', element: page(MasterClient) },
+        { path: '/master/client/create', element: page(MasterClientForm) },
+        { path: '/master/client/edit/:id', element: page(MasterClientForm) },
+        { path: '/master/client/permissions/:id/:email', element: page(UserMenuAccess) },
+        { path: '/master/client/permissions/user/:id/:email', element: page(UserMenuAccessClient) },
+
+        // ---- workspace users & roles ----
+        { path: '/master/user', element: page(SetupUserTable) },
+        { path: '/master/user/edit/:id', element: page(SetupUserForm) },
+        { path: '/userManagement/user/create', element: page(SetupUserForm) },
+        { path: '/userManagement/role', element: page(ViewRoleManagement) },
+        { path: '/userManagement/role/create', element: page(CreateRoleManagement) },
+        { path: '/userManagement/role/:id', element: page(CreateRoleManagement) },
+
+        // ---- campaigns ----
+        { path: '/master/campaigns', element: page(MasterCampaignTable) },
+        { path: '/master/campaigns/add', element: page(CampaignsForm) },
+        { path: '/master/campaigns/edit/:id', element: page(CampaignsForm) },
+
+        // ---- destinations ----
+        { path: '/master/destinations/:id', element: page(MasterDestinationTable) },
+        { path: '/master/destinations/add', element: page(DestinationForm) },
+        { path: '/master/destinations/edit/:id', element: page(DestinationForm) },
+
+        // ---- itineraries ----
+        { path: '/master/itenary/:id', element: page(MasterItenaryTable) },
+        { path: '/master/itenary/add', element: page(ItenaryClientsForm) },
+        { path: '/master/itenary/edit/:id', element: page(ItenaryClientsForm) },
+
+        // ---- package templates ----
+        { path: '/master/packages/:id', element: page(MasterPackagesTable) },
+        { path: '/master/packages/add', element: page(PackagesClientForm) },
+        { path: '/master/packages/edit/:id', element: page(PackagesClientForm) },
+        { path: '/master/packages/wizard', element: page(PackageCreationWizard) },
+        { path: '/package/activities/:campaignId/:packageId', element: page(PackageItenary) },
+        { path: '/package/activities/:packageId', element: page(PackageItenaryView) },
+
+        // ---- partners ----
+        { path: '/master/supplier', element: page(MasterSupplierTable) },
+        { path: '/master/supplier/add', element: page(SupplierForm) },
+        { path: '/master/supplier/edit/:id', element: page(SupplierForm) },
+        { path: '/master/agent', element: page(MasterAgentTable) },
+        { path: '/master/agent/add', element: page(AgentForm) },
+        { path: '/master/agent/edit/:id', element: page(AgentForm) },
+
+        // ---- sales pipeline ----
+        { path: '/process/leads', element: page(MasterLeadsTable) },
+        { path: '/process/leads/add', element: page(LeadsForm) },
+        { path: '/process/leads/edit/:id', element: page(LeadsForm) },
+        { path: '/process/guest/add/:leadId', element: page(GuestForm) },
+        { path: '/process/packages', element: page(FinalPackageTable) },
+        { path: '/process/transactions', element: page(ServiceLedgerTable) },
+
+        // ---- integrations & careers ----
+        { path: '/integration/gmail', element: page(GmailIntegrationForm) },
+        { path: '/integration/facebook', element: page(FacebookIntegrationForm) },
+        { path: '/process/candidates', element: page(JobCandidates) }
     ]
 }
 

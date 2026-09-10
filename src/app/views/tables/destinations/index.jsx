@@ -7,7 +7,7 @@ import Stack from '@mui/material/Stack'
 // import IconButton from '@mui/material/IconButton'
 // import TextField from '@mui/material/TextField'
 import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
-import * as XLSX from 'xlsx'
+import { validateSpreadsheetFile } from '@/utilities/spreadsheet'
 
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
@@ -193,54 +193,61 @@ function MasterDestinationTable() {
             handleAdd()
         }
     })
-    const handleFileUpload = e => {
+    // Uploads the workbook itself rather than parsing it in the browser.
+    //
+    // The `xlsx` package that did the parsing carries an unpatched
+    // prototype-pollution advisory, and doing the header mapping client-side
+    // meant a caller could bypass it entirely by posting a JSON array. The API
+    // now parses the file and accepts either the canonical column names or the
+    // readable headings from the sample.
+    const handleFileUpload = async e => {
         const file = e.target.files[0]
-        const reader = new FileReader()
+        if (!file) return
 
-        reader.onload = async event => {
-            const workbook = XLSX.read(event.target.result, { type: 'binary' })
-            const sheetName = workbook.SheetNames[0]
-            const sheet = workbook.Sheets[sheetName]
-            const parsedData = XLSX.utils.sheet_to_json(sheet)
-
-            // Map Excel headers to Database columns
-            const formattedData = parsedData.map(row => ({
-                name: row['Destination Name'] || row.name,
-                delux_hotel: row['Deluxe Hotel'] || row.delux_hotel,
-                super_delux_hotel: row['Super Deluxe Hotel'] || row.super_delux_hotel,
-                luxury_hotel: row['Luxury Hotel'] || row.luxury_hotel,
-                premium_hotel: row['Premium Hotel'] || row.premium_hotel
-            }))
-
-            try {
-                await uploadDestinations({
-                    destinations: formattedData,
-                    campaignId: params.id
-                }).unwrap()
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: 'Destinations uploaded successfully!',
-                        variant: 'alert',
-                        alert: { color: 'success' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
-                )
-            } catch (err) {
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: err?.data?.message || 'Upload failed. Please check the file and try again.',
-                        variant: 'alert',
-                        alert: { color: 'error' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
-                )
-            }
+        const check = validateSpreadsheetFile(file)
+        if (!check.ok) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: check.message,
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
         }
 
-        reader.readAsBinaryString(file)
+        try {
+            const response = await uploadDestinations({ file, campaignId: params.id }).unwrap()
+            const { count = 0, rejected = [] } = response.data || {}
+
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: rejected.length
+                        ? `${count} destinations uploaded, ${rejected.length} row(s) skipped`
+                        : `${count} destinations uploaded successfully!`,
+                    variant: 'alert',
+                    alert: { color: rejected.length ? 'warning' : 'success' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } catch (err) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: err?.data?.message || 'Upload failed. Please check the file and try again.',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        } finally {
+            e.target.value = ''
+        }
     }
+
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
@@ -294,7 +301,7 @@ function MasterDestinationTable() {
                         </UiAccessGuard> */}
                         <Box>
                             <input
-                                accept='.xlsx, .xls'
+                                accept='.xlsx,.xls,.csv'
                                 style={{ display: 'none' }}
                                 id='excel-upload'
                                 type='file'

@@ -463,12 +463,14 @@ function PackagesItenary() {
 
     const handleEditActivity = activity => {
         setEditingActivity(activity)
+        console.log(activity)
         formik.setValues({
             packageId: activity.packageId?.toString() || params.packageId,
-            campaignId: params.campaignId || '',
+            campaignId:
+                params.campaignId || activity.campaignId?.toString() || activity.package?.campaignId?.toString() || '',
             itenaryId: activity.itenaryId?.toString() || '',
             destinationId: activity.destinationId?.toString() || '',
-            description: activity.itenary?.description || '',
+            description: activity.itenary?.description || activity.description || '',
             image: activity.image || '',
             entryType: activity.entryType || 'Stay'
         })
@@ -476,6 +478,7 @@ function PackagesItenary() {
     }
 
     useEffect(() => {
+        console.log(packageActivities, 'package')
         if (!focusActivityId || packageActivities.length === 0) return
 
         const matchedActivity = packageActivities.find(item => item.id === Number(focusActivityId))

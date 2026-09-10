@@ -17,17 +17,25 @@ export const authApi = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['getClientAccounts', 'getAuthUser']
         }),
         getMenu: build.query({
-            query: userId => {
+            // No argument. The API resolves the caller from the session cookie.
+            // It used to be `/menu?userId=${userId}` — a client-supplied id, so
+            // passing someone else's returned THEIR navigation, which leaked
+            // the shape of other tenants' workspaces.
+            query: () => {
                 const KEY = 'menuKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/menu?userId=${userId}`, // Pass the ID directly
+                    url: '/menu',
                     method: 'GET',
                     responseHandler: result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            // This allows you to manually trigger a refresh if needed
             providesTags: ['Menu']
+        }),
+
+        // Issues the double-submit CSRF cookie. Called once after sign-in.
+        getCsrfToken: build.query({
+            query: () => ({ url: '/auth/csrf-token' })
         }),
 
         getAuthUser: build.query({
@@ -40,9 +48,12 @@ export const authApi = apiSliceConfig.injectEndpoints({
         }),
         logout: build.mutation({
             query: () => ({
-                url: '/auth/logout'
+                url: '/auth/logout',
+                // POST, so the CSRF check applies — a GET logout is
+                // triggerable from any page via an <img> tag
+                method: 'POST'
             }),
-            invalidatesTags: ['getAuthUser']
+            invalidatesTags: ['getAuthUser', 'Menu']
         }),
         forcedLogout: build.mutation({
             query: userId => ({
@@ -91,6 +102,8 @@ export const {
     // useGetAuthUserMutation,
     useGetMenuQuery,
     useLazyGetMenuQuery,
+    useGetCsrfTokenQuery,
+    useLazyGetCsrfTokenQuery,
     // useGetMenuConfigMutation,
     useForcedLogoutMutation,
     useLogOutSessionMutation,

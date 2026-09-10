@@ -61,12 +61,26 @@ export const locationSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['locationMaster', 'locationMasterById']
         }),
         uploadCampaignsExcel: build.mutation({
-            query: campaignsArray => ({
-                url: '/campaign/upload-excel',
-                method: 'POST',
-                body: { campaigns: campaignsArray }
-            }),
-            // This forces the "Campaign List" to refresh automatically
+            // Sends the raw .xlsx file as multipart. It used to POST a JSON
+            // array that the BROWSER had produced with the `xlsx` package —
+            // which carries an unpatched prototype-pollution advisory and
+            // meant all row validation happened client-side. The API now
+            // parses and validates the workbook itself (utils/spreadsheet.js).
+            //
+            // No Content-Type header: the browser must set the multipart
+            // boundary itself, and setting it manually is the classic way to
+            // break a FormData upload.
+            query: file => {
+                const formData = new FormData()
+                formData.append('file', file)
+
+                return {
+                    url: '/campaign/upload-excel',
+                    method: 'POST',
+                    body: formData
+                }
+            },
+            // Forces the campaign list to refresh automatically
             invalidatesTags: ['Campaigns']
         })
     })

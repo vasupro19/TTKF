@@ -23,6 +23,7 @@ import { motion } from 'framer-motion'
 import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
+import { ensureCsrfToken } from '@app/store/slices/api/configSlice'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 
@@ -63,10 +64,23 @@ export default function Login() {
             try {
                 const res = await login(values).unwrap()
                 const userData = res.data.user
+
+                // The access token is delivered ONLY as an httpOnly cookie —
+                // it used to also come back in the JSON body alongside the
+                // bcrypt hash and refresh token, which defeated the point of
+                // httpOnly. What is stored here is just a marker so AuthGuard
+                // knows a session was established; it is not a credential.
+                await setToken('active')
+
+                // Fetch the CSRF token before anything tries to write. Every
+                // state-changing request now needs it.
+                await ensureCsrfToken()
+
                 dispatch(setUserDetails({ user: userData }))
-                await setToken(res.data.accessToken)
-                const menus = await triggerMenu(userData.id).unwrap()
+
+                const menus = await triggerMenu().unwrap()
                 dispatch(setMenuItems(menus.data))
+
                 navigate('/dashboard', { replace: true })
             } catch (err) {
                 dispatch(

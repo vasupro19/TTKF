@@ -7,13 +7,14 @@ function GuestGuard({ children }) {
     const navigate = useNavigate()
     const { isLoggedIn } = useSelector(state => state.auth)
     const [currentToken] = useLocalStorage(LOCAL_STORAGE_KEYS.token, null)
-    const [route] = useLocalStorage(LOCAL_STORAGE_KEYS.previousRoute, null)
-    console.log(currentToken, isLoggedIn)
 
     useEffect(() => {
         if (isLoggedIn || currentToken) {
-            const redirectPath = '/dashboard'
-            navigate(redirectPath, { replace: true })
+            // A hardcoded literal on purpose. Passing a user-controlled value
+            // to navigate() is what makes react-router's open-redirect advisory
+            // (CVE-2025-68470 bypass) exploitable; there is no such call site in
+            // this app, which is why that advisory is not reachable here.
+            navigate('/dashboard', { replace: true })
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoggedIn, navigate, currentToken])

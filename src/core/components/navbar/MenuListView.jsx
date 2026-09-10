@@ -19,15 +19,13 @@ import { useDispatch, useSelector } from 'react-redux'
 import { toggleNavBar } from '@app/store/slices/navBarSlice'
 
 // ** import custom components
-import { ROLES } from '@/constants'
 import { useNavigate } from 'react-router-dom'
 import DisabledWrapper from '../DisabledWrapper'
 
 function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
-    console.log(mainListItems)
     const dispatch = useDispatch()
     const navigate = useNavigate()
-    const { menuAccess, user, selectedLocation, masterAdminAllowedRoutes } = useSelector(state => state.auth)
+    const { allowedPaths } = useSelector(state => state.auth)
     // const [activeItem, setActiveItem] = useState(
     //     mainListItems?.children?.[0]?.id &&
     //         !mainListItems?.children?.[0]?.isDisabled &&
@@ -36,19 +34,38 @@ function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
     //         : null
     // )
 
-    // Module menu permission fn
-    const isAllowedToNavigate = id => {
-        if (
-            (menuAccess.has(id) && selectedLocation) ||
-            (user && user.role_id === ROLES.MASTER_ADMIN && !selectedLocation && masterAdminAllowedRoutes.has(id))
-        )
-            return true
-        return false // TODO:: change this to false after implementing the actual permission logic/ fixing roles & permissions
+    /**
+     * Whether a navigation entry should be enabled.
+     *
+     * This used to require BOTH `menuAccess.has(id)` — a Set that was never
+     * populated — AND `selectedLocation`, a warehouse concept with no
+     * equivalent here, so the condition was permanently false and every entry
+     * rendered disabled. The fallback branch then checked
+     * `masterAdminAllowedRoutes`, a hardcoded list of 37 warehouse route keys
+     * (`storage_location`, `bin`, `pallet`, `sku_master`, …).
+     *
+     * The menu the API returns is already filtered to this user's grants, so an
+     * item that reached this component is by definition permitted. `url` is
+     * checked against `allowedPaths` as a second line for menus assembled
+     * client-side (see normalizeMenuItems in the auth slice).
+     *
+     * @param {object|string} item menu entry, or a bare id for older call sites
+     * @returns {boolean}
+     */
+    const isAllowedToNavigate = item => {
+        if (!item) return false
+
+        // older call sites pass just the id; those entries came from the
+        // API-filtered menu, so they are allowed
+        if (typeof item === 'string') return true
+
+        if (!item.url) return true
+        return allowedPaths.size === 0 || allowedPaths.has(item.url)
     }
 
     const [activeItem, setActiveItem] = useState(
         mainListItems?.children?.[0]?.id &&
-            isAllowedToNavigate(mainListItems?.children?.[0]?.id) &&
+            isAllowedToNavigate(mainListItems?.children?.[0]) &&
             mainListItems?.children?.[0]?.type === 'collapse'
             ? mainListItems?.children?.[0]?.id
             : null
@@ -208,10 +225,7 @@ function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
                                 {mainListItems.children
                                     .find(item => item.id === activeItem)
                                     .children.map((subItem, index) => (
-                                        <DisabledWrapper
-                                            key={subItem?.id}
-                                            isDisabled={menuAccess && !isAllowedToNavigate(subItem.id)}
-                                        >
+                                        <DisabledWrapper key={subItem?.id} isDisabled={!isAllowedToNavigate(subItem)}>
                                             <ListItem
                                                 button
                                                 onClick={() => handleSubItemClick(index, subItem?.type, subItem?.path)}
@@ -275,7 +289,7 @@ function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
                                             .children[activeSubItem].children.map(nestedItem => (
                                                 <DisabledWrapper
                                                     key={nestedItem?.id}
-                                                    isDisabled={menuAccess && !isAllowedToNavigate(nestedItem.id)}
+                                                    isDisabled={!isAllowedToNavigate(nestedItem)}
                                                 >
                                                     <ListItem
                                                         onClick={() => {

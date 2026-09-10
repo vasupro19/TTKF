@@ -477,25 +477,6 @@ export function downloadFile(url, filename) {
     document.body.removeChild(link)
 }
 
-export const getScannableInputSx = () => ({
-    '& input': {
-        backgroundColor: '#fff',
-        padding: '12px 8px',
-        height: '14px',
-        borderRight: '1px solid',
-        borderColor: 'gray',
-        borderRadius: '8px 0px 0px 8px'
-    },
-    // Change borderRight color on hover
-    '& input:hover': {
-        borderRightColor: 'primary.main'
-    },
-    // Change borderRight color when focused
-    '& input:focus': {
-        borderRight: '2px solid',
-        borderRightColor: 'primary.main'
-    }
-})
 
 /**
  * Masks a portion of the given string by replacing the middle part with asterisks (*).
@@ -508,75 +489,3 @@ export const getScannableInputSx = () => ({
  * @param {number} [back=0] - Number of characters to keep unmasked at the end.
  * @returns {string} - The masked string, original string if too short, or empty string on invalid input.
  */
-export const maskItemId = (itemId, front = 5, back = 0) => {
-    if (typeof itemId !== 'string') return ''
-    if (!Number.isInteger(front) || front < 0) return ''
-    if (!Number.isInteger(back) || back < 0) return ''
-
-    const len = itemId.length
-    if (len <= front + back) return itemId
-
-    const start = itemId.slice(0, front)
-    const end = itemId.slice(len - back)
-    const middleMask = '*'.repeat(len - front - back)
-
-    return start + middleMask + end
-}
-
-import jsPDF from 'jspdf'
-import QRCode from 'qrcode'
-
-export const handleQRGeneration = async (values, name) => {
-    const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'pt',
-        format: [50 * 2.83465, 25 * 2.83465] // 50mm x 25mm dimensions
-    })
-    // Label dimensions in points (for 25mm x 50mm)
-    const labelWidth = 50 * 2.83465 // Convert 50mm to points
-    const labelHeight = 25 * 2.83465 // Convert 25mm to points
-
-    const fontSize = 8 // Font size for the text
-    // const fontBold = 'bold' // Font weight for bold text
-    const qrCodeSize = 40 // Size of the QR code in the PDF
-    const gapBetweenQrAndText = 10 // Gap between QR code and ID text
-    const gapBetweenTextAndTopText = 0 // Gap between "wms.cerebrum.io" and the QR code/text area
-
-    // eslint-disable-next-line no-plusplus
-    for (let i = 0; i < values.length; i++) {
-        const id = values[i]
-
-        // Generate QR code as a base64 image
-        // eslint-disable-next-line no-await-in-loop
-        const qrCodeImage = await QRCode.toDataURL(id, {
-            width: 100, // Width of the QR code
-            margin: 0 // No margin around the QR code
-        })
-
-        // Define QR code position and dimensions
-        const qrCodeX = (labelWidth - qrCodeSize) / 2 // Center QR code horizontally
-        const qrCodeY = 15 + gapBetweenTextAndTopText // Add some spacing from the top for "wms.cerebrum.io" text
-
-        // Add the QR code image to the PDF
-        doc.addImage(qrCodeImage, 'PNG', qrCodeX, qrCodeY, qrCodeSize, qrCodeSize)
-
-        // Add ID text below the QR code
-        const idTextY = qrCodeY + qrCodeSize + gapBetweenQrAndText // Place text below the QR code
-        doc.setFontSize(fontSize)
-        doc.setFont('helvetica', 'bold') // Set font weight to bold
-        doc.text(id, labelWidth / 2, idTextY, { align: 'center' }) // Center-align the text
-
-        // Add the "wms.cerebrum.io" text at the top of the label
-        const topTextY = 10 // Text near the top of the label
-        doc.setFontSize(6)
-        doc.setFont('helvetica', 'normal') // Set top text to normal font
-        doc.text(import.meta.env.VITE_APP_URI || '', labelWidth / 2, topTextY, { align: 'center' })
-
-        // Add a new page for the next label unless it's the last label
-        if (i < values.length - 1) {
-            doc.addPage([labelWidth, labelHeight]) // Set page size for the label
-        }
-    }
-
-    doc.save(`${name}_qrcodes.pdf`)
-}

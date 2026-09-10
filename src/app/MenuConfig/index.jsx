@@ -7,8 +7,9 @@ const MenuInitializer = ({ children }) => {
     const dispatch = useDispatch()
     const user = useSelector(state => state.auth.user) // Get user from persisted auth state
 
-    // 1. Fetch menu. Skip if no user is found.
-    const { data: menuData, isSuccess } = useGetMenuQuery(user?.id, {
+    // 1. Fetch the menu. No argument: the API resolves the caller from the
+    //    session cookie rather than a client-supplied userId.
+    const { data: menuData, isSuccess } = useGetMenuQuery(undefined, {
         skip: !user?.id,
         refetchOnMountOrArgChange: true
     })

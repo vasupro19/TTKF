@@ -23,6 +23,7 @@ import { motion } from 'framer-motion'
 import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
+import { ensureCsrfToken } from '@app/store/slices/api/configSlice'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 import JobApplicationForm from './JobApplicationForm'
@@ -67,10 +68,17 @@ export default function Login() {
             try {
                 const res = await login(values).unwrap()
                 const userData = res.data.user
+
+                // The access token is an httpOnly cookie only; this marker
+                // just tells AuthGuard a session exists. See LoginForm.jsx.
+                await setToken('active')
+                await ensureCsrfToken()
+
                 dispatch(setUserDetails({ user: userData }))
-                await setToken(res.data.accessToken)
-                const menus = await triggerMenu(userData.id).unwrap()
+
+                const menus = await triggerMenu().unwrap()
                 dispatch(setMenuItems(menus.data))
+
                 navigate('/dashboard', { replace: true })
             } catch (err) {
                 dispatch(
