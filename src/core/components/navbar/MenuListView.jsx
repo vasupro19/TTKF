@@ -356,7 +356,7 @@ MenuListView.propTypes = {
     title: PropTypes.string.isRequired,
     isVisible: PropTypes.bool.isRequired,
     setIsVisible: PropTypes.func.isRequired,
-    /* eslint-disable react/forbid-prop-types */
+
     mainListItems: PropTypes.oneOfType([PropTypes.array, PropTypes.object])
 }
 

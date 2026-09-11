@@ -1,4 +1,3 @@
-/* eslint-disable no-nested-ternary */
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'

@@ -171,7 +171,6 @@ function MasterSupplierTable() {
     useEffect(() => {
         setRefetch(true)
         setTimeout(() => setRefetch(false), 500)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.pathname, navigate])
 
     // use keyboard shortcut

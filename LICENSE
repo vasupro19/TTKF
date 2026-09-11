@@ -1,0 +1,37 @@
+Copyright (c) 2026 Vasu / CodeRootz. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+This software and its source code are the confidential and proprietary property
+of the copyright holder. They are licensed, not sold.
+
+WITHOUT A SEPARATE WRITTEN LICENCE AGREEMENT SIGNED BY THE COPYRIGHT HOLDER, NO
+PERMISSION IS GRANTED TO ANY PERSON TO USE, COPY, MODIFY, MERGE, PUBLISH,
+DISTRIBUTE, SUBLICENCE, HOST, OR SELL THIS SOFTWARE OR ANY PORTION OF IT.
+
+Where a written licence agreement exists, that agreement governs and this file
+is subordinate to it. In the absence of terms to the contrary in such an
+agreement, a licensee may not:
+
+  1. redistribute the software or its source code, in whole or in part, to any
+     third party;
+  2. offer the software to third parties as a hosted or managed service;
+  3. remove or obscure any copyright, trademark or attribution notice;
+  4. reverse engineer, decompile or disassemble any distributed binary, except
+     to the extent that restriction is unenforceable under applicable law.
+
+THIRD-PARTY COMPONENTS
+This software incorporates open-source components, each governed by its own
+licence. Run `npm ls --all` in each package directory for the current list, and
+`npx license-checker --summary` for a licence breakdown. Nothing in this notice
+limits any right granted to you under those licences.
+
+NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Enquiries: vasu.grover@coderootz.com

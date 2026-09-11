@@ -102,13 +102,11 @@ function CustomPhoneInput({ field, formik, handlePhoneChange, outsideLabel = fal
                             fontSize: '0.675rem !important',
                             padding: '0 4px',
                             background: field?.isDisabled ? 'transparent' : '#fff',
-                            color:
-                                // eslint-disable-next-line no-nested-ternary
-                                field?.isDisabled
-                                    ? '#888 !important'
-                                    : formik.touched[field.name] && Boolean(formik.errors[field.name])
-                                      ? 'error.main'
-                                      : '#697586 !important',
+                            color: field?.isDisabled
+                                ? '#888 !important'
+                                : formik.touched[field.name] && Boolean(formik.errors[field.name])
+                                  ? 'error.main'
+                                  : '#697586 !important',
                             zIndex: field?.isDisabled ? 2 : 2,
                             ...(field?.isDisabled && {
                                 '&::before': {

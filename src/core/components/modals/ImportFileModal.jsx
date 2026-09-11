@@ -74,7 +74,6 @@ function ImportFileModal({
         [dispatch, maxFiles, customOnDrop]
     )
 
-    // eslint-disable-next-line no-unused-vars
     const handleDownloadSample = async action => {
         if (handleGetTemplate) {
             try {

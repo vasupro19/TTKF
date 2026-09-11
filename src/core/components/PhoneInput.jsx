@@ -38,9 +38,9 @@ function PhoneField({
 
     return (
         <Box sx={{ width: '100%' }}>
-            {/* eslint-disable  */}
+            {}
             <Typography sx={{ textAlign: 'left', mb: 1, ...labelSx, color: disabled ? 'text.secondary' : 'unset' }}>
-                {/* eslint-enable  */}
+                {}
                 {label}*
             </Typography>
             <PhoneInput

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import StatusBadge from '@core/components/StatusBadge'
 
 export const locations = [

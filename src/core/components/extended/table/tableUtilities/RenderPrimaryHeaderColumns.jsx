@@ -6,7 +6,7 @@ import PrimaryHeaderCellContent from './PrimaryHeaderCellContent'
 const RenderPrimaryHeaderColumns = ({ columns, stickyLeft, searchTerms, handleSort, headerCellSX, hasData }) =>
     columns
         ?.filter(column => column?.visible)
-        // eslint-disable-next-line no-unused-vars
+
         ?.map((column, index, array) => {
             const cellStyles = generatePrimaryHeaderCellStyles(column, stickyLeft, index, headerCellSX, hasData)
             /* eslint-disable no-param-reassign */

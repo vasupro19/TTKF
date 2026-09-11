@@ -1,4 +1,3 @@
-/* eslint-disable react/button-has-type */
 import React, { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 

@@ -1,4 +1,3 @@
-// eslint-disable-next-line import/prefer-default-export
 export default function GRNIcon(props) {
     return (
         // eslint-disable-next-line react/jsx-props-no-spreading

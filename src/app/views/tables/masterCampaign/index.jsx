@@ -255,7 +255,6 @@ function MasterCampaignTable() {
     useEffect(() => {
         setRefetch(true)
         setTimeout(() => setRefetch(false), 500)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.pathname])
 
     // use keyboard shortcut

@@ -42,15 +42,13 @@ function CustomDateInput({ field, formik, outsideLabel = false, handleCustomChan
                         fontSize: '0.675rem !important',
                         padding: '0 4px',
                         background: field?.isDisabled ? 'transparent' : '#fff',
-                        color:
-                            // eslint-disable-next-line no-nested-ternary
-                            field?.isDisabled
-                                ? '#888 !important'
-                                : formik.touched[field.name] && Boolean(formik.errors[field.name])
-                                  ? 'error.main'
-                                  : focused
-                                    ? '#000 !important'
-                                    : '#697586 !important',
+                        color: field?.isDisabled
+                            ? '#888 !important'
+                            : formik.touched[field.name] && Boolean(formik.errors[field.name])
+                              ? 'error.main'
+                              : focused
+                                ? '#000 !important'
+                                : '#697586 !important',
                         zIndex: field?.isDisabled ? 2 : 1,
                         ...(field?.isDisabled && {
                             '&::before': {
@@ -74,7 +72,6 @@ function CustomDateInput({ field, formik, outsideLabel = false, handleCustomChan
                 <TextField
                     fullWidth
                     name={field.name}
-                    // eslint-disable-next-line react/prop-types
                     type={field?.type === 'dateTime' ? 'datetime-local' : 'date'}
                     value={formik.values[field.name]}
                     placeholder={field.placeholder || ''}
@@ -99,7 +96,6 @@ function CustomDateInput({ field, formik, outsideLabel = false, handleCustomChan
                         ...field.customSx
                     }}
                     InputLabelProps={{ shrink: true }} // Ensures label does not overlap input content
-                    // eslint-disable-next-line react/prop-types
                     disabled={field?.isDisabled}
                     // eslint-disable-next-line react/prop-types
                     inputProps={field.inputProps || {}}

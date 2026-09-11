@@ -1,6 +1,5 @@
 /* eslint-disable react/jsx-props-no-spreading */
-/* eslint-disable react/destructuring-assignment */
-/* eslint-disable react/no-unstable-nested-components */
+
 import React, { useState, useCallback } from 'react'
 import { Autocomplete, Popper, styled, TextField } from '@mui/material'
 import CustomButton from './extended/CustomButton'

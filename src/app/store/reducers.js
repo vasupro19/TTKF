@@ -1,7 +1,7 @@
 import { combineReducers } from 'redux'
-// eslint-disable-next-line import/no-extraneous-dependencies
+
 import { persistReducer } from 'redux-persist'
-// eslint-disable-next-line import/no-extraneous-dependencies
+
 import storage from 'redux-persist/lib/storage'
 
 import AuthSlice from './slices/auth'

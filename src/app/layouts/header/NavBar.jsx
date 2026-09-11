@@ -1,4 +1,3 @@
-/* eslint-disable react/jsx-props-no-spreading */
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -88,7 +87,7 @@ function NavBar() {
 
     // eslint-disable-next-line no-unused-vars
     const [_, __, removeToken] = useLocalStorage(LOCAL_STORAGE_KEYS.token, null)
-    // eslint-disable-next-line no-unused-vars
+
     // const [clientLocation, setClientLocation, removeClientLocation] = useLocalStorage(
     //     LOCAL_STORAGE_KEYS.clientLocation,
     //     null,
@@ -368,7 +367,6 @@ function NavBar() {
                 searchTimeoutRef.current = null
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [menuItems, isMenuOpen, isVisible]) // Dependencies updated
 
     // use keyboard shortcut

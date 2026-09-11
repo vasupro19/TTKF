@@ -75,7 +75,17 @@ module.exports = {
         'import/no-extraneous-dependencies': [
             'error',
             {
-                devDependencies: ['vite.config.js', '**/*.config.js']
+                // Test tooling (vitest, @testing-library/*) was previously listed
+                // under `dependencies`, so it was installed on every production
+                // deploy. It now sits in devDependencies where it belongs, which
+                // means test files must be allowed to import from there.
+                devDependencies: [
+                    'vite.config.js',
+                    '**/*.config.js',
+                    '**/*.test.{js,jsx}',
+                    '**/*.spec.{js,jsx}',
+                    'src/test/**'
+                ]
             }
         ],
         'no-unused-vars': [

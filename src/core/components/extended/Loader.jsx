@@ -1,4 +1,3 @@
-/* eslint-disable react/self-closing-comp */
 import { Box, Typography } from '@mui/material'
 import { useSelector, useDispatch } from 'react-redux'
 

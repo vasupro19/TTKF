@@ -62,7 +62,7 @@ import CustomPagination from './CustomPagination'
  */
 
 // Fixed header that will clone the table header
-// eslint-disable-next-line no-shadow
+
 const FixedHeaderContainer = styled(Box)(({ theme, width }) => ({
     position: 'fixed',
     top: '56px', // 50px from the top of viewport
@@ -502,7 +502,6 @@ function DataTable({
             table.removeEventListener('scroll', horizontalScrollHandler)
             resizeObserver.disconnect()
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInitialized, isLoading])
 
     // Function to flash the row using DOM manipulation - fully optimized version

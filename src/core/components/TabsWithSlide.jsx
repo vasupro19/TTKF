@@ -52,7 +52,7 @@ function TabsWithSlide({ labels = [], tabIndex = 0, onTabChange, customSx = {} }
                 >
                     {labels.map((label, index) => (
                         <MenuItem
-                            // eslint-disable-next-line react/no-array-index-key
+                             
                             key={index}
                             value={index}
                             sx={{ fontSize: '0.85rem', fontWeight: 500 }}
@@ -109,7 +109,7 @@ function TabsWithSlide({ labels = [], tabIndex = 0, onTabChange, customSx = {} }
             >
                 {labels.map((label, index) => (
                     <FormControlLabel
-                        // eslint-disable-next-line react/no-array-index-key
+                         
                         key={index}
                         value={index}
                         control={
@@ -169,7 +169,7 @@ TabsWithSlide.propTypes = {
     labels: PropTypes.arrayOf(PropTypes.string).isRequired,
     tabIndex: PropTypes.number.isRequired,
     onTabChange: PropTypes.func.isRequired,
-    // eslint-disable-next-line react/forbid-prop-types
+     
     customSx: PropTypes.object
 }
 

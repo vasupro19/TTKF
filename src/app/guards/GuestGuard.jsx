@@ -16,7 +16,6 @@ function GuestGuard({ children }) {
             // this app, which is why that advisory is not reachable here.
             navigate('/dashboard', { replace: true })
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoggedIn, navigate, currentToken])
 
     return children

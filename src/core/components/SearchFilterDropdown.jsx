@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-/* eslint-disable react/forbid-prop-types */
+
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 // import PropTypes from 'prop-types'
 import { TextField, Checkbox, Popover, Box, InputAdornment, styled } from '@mui/material'

@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'hardening/**', 'release/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  build:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # `vite build` runs eslint through vite-plugin-eslint and FAILS the build
+      # on any error, so this step is partly redundant — but running it
+      # separately means a lint failure is reported as a lint failure rather
+      # than buried in a rollup stack trace.
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # VITE_APP_BASE_URL is required by the Dockerfile and inlined at build
+      # time; a placeholder is fine for proving the build compiles.
+      - name: Build
+        env:
+          VITE_APP_BASE_URL: https://api.example.com/v1
+          VITE_APP_NAME: TTK
+        run: npm run build
+
+      # Guards against the bundle silently growing back. The warehouse removal
+      # took the main chunk from 1,197KB to 758KB; a regression past 1MB means
+      # something large has been reintroduced.
+      - name: Bundle size budget
+        run: |
+          MAIN=$(find dist/assets -name 'index-*.js' -print0 | xargs -0 ls -S | head -1)
+          SIZE_KB=$(( $(stat -c%s "$MAIN") / 1024 ))
+          echo "main chunk: ${SIZE_KB}KB ($MAIN)"
+
+          if [ "$SIZE_KB" -gt 1024 ]; then
+            echo "::error::main chunk is ${SIZE_KB}KB, over the 1024KB budget"
+            exit 1
+          fi
+
+      - name: No source maps in the build
+        run: |
+          if find dist -name '*.map' | grep -q .; then
+            echo "::error::source maps present in dist/ — they expose application source"
+            exit 1
+          fi
+          echo "no source maps"
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Fails on critical only. The two remaining high-severity findings are
+      # transitive, unreachable in this app, and documented with reasoning in
+      # ../TTKB/docs/SECURITY.md; tightening this to --audit-level=high is the
+      # goal once react-router v7 and vite v8 migrations land.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Report everything, without failing
+        if: always()
+        run: npm audit --omit=dev || true
+
+      - name: Check no .env is committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::a .env file is tracked in git"
+            exit 1
+          fi
+          echo "no .env tracked"
+
+  docker:
+    name: Image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ttk-web:ci
+          build-args: |
+            VITE_APP_BASE_URL=https://api.example.com/v1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The previous image ran `vite dev`. Prove this one serves static files
+      # from nginx instead.
+      - name: Serves a static build, not a dev server
+        run: |
+          docker run -d --name web-ci -p 8080:80 ttk-web:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+
+          curl -sf http://127.0.0.1:8080/healthz | grep -q ok
+
+          # SPA fallback: a client-side route must return the app, not a 404
+          curl -sf http://127.0.0.1:8080/process/leads | grep -qi "<!doctype html"
+
+          # security headers set by nginx.conf
+          curl -sI http://127.0.0.1:8080/ | grep -qi "x-content-type-options: nosniff"
+          curl -sI http://127.0.0.1:8080/ | grep -qi "content-security-policy"
+
+          # no HMR client, which would mean the dev server is running
+          if curl -s http://127.0.0.1:8080/ | grep -q "@vite/client"; then
+            echo "::error::the image is serving a Vite dev build"
+            exit 1
+          fi
+
+          docker rm -f web-ci
+          echo "static build served correctly"

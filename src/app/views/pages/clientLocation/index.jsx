@@ -120,7 +120,6 @@ function ClientLocationTable() {
         setInputVal(e.target.value)
     }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         getClients()
         // eslint-disable-next-line react-hooks/exhaustive-deps

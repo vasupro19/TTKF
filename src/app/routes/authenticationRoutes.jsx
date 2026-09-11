@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { lazy } from 'react'
 import GuestGuard from '@app/guards/GuestGuard'
 import GuestLayout from '@app/layouts/GuestLayout'

@@ -113,7 +113,7 @@ function CustomSearchTextField({
             InputProps={{
                 inputRef: searchInputRef,
                 sx: { height: 40, ...inputPropsSx },
-                // eslint-disable-next-line react/jsx-props-no-spreading
+
                 ...(showAdornment
                     ? {
                           endAdornment:

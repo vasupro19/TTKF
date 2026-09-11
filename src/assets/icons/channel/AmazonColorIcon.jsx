@@ -8,7 +8,6 @@ function AmazonColorIcon(props) {
             viewBox='0 0 48 48'
             version='1.1'
             xmlns='http://www.w3.org/2000/svg'
-            // eslint-disable-next-line react/no-unknown-property
             xmlnsXlink='http://www.w3.org/1999/xlink'
             // eslint-disable-next-line react/jsx-props-no-spreading
             {...props}

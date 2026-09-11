@@ -1,4 +1,3 @@
-/* eslint-disable no-underscore-dangle */
 import React, { useState, useRef } from 'react'
 import { useFormik } from 'formik'
 import { z } from 'zod'

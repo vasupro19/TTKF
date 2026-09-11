@@ -103,7 +103,6 @@ function FormComponent({
                 {fields
                     .filter(field => field.name)
                     .map(field => (
-                        // eslint-disable-next-line react/jsx-props-no-spreading
                         <Grid item {...(field.grid || grid)} key={field.name}>
                             {/* Dynamically rendering field types based on field.type */}
                             {isLoading ? (
@@ -758,5 +757,5 @@ FormComponent.propTypes = {
     onClickCancel: PropTypes.func,
     showCancelButton: PropTypes.bool // Show cancel button
 }
-/* eslint-disable */
+
 export default FormComponent
