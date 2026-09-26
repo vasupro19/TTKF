@@ -23,6 +23,7 @@ import {
     ExpandLess,
     Refresh
 } from '@mui/icons-material'
+import { useAssistAiMutation } from '@/app/store/slices/api/aiSlice'
 
 /**
  * AiFormAssistant
@@ -71,6 +72,7 @@ function AiFormAssistant({ fields = [], formik, context = '', suggestions = [], 
     const [aiResponse, setAiResponse] = useState(null)
     const [copied, setCopied] = useState(false)
     const [appliedFields, setAppliedFields] = useState([])
+    const [assistAi] = useAssistAiMutation()
     const inputRef = useRef(null)
 
     const chips = suggestions.length ? suggestions : SUGGESTIONS[entityType] || SUGGESTIONS.default
@@ -110,16 +112,11 @@ Example response:
         setAppliedFields([])
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    system: buildSystemPrompt(),
-                    messages: [{ role: 'user', content: userPrompt }]
-                })
-            })
-
-            const data = await response.json()
+            // ? goes through the api slice so the session cookie and CSRF token are sent — a bare fetch gets a 401
+            const data = await assistAi({
+                system: buildSystemPrompt(),
+                messages: [{ role: 'user', content: userPrompt }]
+            }).unwrap()
             const text = data?.content?.[0]?.text || ''
 
             // Strip markdown fences if present
