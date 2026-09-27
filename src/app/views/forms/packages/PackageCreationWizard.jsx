@@ -240,7 +240,11 @@ const cleanDestinationLabel = value =>
         .replace(/\bby\s+[a-z\s]+$/i, '')
         .replace(/\bwith\s+[a-z\s]+$/i, '')
         .replace(/\bpickup\s+from\s+[a-z\s]+$/i, '')
-        .replace(/\b(?:include|including|incl|covering)\b.*$/i, '')
+        // ? conversational filler after the name: "3n manali in which it should include ...", "2n shimla and ..."
+        .replace(
+            /\b(?:include|including|incl|covering|in which|which|where|that|should|must|also|and|then|plus)\b.*$/i,
+            ''
+        )
         .replace(/\s+/g, ' ')
         .trim()
 
@@ -337,7 +341,8 @@ const parseDraftPrompt = prompt => {
         matches.forEach(match => {
             const destinationName = cleanDestinationLabel(match[2])
             if (destinationName) {
-                destinations.push(createDestinationRow(destinationName, Number(match[1]) || 1))
+                const properName = destinationName.replace(/\b[a-z]/g, letter => letter.toUpperCase())
+                destinations.push(createDestinationRow(properName, Number(match[1]) || 1))
             }
         })
     })
@@ -2028,7 +2033,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                 openSnackbar({
                     open: true,
                     message:
-                        'Type or speak a package brief first, e.g. "2N Shimla, 3N Manali from Chandigarh by cab, include Sissu and Rohtang".',
+                        'Type or speak what the guest wants first, e.g. "Create an itinerary for 2N Shimla and 3N Manali that includes Chandratal and Rohtang".',
                     variant: 'alert',
                     alert: { color: 'warning' },
                     anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -2192,7 +2197,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         recognition.onstart = () => {
             setIsListening(true)
             setVoiceStatus(
-                'Listening... say something like "2N Shimla, 3N Manali from Delhi by cab, include Sissu and Rohtang".'
+                'Listening... say something like "2 nights Shimla and 3 nights Manali, include Chandratal and Rohtang, pickup from Delhi".'
             )
         }
 
@@ -2497,16 +2502,17 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                             <Stack spacing={2}>
                                 <Typography variant='h5'>Build with AI</Typography>
                                 <Typography variant='body2' color='text.secondary'>
-                                    Describe the trip the way you would tell a colleague: destinations with nights,
-                                    pickup city, transport and any must-see stops. AI plans each day around those stops,
-                                    then writes the descriptions and suggests hotels and images.
+                                    Type what the guest wants in plain words, the way you would ask any AI assistant:
+                                    nights per destination, pickup city, vehicle and the places they must see. AI builds
+                                    the day-by-day itinerary around those places, then writes the descriptions and
+                                    suggests hotels and images.
                                 </Typography>
                                 <TextField
                                     multiline
                                     minRows={3}
                                     value={draftPrompt}
                                     onChange={event => setDraftPrompt(event.target.value)}
-                                    placeholder='2N Shimla, 3N Manali from Chandigarh by cab, include Sissu and Rohtang'
+                                    placeholder='Create an itinerary for 2N Shimla and 3N Manali that includes Chandratal and Rohtang, pickup from Delhi by Innova'
                                 />
                                 <Stack direction='row' spacing={1.5} flexWrap='wrap' useFlexGap>
                                     {voiceSupported ? (

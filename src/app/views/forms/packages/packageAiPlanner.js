@@ -25,9 +25,9 @@ export const PLANNER_SYSTEM_PROMPT = `You are an expert Indian holiday package p
 Respond ONLY with a JSON object with these keys:
 - packageName: string — catchy, ending with "<days>D/<nights>N"
 - originLocation: string — pickup city if the brief or knownOriginLocation gives one, else ""
-- transportMode: string — Cab, Volvo, Tempo Traveller, Train, Flight or Bus if the brief or knownTransportMode gives one, else ""
+- transportMode: string — the vehicle or mode as the agent wrote it (e.g. Innova, Cab, Tempo Traveller, Volvo, Train, Flight) if the brief or knownTransportMode gives one, else ""
 - destinations: array of { "name": string, "nights": integer } in travel order, as the brief lists them
-- mustInclude: array of strings — every specific place, excursion or activity the brief asks for, spelled properly (e.g. "Sissu", "Rohtang Pass")
+- mustInclude: array of strings — every specific place, excursion or activity the brief asks for besides the destinations themselves, spelled properly (e.g. "Chandratal Lake", "Rohtang Pass")
 - days: array of { "day": integer, "destination": string, "type": "TransitStay" | "Stay" | "Transit", "title": string, "highlights": array of strings }
 - warnings: array of short strings for the agent
 
@@ -38,15 +38,16 @@ DAY STRUCTURE — follow exactly:
 - Every other day has type "Stay".
 
 PLANNING RULES:
-1. Put every mustInclude item on a day at the destination it is visited from — e.g. Rohtang Pass, Sissu, Atal Tunnel, Solang Valley and Kullu from Manali; Kufri, Chail and Naldehra from Shimla. Read misspellings sensibly ("rotang" = Rohtang Pass, "sisu" = Sissu).
+0. mustInclude items are firm requests from the guest. Place EVERY one of them, even a demanding excursion such as Chandratal Lake — put any concern (road condition, altitude, season, permit) in warnings instead of leaving it out. The only reason to leave one out is that there are not enough days, and then say so in warnings.
+1. Put every mustInclude item on a day at the destination it is visited from — e.g. Rohtang Pass, Chandratal Lake, Sissu, Atal Tunnel, Solang Valley and Kullu from Manali; Kufri, Chail and Naldehra from Shimla. Read misspellings sensibly ("rotang" = Rohtang Pass, "chandrataal" = Chandratal Lake, "sisu" = Sissu).
 2. Long excursions go on full "Stay" days, never on arrival or drop days. Arrival days get light, nearby sightseeing only.
 3. Pair places on the same route on the same day, with at most one major excursion per day.
 4. Never repeat a place on two days.
 5. Fill the remaining days with the destination's best-known real sightseeing.
-6. highlights: 2 to 4 real place or activity names for that day, with requested items spelled properly. Never list travel logistics (check-in, check-out, pickup, drop, arrival, departure, the journey itself) as a highlight.
+6. highlights: 2 to 4 real place or activity names for that day, with requested items spelled properly. Never list travel logistics (check-in, check-out, pickup, drop, arrival, departure, the journey itself) as a highlight. The final drop day may have an empty highlights array — never invent filler.
 7. title: under 10 words naming the day's key places, joined with "&" or ","; never start with Explore, Visit, Tour, Discover, Day or Enjoy. A TransitStay title names the route, e.g. "Chandigarh to Shimla & Mall Road Evening". The drop day title names the return, e.g. "Manali to Chandigarh Return Journey".
 8. Never add days beyond the nights given. If the requested items cannot all fit, leave the extras out and add a warning naming what did not fit.
-9. Add a warning for anything the agent must arrange: permits (e.g. Rohtang Pass needs one), weekly closures or seasonal access.
+9. Add a warning for anything the agent must arrange: permits (e.g. Rohtang Pass needs one), weekly closures or seasonal access. Warnings are only for things the agent must act on — never restate or summarise the itinerary.
 
 Return JSON only.`
 
@@ -82,7 +83,8 @@ const uniqueBy = (items, keyOf) =>
     items.filter((item, index) => items.findIndex(other => keyOf(other) === keyOf(item)) === index)
 
 // ? models list the logistics of a day ("Hotel Check-in", "Overnight Volvo Journey") as if they were sights
-const LOGISTICS_HIGHLIGHT = /\b(check[\s-]?in|check[\s-]?out|pick[\s-]?up|drop|arrival|departure|journey|transfer)\b/i
+const LOGISTICS_HIGHLIGHT =
+    /\b(check[\s-]?in|check[\s-]?out|pick[\s-]?up|drop|arrival|departure|journey|transfer|drive|views?)\b/i
 
 /**
  * @description replaces any day/night suffix the model wrote with one computed
@@ -142,10 +144,11 @@ export const normalizePlan = raw => {
         transportMode: cleanString(plan.transportMode, 40),
         destinations,
         days,
+        // ? models echo the destinations back as requests ("Shimla", "Manali"); those are not stops
         mustInclude: uniqueBy(
             list(plan.mustInclude)
                 .map(item => cleanString(typeof item === 'string' ? item : item?.name, 60))
-                .filter(Boolean),
+                .filter(item => item && !destinations.some(place => normalizeText(place.name) === normalizeText(item))),
             normalizeText
         ),
         warnings: list(plan.warnings)
