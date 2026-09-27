@@ -36,15 +36,13 @@ import {
     useUpdateItenaryClientMutation
 } from '@/app/store/slices/api/itenarySlice'
 import { useCreatePackageItenaryClientMutation } from '@/app/store/slices/api/packageItenarySlice'
-import {
-    applyPlanToRows,
-    buildPlannerRequest,
-    buildWriterBatches,
-    buildWriterRequest,
-    matchInclusions,
-    normalizePlan,
-    parseWriterDescriptions
-} from './packageAiPlanner'
+import TripBriefCard from './tripUi/TripBriefCard'
+import TripPlanView from './tripUi/TripPlanView'
+import DayPlanCard from './tripUi/DayPlanCard'
+import { applyPatch, emptyRequirements } from './tripEngine/requirements'
+import { editRequirements, planTrip, understand } from './tripEngine/pipeline'
+import { entryTypeFor, renderDayDescription, renderDayTitle } from './tripEngine/render'
+import { DAY_TYPES } from './tripEngine/route'
 
 const steps = ['Package', 'Destinations', 'Activities', 'Review']
 
@@ -221,48 +219,6 @@ const getAiRetryDelayMs = error => {
 const isGenericActivityTitle = title =>
     /^(Arrival in .+|Transit Day|Transit \+ Stay Day|Fresh Up Day|New Stay Day)$/i.test((title || '').trim())
 
-const TRANSPORT_PATTERNS = [
-    { regex: /\btempo\s*travell?er\b/i, label: 'Tempo Traveller' },
-    { regex: /\btempo\b/i, label: 'Tempo Traveller' },
-    { regex: /\bvolvo\b/i, label: 'Volvo' },
-    { regex: /\bcab\b/i, label: 'Cab' },
-    { regex: /\btaxi\b/i, label: 'Cab' },
-    { regex: /\btrain\b/i, label: 'Train' },
-    { regex: /\bflight\b/i, label: 'Flight' },
-    { regex: /\bbus\b/i, label: 'Bus' }
-]
-
-const cleanDestinationLabel = value =>
-    (value || '')
-        .toString()
-        .replace(/\bfrom\s+[a-z\s]+$/i, '')
-        .replace(/\bvia\s+[a-z\s]+$/i, '')
-        .replace(/\bby\s+[a-z\s]+$/i, '')
-        .replace(/\bwith\s+[a-z\s]+$/i, '')
-        .replace(/\bpickup\s+from\s+[a-z\s]+$/i, '')
-        // ? conversational filler after the name: "3n manali in which it should include ...", "2n shimla and ..."
-        .replace(
-            /\b(?:include|including|incl|covering|in which|which|where|that|should|must|also|and|then|plus)\b.*$/i,
-            ''
-        )
-        .replace(/\s+/g, ' ')
-        .trim()
-
-const extractTransportMode = prompt => {
-    const normalizedPrompt = (prompt || '').toString()
-    const matches = TRANSPORT_PATTERNS.map(pattern => {
-        const match = normalizedPrompt.match(pattern.regex)
-        return match ? { index: match.index ?? Number.MAX_SAFE_INTEGER, label: pattern.label } : null
-    }).filter(Boolean)
-
-    const uniqueLabels = matches
-        .sort((left, right) => left.index - right.index)
-        .map(item => item.label)
-        .filter((label, index, collection) => collection.indexOf(label) === index)
-
-    return uniqueLabels.join(' + ')
-}
-
 const buildTransferTitle = ({ fromLocation, toLocation, transportMode }) => {
     const baseTitle = fromLocation ? `Transfer from ${fromLocation} to ${toLocation}` : `Transfer to ${toLocation}`
     return transportMode ? `${baseTitle} via ${transportMode}` : baseTitle
@@ -317,58 +273,6 @@ This final transfer is intended to close the trip gracefully, giving guests a re
 
 const buildArrivalStayDescription = destinationName =>
     `Arrive in ${destinationName} and settle in comfortably after the journey. Depending on your arrival time, enjoy a relaxed local outing, market visit, or leisure moments while soaking in the atmosphere of the destination. The day is kept easy and welcoming so the trip begins on a pleasant and comfortable note before the overnight stay.`
-
-const parseDraftPrompt = prompt => {
-    const normalizedPrompt = prompt.replace(/\s+/g, ' ').trim()
-    const originMatch =
-        normalizedPrompt.match(/\bfrom\s+([a-z][a-z\s]+?)(?=(?:\s+\d+\s*(?:n|night|nights)\b)|$)/i) ||
-        normalizedPrompt.match(/\bpickup\s+from\s+([a-z][a-z\s]+?)(?=(?:\s+\d+\s*(?:n|night|nights)\b)|$)/i)
-    const originLocation = originMatch?.[1]?.trim() || ''
-    const transportMode = extractTransportMode(normalizedPrompt)
-
-    const lines = normalizedPrompt
-        .split(/\n|,/)
-        .map(item => item.trim())
-        .filter(Boolean)
-
-    const destinations = []
-
-    lines.forEach(line => {
-        const matches = [
-            ...line.matchAll(/(\d+)\s*(?:n|night|nights)\s+([^,\n]+?)(?=(?:\s+\d+\s*(?:n|night|nights)\b)|$)/gi)
-        ]
-
-        matches.forEach(match => {
-            const destinationName = cleanDestinationLabel(match[2])
-            if (destinationName) {
-                const properName = destinationName.replace(/\b[a-z]/g, letter => letter.toUpperCase())
-                destinations.push(createDestinationRow(properName, Number(match[1]) || 1))
-            }
-        })
-    })
-
-    const uniqueDestinations = destinations.filter((destination, index, collection) => {
-        const key = toNormalized(destination.name)
-        return collection.findIndex(item => toNormalized(item.name) === key) === index
-    })
-
-    return {
-        originLocation,
-        transportMode,
-        destinations: uniqueDestinations
-    }
-}
-
-const hasPromptOrigin = prompt => /\b(?:from|pickup\s+from)\b/i.test(prompt || '')
-
-const parsePromptWithFallbackOrigin = (prompt, currentOriginLocation = '') => {
-    const parsed = parseDraftPrompt(prompt)
-    return {
-        originLocation: parsed.originLocation || (hasPromptOrigin(prompt) ? '' : currentOriginLocation),
-        transportMode: parsed.transportMode || '',
-        destinations: parsed.destinations
-    }
-}
 
 const buildSuggestedPackageName = destinationRows => {
     const validNames = destinationRows.map(item => item.name.trim()).filter(Boolean)
@@ -740,9 +644,13 @@ function PackageCreationWizard() {
     const [voiceSupported, setVoiceSupported] = useState(false)
     const [isListening, setIsListening] = useState(false)
     const [voiceStatus, setVoiceStatus] = useState('')
-    const [voiceDrafting, setVoiceDrafting] = useState(false)
-    const [aiPlanSummary, setAiPlanSummary] = useState(null)
-    const [aiPlanUnavailable, setAiPlanUnavailable] = useState(false)
+    // ? the structured trip (requirements, journey legs, timed day plans) the engine builds; the rows in
+    //   `activities` are what gets saved, rendered from it
+    const [tripForm, setTripForm] = useState(emptyRequirements)
+    const [trip, setTrip] = useState(null)
+    const [tripBusy, setTripBusy] = useState(false)
+    const [tripError, setTripError] = useState('')
+    const [openTextByRow, setOpenTextByRow] = useState({})
     const [imageOptionsByRow, setImageOptionsByRow] = useState({})
     const [imageLoadingByRow, setImageLoadingByRow] = useState({})
     const [destinationHotelLoadingByRow, setDestinationHotelLoadingByRow] = useState({})
@@ -1926,233 +1834,153 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }))
     }
 
-    // ? one retry: on the free tier a busy model often answers a few seconds later
-    const requestBatchDescriptions = async ({ batch, rows, packageName, originLocation, transportMode }) => {
-        const isComplete = found => batch.every(row => found[row.id])
-        let descriptions = {}
+    // ? one AI request, parsed — the engine calls this once per stage
+    const askAi = request => runQueuedAiRequest(() => assistAi(request).unwrap()).then(parseAiJson)
 
-        // eslint-disable-next-line no-restricted-syntax
-        for (const attempt of [1, 2]) {
-            try {
-                // eslint-disable-next-line no-await-in-loop
-                const response = await runQueuedAiRequest(() =>
-                    assistAi(buildWriterRequest({ batch, rows, packageName, originLocation, transportMode })).unwrap()
-                )
-                descriptions = { ...parseWriterDescriptions(parseAiJson(response), batch, rows), ...descriptions }
-            } catch (error) {
-                // ? the caller counts the days still missing
-            }
-            if (isComplete(descriptions)) break
-            // eslint-disable-next-line no-await-in-loop
-            if (attempt === 1) await sleep(3000)
-        }
+    const showWarning = message =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color: 'warning' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
+            })
+        )
 
-        return descriptions
-    }
+    // ? writes a ready plan into the wizard's own rows. A day whose plan did not change keeps its row, including
+    //   any text the agent edited and its image.
+    const syncFromTrip = nextTrip => {
+        if (nextTrip.status !== 'ready') return
+        const { requirements } = nextTrip
 
-    // ? writes day descriptions a few days per call; anything the agent typed meanwhile is kept
-    const writeDescriptionsForRows = async ({ rows, packageName, originLocation, transportMode }) => {
-        let failedDays = 0
-
-        setDescriptionLoadingByRow(prev => ({ ...prev, ...Object.fromEntries(rows.map(row => [row.id, true])) }))
-
-        // eslint-disable-next-line no-restricted-syntax
-        for (const batch of buildWriterBatches(rows)) {
-            try {
-                // eslint-disable-next-line no-await-in-loop
-                const descriptions = await requestBatchDescriptions({
-                    batch,
-                    rows,
-                    packageName,
-                    originLocation,
-                    transportMode
-                })
-
-                setActivities(prev =>
-                    prev.map(item => {
-                        const drafted = batch.find(row => row.id === item.id)
-                        if (!drafted || !descriptions[item.id] || item.description !== drafted.description) {
-                            return item
-                        }
-                        return { ...item, description: descriptions[item.id] }
-                    })
-                )
-                failedDays += batch.filter(row => !descriptions[row.id]).length
-            } finally {
-                setDescriptionLoadingByRow(prev => ({
-                    ...prev,
-                    ...Object.fromEntries(batch.map(row => [row.id, false]))
-                }))
-            }
-        }
-
-        if (failedDays) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: `AI could not write ${failedDays} day description${failedDays > 1 ? 's' : ''}. A standard description is filled in, so you can edit it and continue.`,
-                    variant: 'alert',
-                    alert: { color: 'warning' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        }
-    }
-
-    // ? the planner call; null when AI is unavailable or returned nothing usable
-    const requestAiPlan = async ({ brief, destinationRows }) => {
-        try {
-            const response = await runQueuedAiRequest(() =>
-                assistAi(
-                    buildPlannerRequest({
-                        brief,
-                        originLocation: packageForm.originLocation,
-                        transportMode: packageForm.transportMode,
-                        destinations: destinationRows?.map(row => ({
-                            name: row.name.trim(),
-                            nights: Number(row.nights) || 1
-                        }))
-                    })
-                ).unwrap()
-            )
-            const plan = normalizePlan(parseAiJson(response))
-            return plan.destinations.length ? plan : null
-        } catch (error) {
-            return null
-        }
-    }
-
-    // ? lays the plan onto the day rows for these destinations, then writes the descriptions
-    const applyAiPlan = ({ plan, destinationRows, originLocation, transportMode, packageName }) => {
-        const draftRows = buildActivitiesFromDestinations(destinationRows, originLocation, transportMode)
-        // ? 5 nights is 6 days: without a pickup city the rows above stop at the last night, so add the departure day
-        const lastStop = destinationRows[destinationRows.length - 1]?.name?.trim()
-        if (!(originLocation || '').trim() && lastStop) {
-            draftRows.push(
-                createActivityRow({
-                    title: `Departure from ${lastStop}`,
-                    description: buildDefaultDescription({ entryType: 'Transit', transportMode }),
-                    entryType: 'Transit'
-                })
-            )
-        }
-        // ? planned rows already have their title, so the per-row title drafting must not pick them up
-        const plannedRows = applyPlanToRows(draftRows, plan.days).map(row => ({ ...row, isAiPending: false }))
-
-        setActivities(plannedRows)
-        setAiPlanSummary({ inclusions: matchInclusions(plannedRows, plan.mustInclude), warnings: plan.warnings })
-        autoFillImagesForActivities(plannedRows)
-        writeDescriptionsForRows({ rows: plannedRows, packageName, originLocation, transportMode })
-    }
-
-    const handleBuildWithAi = async () => {
-        const brief = draftPrompt.trim()
-
-        if (!brief) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message:
-                        'Type or speak what the guest wants first, e.g. "Create an itinerary for 2N Shimla and 3N Manali that includes Chandratal and Rohtang".',
-                    variant: 'alert',
-                    alert: { color: 'warning' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            return
-        }
-
-        setVoiceDrafting(true)
-        setVoiceStatus('')
-        setAiPlanSummary(null)
-        setAiPlanUnavailable(false)
-
-        let plan = await requestAiPlan({ brief })
-        const aiPlanned = Boolean(plan)
-        if (!aiPlanned) {
-            // ? the pattern-based draft still works without AI
-            const parsed = parsePromptWithFallbackOrigin(brief, packageForm.originLocation)
-            plan = {
-                packageName: '',
-                originLocation: parsed.originLocation,
-                transportMode: parsed.transportMode,
-                destinations: parsed.destinations
-            }
-        }
-
-        if (!plan.destinations.length) {
-            setVoiceDrafting(false)
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message:
-                        'I could not find destinations in that brief. Try something like "2N Shimla, 3N Manali from Delhi".',
-                    variant: 'alert',
-                    alert: { color: 'warning' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            return
-        }
-
-        const nextOriginLocation = plan.originLocation || packageForm.originLocation
-        const nextTransportMode = plan.transportMode || packageForm.transportMode
-        const hydratedDestinations = plan.destinations.map(item => buildDestinationRowFromValue(item.name, item.nights))
-        const packageName = plan.packageName || buildSuggestedPackageName(hydratedDestinations)
+        const nextDestinations = requirements.destinations.map(item => {
+            const existing = destinations.find(row => toNormalized(row.name) === toNormalized(item.name))
+            return existing
+                ? { ...existing, nights: item.nights }
+                : buildDestinationRowFromValue(item.name, item.nights)
+        })
+        setDestinations(nextDestinations)
+        nextDestinations
+            .filter(row => !destinations.some(prev => prev.id === row.id))
+            .forEach(scheduleDestinationHotelAutofill)
 
         setPackageForm(prev => ({
             ...prev,
-            originLocation: nextOriginLocation,
-            transportMode: nextTransportMode,
-            name: prev.name || packageName
+            originLocation: requirements.origin,
+            transportMode: requirements.transport.vehicle || requirements.transport.mode,
+            name: prev.name || buildSuggestedPackageName(requirements.destinations)
         }))
-        setDestinations(hydratedDestinations)
-        hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
-        setVoiceDrafting(false)
-        // ? straight to the day plan, which is what the agent asked for
-        setActiveStep(2)
 
-        if (aiPlanned) {
-            applyAiPlan({
-                plan,
-                destinationRows: hydratedDestinations,
-                originLocation: nextOriginLocation,
-                transportMode: nextTransportMode,
-                packageName
+        const nextRows = nextTrip.days.map(day => {
+            const description = renderDayDescription(day)
+            const previousRow = activities.find(row => row.planKey === day.planKey)
+            if (previousRow && previousRow.generatedDescription === description) {
+                return { ...previousRow, dayPlan: day }
+            }
+            return createActivityRow({
+                title: renderDayTitle(day),
+                description,
+                generatedDescription: description,
+                planKey: day.planKey,
+                destinationName: day.type === DAY_TYPES.DEPARTURE ? '' : day.stay || '',
+                entryType: entryTypeFor(day),
+                image: previousRow?.image || '',
+                highlights: day.activities.map(activity => activity.name).slice(0, 4),
+                dayPlan: day,
+                isAiPending: false
             })
-            return
-        }
-
-        const draftRows = buildActivitiesFromDestinations(hydratedDestinations, nextOriginLocation, nextTransportMode)
-        setActivities(draftRows)
-        draftRows.forEach(scheduleActivityDescriptionAutofill)
-        autoFillImagesForActivities(draftRows)
-        setAiPlanUnavailable(true)
+        })
+        setActivities(nextRows)
+        autoFillImagesForActivities(nextRows)
     }
+
+    const runPlan = async build => {
+        setTripBusy(true)
+        setTripError('')
+        try {
+            const nextTrip = await build()
+            const wasReady = trip?.status === 'ready'
+            setTrip(nextTrip)
+            setTripForm(nextTrip.input)
+            syncFromTrip(nextTrip)
+            if (nextTrip.status === 'ready' && !wasReady) setActiveStep(2)
+            return nextTrip
+        } catch (error) {
+            setTripError(
+                'AI is busy right now — the free Gemini tier is at its limit. Nothing was changed; try again in a minute.'
+            )
+            return null
+        } finally {
+            setTripBusy(false)
+        }
+    }
+
+    const handleBuildTrip = () => {
+        if (!draftPrompt.trim() && !tripForm.destinations.length) {
+            showWarning('Describe the trip in the box, or add destinations under Trip details, first.')
+            return null
+        }
+        return runPlan(async () => {
+            const requirements = await understand({ text: draftPrompt, form: tripForm, ask: askAi })
+            return planTrip({ requirements, previous: null, ask: askAi })
+        })
+    }
+
+    // ? every later change re-plans from the last trip, so only what changed is asked for again
+    const replan = input => runPlan(() => planTrip({ requirements: input, previous: trip, ask: askAi }))
+
+    const handleUpdateTrip = () => replan(tripForm)
+
+    const handleAnswerQuestion = (question, answer) => {
+        const input = trip?.input || tripForm
+        if (question.field === 'destinations') {
+            return runPlan(async () =>
+                planTrip({
+                    requirements: await understand({ text: answer, form: input, ask: askAi }),
+                    previous: trip,
+                    ask: askAi
+                })
+            )
+        }
+        return replan(applyPatch(input, { type: 'set', field: question.field, value: answer }))
+    }
+
+    const handleApplyOption = option =>
+        option.patch.type === 'retry' ? replan(trip.input) : replan(applyPatch(trip.input, option.patch))
+
+    const handleAcceptRecommendation = item => {
+        const last = trip.input.destinations[trip.input.destinations.length - 1]?.name
+        return replan(
+            applyPatch(
+                trip.input,
+                item.kind === 'destination'
+                    ? { type: 'add-destination', name: item.name, nights: 1, after: last }
+                    : { type: 'add-required', name: item.name }
+            )
+        )
+    }
+
+    const handleChangeRequest = instruction =>
+        runPlan(async () =>
+            planTrip({
+                requirements: await editRequirements({ requirements: trip.input, instruction, ask: askAi }),
+                previous: trip,
+                ask: askAi
+            })
+        )
 
     const handleAutoBuildActivities = async () => {
         const validDestinations = destinations.filter(item => item.name.trim())
-        const brief = draftPrompt.trim()
 
-        // ? with a request typed, re-plan around it for the destinations and nights set on this step, so the
-        //   places the guest asked for survive a rebuild instead of being replaced by generic days
-        if (brief && validDestinations.length) {
-            setVoiceDrafting(true)
-            const plan = await requestAiPlan({ brief, destinationRows: validDestinations })
-            setVoiceDrafting(false)
-
-            setAiPlanUnavailable(!plan)
-            if (plan) {
-                applyAiPlan({
-                    plan,
-                    destinationRows: validDestinations,
-                    originLocation: packageForm.originLocation,
-                    transportMode: packageForm.transportMode,
-                    packageName: packageForm.name
-                })
-                setActiveStep(2)
-                return
-            }
+        // ? with a trip planned, this step's names and nights are the source of truth: re-plan around them
+        if (trip) {
+            const nextTrip = await replan({
+                ...trip.input,
+                destinations: validDestinations.map(row => ({ name: row.name.trim(), nights: Number(row.nights) || 1 }))
+            })
+            if (nextTrip?.status === 'ready') setActiveStep(2)
+            return
         }
 
         const generatedActivities = buildActivitiesFromDestinations(
@@ -2179,7 +2007,6 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             }
         })
 
-        setAiPlanSummary(null)
         setActivities(generatedActivities)
         generatedActivities.forEach(scheduleActivityDescriptionAutofill)
         autoFillImagesForActivities(generatedActivities)
@@ -2295,6 +2122,8 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }
 
         if (activeStep === 2) {
+            // ? a plan with an unresolved conflict cannot be saved
+            if (trip && trip.status !== 'ready') return false
             return activities.some(item => item.title.trim() || item.isAiPending)
         }
 
@@ -2522,89 +2351,35 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                     <Card sx={{ borderRadius: 3, border: '1px solid #e5e7eb' }}>
                         <CardContent>
                             <Stack spacing={2}>
-                                <Typography variant='h5'>Build with AI</Typography>
-                                <Typography variant='body2' color='text.secondary'>
-                                    Type what the guest wants in plain words, the way you would ask any AI assistant:
-                                    nights per destination, pickup city, vehicle and the places they must see. AI builds
-                                    the day-by-day itinerary around those places, then writes the descriptions and
-                                    suggests hotels and images.
-                                </Typography>
-                                <TextField
-                                    multiline
-                                    minRows={3}
-                                    value={draftPrompt}
-                                    onChange={event => setDraftPrompt(event.target.value)}
-                                    placeholder='Create an itinerary for 2N Shimla and 3N Manali that includes Chandratal and Rohtang, pickup from Delhi by Innova'
+                                <TripBriefCard
+                                    notes={draftPrompt}
+                                    onNotesChange={setDraftPrompt}
+                                    value={tripForm}
+                                    onChange={setTripForm}
+                                    onBuild={handleBuildTrip}
+                                    onUpdate={handleUpdateTrip}
+                                    building={tripBusy}
+                                    hasTrip={Boolean(trip)}
+                                    voice={{
+                                        supported: voiceSupported,
+                                        listening: isListening,
+                                        onToggle: isListening ? stopVoiceCapture : startVoiceCapture,
+                                        status: voiceStatus
+                                    }}
                                 />
-                                <Stack direction='row' spacing={1.5} flexWrap='wrap' useFlexGap>
-                                    {voiceSupported ? (
-                                        <CustomButton
-                                            variant={isListening ? 'contained' : 'outlined'}
-                                            color={isListening ? 'error' : 'primary'}
-                                            onClick={isListening ? stopVoiceCapture : startVoiceCapture}
-                                        >
-                                            {isListening ? 'Stop Listening' : 'Start Voice Input'}
-                                        </CustomButton>
-                                    ) : (
-                                        <Chip
-                                            color='default'
-                                            label='Voice input works in supported Chrome browsers'
-                                            variant='outlined'
+                                {tripError ? <Alert severity='warning'>{tripError}</Alert> : null}
+                                {trip ? (
+                                    <>
+                                        <Divider />
+                                        <TripPlanView
+                                            trip={trip}
+                                            onAnswer={handleAnswerQuestion}
+                                            onApplyOption={handleApplyOption}
+                                            onAcceptRecommendation={handleAcceptRecommendation}
+                                            onChangeRequest={handleChangeRequest}
+                                            busy={tripBusy}
                                         />
-                                    )}
-                                    <CustomButton
-                                        startIcon={<AutoAwesome />}
-                                        onClick={handleBuildWithAi}
-                                        loading={voiceDrafting}
-                                    >
-                                        Build Package with AI
-                                    </CustomButton>
-                                </Stack>
-                                {voiceStatus ? (
-                                    <Typography variant='body2' color='text.secondary'>
-                                        {voiceStatus}
-                                    </Typography>
-                                ) : null}
-                                {aiPlanUnavailable ? (
-                                    <Alert severity='warning'>
-                                        AI is busy right now, so these days are a basic draft without the places you
-                                        asked for. Click Build Package with AI again in a minute.
-                                    </Alert>
-                                ) : null}
-                                {aiPlanSummary?.inclusions?.length ? (
-                                    <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap alignItems='center'>
-                                        <Typography variant='body2' color='text.secondary'>
-                                            Requested stops:
-                                        </Typography>
-                                        {aiPlanSummary.inclusions.map(item => (
-                                            <Chip
-                                                key={item.name}
-                                                size='small'
-                                                variant='outlined'
-                                                color={item.dayNumber ? 'success' : 'warning'}
-                                                label={
-                                                    item.dayNumber
-                                                        ? `${item.name} · Day ${item.dayNumber}`
-                                                        : `${item.name} · not placed`
-                                                }
-                                            />
-                                        ))}
-                                    </Stack>
-                                ) : null}
-                                {aiPlanSummary?.inclusions?.some(item => !item.dayNumber) ? (
-                                    <Typography variant='body2' color='warning.main'>
-                                        Some stops did not fit the nights given. Add a night and build again, or add
-                                        them to a day in the Activities step.
-                                    </Typography>
-                                ) : null}
-                                {aiPlanSummary?.warnings?.length ? (
-                                    <Alert severity='info'>
-                                        <Box component='ul' sx={{ m: 0, pl: 2 }}>
-                                            {aiPlanSummary.warnings.map(warning => (
-                                                <li key={warning}>{warning}</li>
-                                            ))}
-                                        </Box>
-                                    </Alert>
+                                    </>
                                 ) : null}
                             </Stack>
                         </CardContent>
@@ -2837,7 +2612,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                     variant='outlined'
                                     startIcon={<AutoAwesome />}
                                     onClick={handleAutoBuildActivities}
-                                    loading={voiceDrafting}
+                                    loading={tripBusy}
                                 >
                                     Auto Build Day Plan
                                 </CustomButton>
@@ -2845,7 +2620,13 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                         </Stack>
                     )}
 
-                    {activeStep === 2 && (
+                    {activeStep === 2 && trip && trip.status !== 'ready' ? (
+                        <Alert severity='warning'>
+                            The plan above has something to resolve first, so its days are not shown yet.
+                        </Alert>
+                    ) : null}
+
+                    {activeStep === 2 && (!trip || trip.status === 'ready') && (
                         <Stack spacing={2}>
                             <Alert severity='info'>
                                 Stay and Transit + Stay entries will link to destinations and hotel suggestions. Transit
@@ -2896,7 +2677,8 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                                     </Button>
                                                 )}
                                             </Stack>
-                                            {row.highlights?.length ? (
+                                            {row.dayPlan ? <DayPlanCard day={row.dayPlan} showTitle={false} /> : null}
+                                            {!row.dayPlan && row.highlights?.length ? (
                                                 <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap>
                                                     {row.highlights.map(item => (
                                                         <Chip key={item} size='small' variant='outlined' label={item} />
@@ -2963,21 +2745,37 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                                     </TextField>
                                                 </Grid>
                                                 <Grid item xs={12}>
-                                                    <TextField
-                                                        fullWidth
-                                                        multiline
-                                                        minRows={4}
-                                                        label='Description'
-                                                        value={row.description}
-                                                        onChange={event =>
-                                                            updateActivityRow(row.id, 'description', event.target.value)
-                                                        }
-                                                        helperText={
-                                                            descriptionLoadingByRow[row.id]
-                                                                ? 'AI is drafting a richer day description...'
-                                                                : ''
-                                                        }
-                                                    />
+                                                    {/* ? a planned day is read from its card; its saved text is one click away */}
+                                                    {row.dayPlan && !openTextByRow[row.id] ? (
+                                                        <Button
+                                                            size='small'
+                                                            onClick={() =>
+                                                                setOpenTextByRow(prev => ({ ...prev, [row.id]: true }))
+                                                            }
+                                                        >
+                                                            Edit quotation text
+                                                        </Button>
+                                                    ) : (
+                                                        <TextField
+                                                            fullWidth
+                                                            multiline
+                                                            minRows={4}
+                                                            label='Description'
+                                                            value={row.description}
+                                                            onChange={event =>
+                                                                updateActivityRow(
+                                                                    row.id,
+                                                                    'description',
+                                                                    event.target.value
+                                                                )
+                                                            }
+                                                            helperText={
+                                                                descriptionLoadingByRow[row.id]
+                                                                    ? 'AI is drafting a richer day description...'
+                                                                    : ''
+                                                            }
+                                                        />
+                                                    )}
                                                 </Grid>
                                                 <Grid item xs={12}>
                                                     <Stack spacing={1.5}>
