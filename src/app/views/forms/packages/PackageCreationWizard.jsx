@@ -36,6 +36,15 @@ import {
     useUpdateItenaryClientMutation
 } from '@/app/store/slices/api/itenarySlice'
 import { useCreatePackageItenaryClientMutation } from '@/app/store/slices/api/packageItenarySlice'
+import {
+    applyPlanToRows,
+    buildPlannerRequest,
+    buildWriterBatches,
+    buildWriterRequest,
+    matchInclusions,
+    normalizePlan,
+    parseWriterDescriptions
+} from './packageAiPlanner'
 
 const steps = ['Package', 'Destinations', 'Activities', 'Review']
 
@@ -231,6 +240,7 @@ const cleanDestinationLabel = value =>
         .replace(/\bby\s+[a-z\s]+$/i, '')
         .replace(/\bwith\s+[a-z\s]+$/i, '')
         .replace(/\bpickup\s+from\s+[a-z\s]+$/i, '')
+        .replace(/\b(?:include|including|incl|covering)\b.*$/i, '')
         .replace(/\s+/g, ' ')
         .trim()
 
@@ -726,6 +736,7 @@ function PackageCreationWizard() {
     const [isListening, setIsListening] = useState(false)
     const [voiceStatus, setVoiceStatus] = useState('')
     const [voiceDrafting, setVoiceDrafting] = useState(false)
+    const [aiPlanSummary, setAiPlanSummary] = useState(null)
     const [imageOptionsByRow, setImageOptionsByRow] = useState({})
     const [imageLoadingByRow, setImageLoadingByRow] = useState({})
     const [destinationHotelLoadingByRow, setDestinationHotelLoadingByRow] = useState({})
@@ -1876,7 +1887,8 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         const results = await Promise.all(
             rowsToUpdate.map(async row => {
                 try {
-                    const keyword = row.destinationName || row.title
+                    // ? "Rohtang Pass" finds a far better photo than "Manali" for the Rohtang day
+                    const keyword = row.highlights?.[0] || row.destinationName || row.title
                     const response = await dispatch(getTravelImages.initiate(keyword, false))
                     const firstImage = response?.data?.urls?.[0]?.url || ''
                     return { rowId: row.id, image: firstImage, options: response?.data?.urls || [] }
@@ -1960,115 +1972,160 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         setActiveStep(1)
     }
 
-    const applyVoiceDraft = useCallback(
-        async promptText => {
-            const trimmedPrompt = promptText.trim()
+    // ? writes day descriptions a few days per call; anything the agent typed meanwhile is kept
+    const writeDescriptionsForRows = async ({ rows, packageName, originLocation, transportMode }) => {
+        let failedDays = 0
 
-            if (!trimmedPrompt) {
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: 'Add or speak a package brief first so I can draft it for you.',
-                        variant: 'alert',
-                        alert: { color: 'warning' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+        setDescriptionLoadingByRow(prev => ({ ...prev, ...Object.fromEntries(rows.map(row => [row.id, true])) }))
+
+        // eslint-disable-next-line no-restricted-syntax
+        for (const batch of buildWriterBatches(rows)) {
+            try {
+                // eslint-disable-next-line no-await-in-loop
+                const response = await runQueuedAiRequest(() =>
+                    assistAi(buildWriterRequest({ batch, rows, packageName, originLocation, transportMode })).unwrap()
+                )
+                const descriptions = parseWriterDescriptions(parseAiJson(response), batch, rows)
+
+                setActivities(prev =>
+                    prev.map(item => {
+                        const drafted = batch.find(row => row.id === item.id)
+                        if (!drafted || !descriptions[item.id] || item.description !== drafted.description) {
+                            return item
+                        }
+                        return { ...item, description: descriptions[item.id] }
                     })
                 )
-                return
-            }
-
-            try {
-                setVoiceDrafting(true)
-
-                const response = await runQueuedAiRequest(() =>
-                    assistAi({
-                        system: `You convert spoken travel package requests into structured JSON for a package wizard.
-
-Respond ONLY with valid JSON.
-Allowed keys:
-- originLocation
-- transportMode
-- packageName
-- destinations
-
-Rules:
-1. destinations must be an array of objects
-2. each destination object must contain:
-   - name
-   - nights
-3. Convert shorthand like "2n manali 2n shimla from delhi" into proper structured values
-4. transportMode should capture words like Cab, Volvo, Train, Flight, Tempo Traveller when present
-5. Keep originLocation empty if not clearly mentioned
-6. packageName should be concise and travel-friendly
-7. Never return explanation text or markdown`,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: trimmedPrompt
-                            }
-                        ]
-                    }).unwrap()
-                )
-
-                const parsed = parseAiJson(response)
-                const aiDestinations = Array.isArray(parsed?.destinations) ? parsed.destinations : []
-                const hydratedDestinations = aiDestinations
-                    .map(item =>
-                        buildDestinationRowFromValue(
-                            item?.name?.toString?.().trim?.() || '',
-                            Math.max(1, Number(item?.nights) || 1)
-                        )
-                    )
-                    .filter(item => item.name.trim())
-
-                if (!hydratedDestinations.length) {
-                    handleGenerateFromPrompt()
-                    return
-                }
-
-                const nextOriginLocation = parsed?.originLocation?.toString?.().trim?.() || packageForm.originLocation
-                const nextTransportMode = parsed?.transportMode?.toString?.().trim?.() || packageForm.transportMode
-                const nextPackageName =
-                    parsed?.packageName?.toString?.().trim?.() || buildSuggestedPackageName(hydratedDestinations)
-                const generatedActivities = buildActivitiesFromDestinations(
-                    hydratedDestinations,
-                    nextOriginLocation,
-                    nextTransportMode
-                )
-
-                setPackageForm(prev => ({
-                    ...prev,
-                    originLocation: nextOriginLocation,
-                    transportMode: nextTransportMode,
-                    name: prev.name || nextPackageName || prev.name
-                }))
-                setDraftPrompt(trimmedPrompt)
-                setDestinations(hydratedDestinations)
-                setActivities(generatedActivities)
-                hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
-                generatedActivities.forEach(scheduleActivityDescriptionAutofill)
-                autoFillImagesForActivities(generatedActivities)
-                setActiveStep(1)
-                setVoiceStatus('Voice draft applied. You can still edit every field before saving.')
+                failedDays += batch.filter(row => !descriptions[row.id]).length
             } catch (error) {
-                handleGenerateFromPrompt()
+                failedDays += batch.length
             } finally {
-                setVoiceDrafting(false)
+                setDescriptionLoadingByRow(prev => ({
+                    ...prev,
+                    ...Object.fromEntries(batch.map(row => [row.id, false]))
+                }))
             }
-        },
-        [
-            assistAi,
-            autoFillImagesForActivities,
-            buildDestinationRowFromValue,
-            dispatch,
-            handleGenerateFromPrompt,
-            packageForm.originLocation,
-            packageForm.transportMode,
-            runQueuedAiRequest,
-            scheduleActivityDescriptionAutofill,
-            scheduleDestinationHotelAutofill
-        ]
-    )
+        }
+
+        if (failedDays) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: `AI could not write ${failedDays} day description${failedDays > 1 ? 's' : ''}. A standard description is filled in, so you can edit it and continue.`,
+                    variant: 'alert',
+                    alert: { color: 'warning' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+        }
+    }
+
+    const handleBuildWithAi = async () => {
+        const brief = draftPrompt.trim()
+
+        if (!brief) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message:
+                        'Type or speak a package brief first, e.g. "2N Shimla, 3N Manali from Chandigarh by cab, include Sissu and Rohtang".',
+                    variant: 'alert',
+                    alert: { color: 'warning' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
+        }
+
+        setVoiceDrafting(true)
+        setVoiceStatus('')
+        setAiPlanSummary(null)
+
+        let plan = null
+        try {
+            const response = await runQueuedAiRequest(() =>
+                assistAi(
+                    buildPlannerRequest({
+                        brief,
+                        originLocation: packageForm.originLocation,
+                        transportMode: packageForm.transportMode
+                    })
+                ).unwrap()
+            )
+            plan = normalizePlan(parseAiJson(response))
+        } catch (error) {
+            // ? handled below: the pattern-based draft still works without AI
+        }
+
+        const aiPlanned = Boolean(plan?.destinations.length)
+        if (!aiPlanned) {
+            const parsed = parsePromptWithFallbackOrigin(brief, packageForm.originLocation)
+            plan = {
+                packageName: '',
+                originLocation: parsed.originLocation,
+                transportMode: parsed.transportMode,
+                destinations: parsed.destinations,
+                days: [],
+                mustInclude: [],
+                warnings: []
+            }
+        }
+
+        if (!plan.destinations.length) {
+            setVoiceDrafting(false)
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message:
+                        'I could not find destinations in that brief. Try something like "2N Shimla, 3N Manali from Delhi".',
+                    variant: 'alert',
+                    alert: { color: 'warning' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
+            return
+        }
+
+        const nextOriginLocation = plan.originLocation || packageForm.originLocation
+        const nextTransportMode = plan.transportMode || packageForm.transportMode
+        const hydratedDestinations = plan.destinations.map(item => buildDestinationRowFromValue(item.name, item.nights))
+        const draftRows = buildActivitiesFromDestinations(hydratedDestinations, nextOriginLocation, nextTransportMode)
+        // ? planned rows already have their title, so the per-row title drafting must not pick them up
+        const plannedRows = aiPlanned
+            ? applyPlanToRows(draftRows, plan.days).map(row => ({ ...row, isAiPending: false }))
+            : draftRows
+        const packageName = plan.packageName || buildSuggestedPackageName(hydratedDestinations)
+
+        setPackageForm(prev => ({
+            ...prev,
+            originLocation: nextOriginLocation,
+            transportMode: nextTransportMode,
+            name: prev.name || packageName
+        }))
+        setDestinations(hydratedDestinations)
+        setActivities(plannedRows)
+        setAiPlanSummary(
+            aiPlanned ? { inclusions: matchInclusions(plannedRows, plan.mustInclude), warnings: plan.warnings } : null
+        )
+        hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
+        autoFillImagesForActivities(plannedRows)
+        setActiveStep(1)
+        setVoiceDrafting(false)
+
+        if (aiPlanned) {
+            writeDescriptionsForRows({
+                rows: plannedRows,
+                packageName,
+                originLocation: nextOriginLocation,
+                transportMode: nextTransportMode
+            })
+        } else {
+            plannedRows.forEach(scheduleActivityDescriptionAutofill)
+            setVoiceStatus(
+                'AI planning is unavailable right now, so this draft was built from the destinations and nights in your text.'
+            )
+        }
+    }
 
     const handleAutoBuildActivities = () => {
         const validDestinations = destinations.filter(item => item.name.trim())
@@ -2134,7 +2191,9 @@ Rules:
 
         recognition.onstart = () => {
             setIsListening(true)
-            setVoiceStatus('Listening... say something like "2N Manali, 2N Shimla from Delhi".')
+            setVoiceStatus(
+                'Listening... say something like "2N Shimla, 3N Manali from Delhi by cab, include Sissu and Rohtang".'
+            )
         }
 
         recognition.onresult = event => {
@@ -2236,6 +2295,19 @@ Rules:
 
     const saveWizard = async () => {
         try {
+            if (Object.values(descriptionLoadingByRow).some(Boolean)) {
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: 'AI is still writing day descriptions. Give it a few seconds, then save.',
+                        variant: 'alert',
+                        alert: { color: 'warning' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
+                return
+            }
+
             const unresolvedAiRows = activities.filter(
                 item => item.isAiPending && (!item.title?.trim() || !item.description?.trim())
             )
@@ -2423,17 +2495,18 @@ Rules:
                     <Card sx={{ borderRadius: 3, border: '1px solid #e5e7eb' }}>
                         <CardContent>
                             <Stack spacing={2}>
-                                <Typography variant='h5'>Quick Draft</Typography>
+                                <Typography variant='h5'>Build with AI</Typography>
                                 <Typography variant='body2' color='text.secondary'>
-                                    Paste or speak a simple prompt like `2N Shimla, 2N Manali from Delhi` and we&apos;ll
-                                    draft the destination plan, hotel suggestions, and day flow for you.
+                                    Describe the trip the way you would tell a colleague: destinations with nights,
+                                    pickup city, transport and any must-see stops. AI plans each day around those stops,
+                                    then writes the descriptions and suggests hotels and images.
                                 </Typography>
                                 <TextField
                                     multiline
                                     minRows={3}
                                     value={draftPrompt}
                                     onChange={event => setDraftPrompt(event.target.value)}
-                                    placeholder='2N Shimla, 2N Manali from Delhi'
+                                    placeholder='2N Shimla, 3N Manali from Chandigarh by cab, include Sissu and Rohtang'
                                 />
                                 <Stack direction='row' spacing={1.5} flexWrap='wrap' useFlexGap>
                                     {voiceSupported ? (
@@ -2453,12 +2526,12 @@ Rules:
                                     )}
                                     <CustomButton
                                         startIcon={<AutoAwesome />}
-                                        onClick={() => applyVoiceDraft(draftPrompt)}
+                                        onClick={handleBuildWithAi}
                                         loading={voiceDrafting}
                                     >
-                                        Create From Voice / Text
+                                        Build Package with AI
                                     </CustomButton>
-                                    <CustomButton startIcon={<AutoAwesome />} onClick={handleGenerateFromPrompt}>
+                                    <CustomButton variant='outlined' onClick={handleGenerateFromPrompt}>
                                         Generate Draft
                                     </CustomButton>
                                 </Stack>
@@ -2466,6 +2539,41 @@ Rules:
                                     <Typography variant='body2' color='text.secondary'>
                                         {voiceStatus}
                                     </Typography>
+                                ) : null}
+                                {aiPlanSummary?.inclusions?.length ? (
+                                    <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap alignItems='center'>
+                                        <Typography variant='body2' color='text.secondary'>
+                                            Requested stops:
+                                        </Typography>
+                                        {aiPlanSummary.inclusions.map(item => (
+                                            <Chip
+                                                key={item.name}
+                                                size='small'
+                                                variant='outlined'
+                                                color={item.dayNumber ? 'success' : 'warning'}
+                                                label={
+                                                    item.dayNumber
+                                                        ? `${item.name} · Day ${item.dayNumber}`
+                                                        : `${item.name} · not placed`
+                                                }
+                                            />
+                                        ))}
+                                    </Stack>
+                                ) : null}
+                                {aiPlanSummary?.inclusions?.some(item => !item.dayNumber) ? (
+                                    <Typography variant='body2' color='warning.main'>
+                                        Some stops did not fit the nights given. Add a night and build again, or add
+                                        them to a day in the Activities step.
+                                    </Typography>
+                                ) : null}
+                                {aiPlanSummary?.warnings?.length ? (
+                                    <Alert severity='info'>
+                                        <Box component='ul' sx={{ m: 0, pl: 2 }}>
+                                            {aiPlanSummary.warnings.map(warning => (
+                                                <li key={warning}>{warning}</li>
+                                            ))}
+                                        </Box>
+                                    </Alert>
                                 ) : null}
                             </Stack>
                         </CardContent>
@@ -2756,6 +2864,13 @@ Rules:
                                                     </Button>
                                                 )}
                                             </Stack>
+                                            {row.highlights?.length ? (
+                                                <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap>
+                                                    {row.highlights.map(item => (
+                                                        <Chip key={item} size='small' variant='outlined' label={item} />
+                                                    ))}
+                                                </Stack>
+                                            ) : null}
                                             <Grid container spacing={2}>
                                                 <Grid item xs={12} md={5}>
                                                     <TextField
