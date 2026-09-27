@@ -370,7 +370,8 @@ export default function PackageItenaryView() {
                                                             sx={{
                                                                 color: '#475569',
                                                                 lineHeight: 1.8,
-                                                                fontSize: '0.95rem'
+                                                                fontSize: '0.95rem',
+                                                                whiteSpace: 'pre-line'
                                                             }}
                                                         >
                                                             {item.description}
