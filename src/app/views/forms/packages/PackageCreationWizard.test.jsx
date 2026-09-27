@@ -102,7 +102,7 @@ beforeEach(() => {
 
     assistAi.mockImplementation(({ system, messages }) => {
         if (system.includes('holiday package planner')) return reply(PLAN)
-        if (system.includes('senior travel writer')) {
+        if (system.includes('day-by-day plan')) {
             const { days } = JSON.parse(messages[0].content)
             return reply({ days: days.map(day => ({ day: day.day, description: `Written copy for day ${day.day}` })) })
         }
@@ -175,13 +175,59 @@ describe('PackageCreationWizard — Build with AI', () => {
         expect(screen.getByText('Day 5 – Chandratal Lake Excursion')).toBeInTheDocument()
     }, 30000)
 
+    test('without a pickup city, 5 nights is still 6 days: a departure day is added', async () => {
+        const days = PLAN.days.slice(0, 5).map((day, index) => (index === 0 ? { ...day, type: 'Stay' } : day))
+        assistAi.mockImplementation(({ system }) =>
+            system.includes('holiday package planner')
+                ? reply({
+                      ...PLAN,
+                      originLocation: '',
+                      days: [...days, { day: 6, destination: '', type: 'Transit', title: 'Departure from Manali' }]
+                  })
+                : reply({})
+        )
+
+        renderWizard()
+        buildFromBrief('give me 2n shimla 3 n manali itenary i also want to go rohtang atal tunnel and sissu')
+
+        expect(await screen.findByText('Day 6 – Departure from Manali')).toBeInTheDocument()
+        expect(screen.getByText('Day 4 – Rohtang Pass & Solang Valley')).toBeInTheDocument()
+        expect(screen.queryByText(/^Day 7/)).not.toBeInTheDocument()
+    }, 20000)
+
+    test('a busy model gets one retry before a day keeps its standard description', async () => {
+        let writerCalls = 0
+        assistAi.mockImplementation(({ system, messages }) => {
+            if (system.includes('holiday package planner')) return reply(PLAN)
+            if (system.includes('day-by-day plan')) {
+                writerCalls += 1
+                if (writerCalls === 1) return { unwrap: () => Promise.reject(new Error('502')) }
+                const { days } = JSON.parse(messages[0].content)
+                return reply({ days: days.map(day => ({ day: day.day, description: `Retried copy ${day.day}` })) })
+            }
+            return reply({})
+        })
+
+        renderWizard()
+        buildFromBrief(BRIEF)
+        await screen.findByText('Day 1 – Delhi to Shimla & Mall Road')
+
+        await waitFor(
+            () =>
+                expect(
+                    within(dayCard('Day 1 – Delhi to Shimla & Mall Road')).getByDisplayValue('Retried copy 1')
+                ).toBeInTheDocument(),
+            { timeout: 15000 }
+        )
+    }, 30000)
+
     test('falls back to the pattern-based draft when the AI planner fails', async () => {
         assistAi.mockImplementation(() => ({ unwrap: () => Promise.reject(new Error('503')) }))
 
         renderWizard()
         buildFromBrief('create itenary for 2n shimla 3n manali in which it should include chandrataal and rohtang')
 
-        expect(await screen.findByText(/AI planning is unavailable right now/i)).toBeInTheDocument()
+        expect(await screen.findByText(/AI is busy right now/i)).toBeInTheDocument()
 
         // the rest of the sentence is not mistaken for part of the destination names
         fireEvent.click(screen.getByRole('button', { name: 'Back' }))

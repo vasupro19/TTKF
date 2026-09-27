@@ -212,7 +212,9 @@ function FullScreenItinerary({
                                                 lineHeight: 1.9,
                                                 fontSize: '0.98rem',
                                                 mb: 3,
-                                                maxWidth: '100%'
+                                                maxWidth: '100%',
+                                                // ? day plans are written line by line (Morning / Afternoon / Evening)
+                                                whiteSpace: 'pre-line'
                                             }}
                                         >
                                             {item.description ||
@@ -997,7 +999,8 @@ export default function ItinerarySection({
                                                                     lineHeight: 1.9,
                                                                     fontSize: '0.96rem',
                                                                     maxWidth: '100%',
-                                                                    wordBreak: 'break-word'
+                                                                    wordBreak: 'break-word',
+                                                                    whiteSpace: 'pre-line'
                                                                 }}
                                                             >
                                                                 {item.description ||

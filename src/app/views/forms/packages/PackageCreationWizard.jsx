@@ -742,6 +742,7 @@ function PackageCreationWizard() {
     const [voiceStatus, setVoiceStatus] = useState('')
     const [voiceDrafting, setVoiceDrafting] = useState(false)
     const [aiPlanSummary, setAiPlanSummary] = useState(null)
+    const [aiPlanUnavailable, setAiPlanUnavailable] = useState(false)
     const [imageOptionsByRow, setImageOptionsByRow] = useState({})
     const [imageLoadingByRow, setImageLoadingByRow] = useState({})
     const [destinationHotelLoadingByRow, setDestinationHotelLoadingByRow] = useState({})
@@ -1925,6 +1926,30 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }))
     }
 
+    // ? one retry: on the free tier a busy model often answers a few seconds later
+    const requestBatchDescriptions = async ({ batch, rows, packageName, originLocation, transportMode }) => {
+        const isComplete = found => batch.every(row => found[row.id])
+        let descriptions = {}
+
+        // eslint-disable-next-line no-restricted-syntax
+        for (const attempt of [1, 2]) {
+            try {
+                // eslint-disable-next-line no-await-in-loop
+                const response = await runQueuedAiRequest(() =>
+                    assistAi(buildWriterRequest({ batch, rows, packageName, originLocation, transportMode })).unwrap()
+                )
+                descriptions = { ...parseWriterDescriptions(parseAiJson(response), batch, rows), ...descriptions }
+            } catch (error) {
+                // ? the caller counts the days still missing
+            }
+            if (isComplete(descriptions)) break
+            // eslint-disable-next-line no-await-in-loop
+            if (attempt === 1) await sleep(3000)
+        }
+
+        return descriptions
+    }
+
     // ? writes day descriptions a few days per call; anything the agent typed meanwhile is kept
     const writeDescriptionsForRows = async ({ rows, packageName, originLocation, transportMode }) => {
         let failedDays = 0
@@ -1935,10 +1960,13 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         for (const batch of buildWriterBatches(rows)) {
             try {
                 // eslint-disable-next-line no-await-in-loop
-                const response = await runQueuedAiRequest(() =>
-                    assistAi(buildWriterRequest({ batch, rows, packageName, originLocation, transportMode })).unwrap()
-                )
-                const descriptions = parseWriterDescriptions(parseAiJson(response), batch, rows)
+                const descriptions = await requestBatchDescriptions({
+                    batch,
+                    rows,
+                    packageName,
+                    originLocation,
+                    transportMode
+                })
 
                 setActivities(prev =>
                     prev.map(item => {
@@ -1950,8 +1978,6 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                     })
                 )
                 failedDays += batch.filter(row => !descriptions[row.id]).length
-            } catch (error) {
-                failedDays += batch.length
             } finally {
                 setDescriptionLoadingByRow(prev => ({
                     ...prev,
@@ -1999,6 +2025,17 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
     // ? lays the plan onto the day rows for these destinations, then writes the descriptions
     const applyAiPlan = ({ plan, destinationRows, originLocation, transportMode, packageName }) => {
         const draftRows = buildActivitiesFromDestinations(destinationRows, originLocation, transportMode)
+        // ? 5 nights is 6 days: without a pickup city the rows above stop at the last night, so add the departure day
+        const lastStop = destinationRows[destinationRows.length - 1]?.name?.trim()
+        if (!(originLocation || '').trim() && lastStop) {
+            draftRows.push(
+                createActivityRow({
+                    title: `Departure from ${lastStop}`,
+                    description: buildDefaultDescription({ entryType: 'Transit', transportMode }),
+                    entryType: 'Transit'
+                })
+            )
+        }
         // ? planned rows already have their title, so the per-row title drafting must not pick them up
         const plannedRows = applyPlanToRows(draftRows, plan.days).map(row => ({ ...row, isAiPending: false }))
 
@@ -2028,6 +2065,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         setVoiceDrafting(true)
         setVoiceStatus('')
         setAiPlanSummary(null)
+        setAiPlanUnavailable(false)
 
         let plan = await requestAiPlan({ brief })
         const aiPlanned = Boolean(plan)
@@ -2089,9 +2127,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         setActivities(draftRows)
         draftRows.forEach(scheduleActivityDescriptionAutofill)
         autoFillImagesForActivities(draftRows)
-        setVoiceStatus(
-            'AI planning is unavailable right now, so this draft was built from the destinations and nights in your text.'
-        )
+        setAiPlanUnavailable(true)
     }
 
     const handleAutoBuildActivities = async () => {
@@ -2105,6 +2141,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             const plan = await requestAiPlan({ brief, destinationRows: validDestinations })
             setVoiceDrafting(false)
 
+            setAiPlanUnavailable(!plan)
             if (plan) {
                 applyAiPlan({
                     plan,
@@ -2527,6 +2564,12 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                     <Typography variant='body2' color='text.secondary'>
                                         {voiceStatus}
                                     </Typography>
+                                ) : null}
+                                {aiPlanUnavailable ? (
+                                    <Alert severity='warning'>
+                                        AI is busy right now, so these days are a basic draft without the places you
+                                        asked for. Click Build Package with AI again in a minute.
+                                    </Alert>
                                 ) : null}
                                 {aiPlanSummary?.inclusions?.length ? (
                                     <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap alignItems='center'>
