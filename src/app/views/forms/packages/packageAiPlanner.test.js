@@ -58,6 +58,30 @@ describe('normalizePlan', () => {
         expect(plan.days[0].highlights).toEqual(['Calangute Beach'])
     })
 
+    test('the destinations themselves are not requested stops', () => {
+        const plan = normalizePlan({
+            destinations: [
+                { name: 'Shimla', nights: 2 },
+                { name: 'Manali', nights: 3 }
+            ],
+            mustInclude: ['Shimla', 'manali', 'Chandratal Lake', 'Rohtang Pass']
+        })
+        expect(plan.mustInclude).toEqual(['Chandratal Lake', 'Rohtang Pass'])
+    })
+
+    test('drops scenery filler from highlights', () => {
+        const plan = normalizePlan({
+            days: [
+                planDay('Manali', 'Stay', 'x', [
+                    'Scenic drive from Delhi',
+                    'High altitude mountain views',
+                    'Kunzum Pass'
+                ])
+            ]
+        })
+        expect(plan.days[0].highlights).toEqual(['Kunzum Pass'])
+    })
+
     test('accepts mustInclude as strings or objects, deduplicated', () => {
         const plan = normalizePlan({ mustInclude: ['Sissu', { name: 'Rohtang Pass' }, 'sissu', 42, null] })
         expect(plan.mustInclude).toEqual(['Sissu', 'Rohtang Pass'])

@@ -103,7 +103,7 @@ describe('PackageCreationWizard — Build with AI', () => {
             </MemoryRouter>
         )
 
-        fireEvent.change(screen.getByPlaceholderText(/include Sissu and Rohtang/i), {
+        fireEvent.change(screen.getByPlaceholderText(/includes Chandratal and Rohtang/i), {
             target: { value: '2N Shimla 3N Manali from Chandigarh by cab, include sisu rotang and kasol' }
         })
         fireEvent.click(screen.getByRole('button', { name: /build package with ai/i }))
@@ -152,14 +152,16 @@ describe('PackageCreationWizard — Build with AI', () => {
             </MemoryRouter>
         )
 
-        fireEvent.change(screen.getByPlaceholderText(/include Sissu and Rohtang/i), {
-            target: { value: '2N Shimla 3N Manali include Sissu' }
+        fireEvent.change(screen.getByPlaceholderText(/includes Chandratal and Rohtang/i), {
+            target: {
+                value: 'create itenary for 2n shimla 3n manali in which it should include chandrataal and rohtang'
+            }
         })
         fireEvent.click(screen.getByRole('button', { name: /build package with ai/i }))
 
         expect(await screen.findByText(/AI planning is unavailable right now/i)).toBeInTheDocument()
         expect(screen.getByDisplayValue('Shimla')).toBeInTheDocument()
-        // "include Sissu" is not mistaken for part of the destination name
+        // the rest of the sentence is not mistaken for part of the destination name
         expect(screen.getByDisplayValue('Manali')).toBeInTheDocument()
     }, 20000)
 })
