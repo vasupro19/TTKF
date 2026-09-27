@@ -29,21 +29,24 @@ vi.mock('@/app/store/slices/api/itenarySlice', () => ({
     useUpdateItenaryClientMutation: () => [vi.fn()]
 }))
 
+const BRIEF =
+    'create itenary for 2n shimla 3n manali in which it should include chandrataal and rohtang, pickup from delhi'
+
 const PLAN = {
     packageName: 'Himachal Escape 5D/6N',
-    originLocation: 'Chandigarh',
-    transportMode: 'Cab',
+    originLocation: 'Delhi',
+    transportMode: '',
     destinations: [
         { name: 'Shimla', nights: 2 },
         { name: 'Manali', nights: 3 }
     ],
-    mustInclude: ['Sissu', 'Rohtang Pass', 'Kasol'],
+    mustInclude: ['Chandratal Lake', 'Rohtang Pass', 'Kasol'],
     days: [
         {
             day: 1,
             destination: 'Shimla',
             type: 'TransitStay',
-            title: 'Chandigarh to Shimla & Mall Road',
+            title: 'Delhi to Shimla & Mall Road',
             highlights: ['Mall Road']
         },
         { day: 2, destination: 'Shimla', type: 'Stay', title: 'Kufri & Jakhoo Temple', highlights: ['Kufri'] },
@@ -58,22 +61,40 @@ const PLAN = {
             day: 4,
             destination: 'Manali',
             type: 'Stay',
-            title: 'Rohtang Pass, Atal Tunnel & Sissu',
-            highlights: ['Rohtang Pass', 'Atal Tunnel', 'Sissu']
+            title: 'Rohtang Pass & Solang Valley',
+            highlights: ['Rohtang Pass', 'Solang Valley']
         },
         {
             day: 5,
             destination: 'Manali',
             type: 'Stay',
-            title: 'Solang Valley & Hadimba Temple',
-            highlights: ['Solang Valley']
+            title: 'Chandratal Lake Excursion',
+            highlights: ['Chandratal Lake', 'Kunzum Pass']
         },
-        { day: 6, destination: '', type: 'Transit', title: 'Manali to Chandigarh Return', highlights: [] }
+        { day: 6, destination: '', type: 'Transit', title: 'Manali to Delhi Return', highlights: [] }
     ],
     warnings: ['Rohtang Pass needs a permit.']
 }
 
 const reply = body => ({ unwrap: () => Promise.resolve({ content: [{ text: JSON.stringify(body) }] }) })
+const plannerCalls = () =>
+    assistAi.mock.calls
+        .filter(([request]) => request.system.includes('holiday package planner'))
+        .map(([request]) => JSON.parse(request.messages[0].content))
+
+const renderWizard = () =>
+    render(
+        <MemoryRouter>
+            <PackageCreationWizard />
+        </MemoryRouter>
+    )
+
+const buildFromBrief = brief => {
+    fireEvent.change(screen.getByPlaceholderText(/includes Chandratal and Rohtang/i), { target: { value: brief } })
+    fireEvent.click(screen.getByRole('button', { name: /build package with ai/i }))
+}
+
+const dayCard = title => screen.getByText(title).closest('.MuiCardContent-root')
 
 beforeEach(() => {
     assistAi.mockReset()
@@ -96,72 +117,75 @@ beforeEach(() => {
 })
 
 describe('PackageCreationWizard — Build with AI', () => {
-    test('a free-text brief becomes a planned package with the requested stops', async () => {
-        render(
-            <MemoryRouter>
-                <PackageCreationWizard />
-            </MemoryRouter>
-        )
+    test('a plain-language request becomes a day plan built around the places asked for', async () => {
+        renderWizard()
+        buildFromBrief(BRIEF)
 
-        fireEvent.change(screen.getByPlaceholderText(/includes Chandratal and Rohtang/i), {
-            target: { value: '2N Shimla 3N Manali from Chandigarh by cab, include sisu rotang and kasol' }
-        })
-        fireEvent.click(screen.getByRole('button', { name: /build package with ai/i }))
+        // lands straight on the day plan, with the requested places on their days
+        expect(await screen.findByText('Day 4 – Rohtang Pass & Solang Valley')).toBeInTheDocument()
+        expect(screen.getByText('Day 5 – Chandratal Lake Excursion')).toBeInTheDocument()
+        expect(screen.getByText('Day 1 – Delhi to Shimla & Mall Road')).toBeInTheDocument()
+        expect(screen.getByText('Day 6 – Manali to Delhi Return')).toBeInTheDocument()
+        expect(screen.queryByText(/^Day 7/)).not.toBeInTheDocument()
+        expect(within(dayCard('Day 5 – Chandratal Lake Excursion')).getByText('Kunzum Pass')).toBeInTheDocument()
 
-        // requested stops are reported against the day they landed on
-        expect(await screen.findByText('Sissu · Day 4')).toBeInTheDocument()
+        // requested places are reported against the day they landed on
+        expect(screen.getByText('Chandratal Lake · Day 5')).toBeInTheDocument()
         expect(screen.getByText('Rohtang Pass · Day 4')).toBeInTheDocument()
         expect(screen.getByText('Kasol · not placed')).toBeInTheDocument()
         expect(screen.getByText('Rohtang Pass needs a permit.')).toBeInTheDocument()
-
-        const plannerCall = assistAi.mock.calls.find(([request]) => request.system.includes('holiday package planner'))
-        expect(JSON.parse(plannerCall[0].messages[0].content).brief).toMatch(/include sisu rotang/)
-
-        // destinations step, straight from the plan
-        expect(screen.getByDisplayValue('Shimla')).toBeInTheDocument()
-        expect(screen.getByDisplayValue('Manali')).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-
-        // activities step: planned titles and highlights on the right days
-        expect(await screen.findByText('Day 4 – Rohtang Pass, Atal Tunnel & Sissu')).toBeInTheDocument()
-        expect(screen.getByText('Day 1 – Chandigarh to Shimla & Mall Road')).toBeInTheDocument()
-        expect(screen.getByText('Day 6 – Manali to Chandigarh Return')).toBeInTheDocument()
-        expect(screen.queryByText(/^Day 7/)).not.toBeInTheDocument()
-
-        const dayFour = screen.getByText('Day 4 – Rohtang Pass, Atal Tunnel & Sissu').closest('.MuiCardContent-root')
-        expect(within(dayFour).getByText('Atal Tunnel')).toBeInTheDocument()
+        expect(plannerCalls()[0].brief).toBe(BRIEF)
 
         // the writer's copy replaces the placeholder descriptions, day for day
-        await waitFor(() => expect(within(dayFour).getByDisplayValue('Written copy for day 4')).toBeInTheDocument(), {
-            timeout: 10000
-        })
+        await waitFor(
+            () =>
+                expect(
+                    within(dayCard('Day 5 – Chandratal Lake Excursion')).getByDisplayValue('Written copy for day 5')
+                ).toBeInTheDocument(),
+            { timeout: 10000 }
+        )
 
-        // package name gets a computed duration, not the model's miscounted one
+        // destinations came from the plan; the name gets a computed duration, not the model's miscount
         fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+        expect(screen.getByDisplayValue('Shimla')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Manali')).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Back' }))
         expect(screen.getByDisplayValue('Himachal Escape 6D/5N')).toBeInTheDocument()
     }, 20000)
 
+    test('"Auto Build Day Plan" keeps the requested places instead of rebuilding generic days', async () => {
+        renderWizard()
+        buildFromBrief(BRIEF)
+        await screen.findByText('Day 4 – Rohtang Pass & Solang Valley')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+        fireEvent.click(screen.getByRole('button', { name: /auto build day plan/i }))
+
+        // re-planned around the same request, for the destinations and nights set on the Destinations step
+        // ? the wizard spaces AI calls 1.4s apart, so the re-plan queues behind the first build's descriptions and hotels
+        await waitFor(() => expect(plannerCalls()).toHaveLength(2), { timeout: 15000 })
+        expect(plannerCalls()[1]).toMatchObject({
+            brief: BRIEF,
+            fixedDestinations: [
+                { name: 'Shimla', nights: 2 },
+                { name: 'Manali', nights: 3 }
+            ]
+        })
+        expect(await screen.findByText('Day 4 – Rohtang Pass & Solang Valley')).toBeInTheDocument()
+        expect(screen.getByText('Day 5 – Chandratal Lake Excursion')).toBeInTheDocument()
+    }, 30000)
+
     test('falls back to the pattern-based draft when the AI planner fails', async () => {
         assistAi.mockImplementation(() => ({ unwrap: () => Promise.reject(new Error('503')) }))
 
-        render(
-            <MemoryRouter>
-                <PackageCreationWizard />
-            </MemoryRouter>
-        )
-
-        fireEvent.change(screen.getByPlaceholderText(/includes Chandratal and Rohtang/i), {
-            target: {
-                value: 'create itenary for 2n shimla 3n manali in which it should include chandrataal and rohtang'
-            }
-        })
-        fireEvent.click(screen.getByRole('button', { name: /build package with ai/i }))
+        renderWizard()
+        buildFromBrief('create itenary for 2n shimla 3n manali in which it should include chandrataal and rohtang')
 
         expect(await screen.findByText(/AI planning is unavailable right now/i)).toBeInTheDocument()
+
+        // the rest of the sentence is not mistaken for part of the destination names
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
         expect(screen.getByDisplayValue('Shimla')).toBeInTheDocument()
-        // the rest of the sentence is not mistaken for part of the destination name
         expect(screen.getByDisplayValue('Manali')).toBeInTheDocument()
     }, 20000)
 })

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
     applyPlanToRows,
+    buildPlannerRequest,
     buildWriterBatches,
     buildWriterRequest,
     matchInclusions,
@@ -96,6 +97,22 @@ describe('normalizePlan', () => {
             ]
         })
         expect(plan.packageName).toBe('Himachal Escape 6D/5N')
+    })
+})
+
+describe('buildPlannerRequest', () => {
+    const payload = input => JSON.parse(buildPlannerRequest(input).messages[0].content)
+
+    test('sends the brief as typed, and fixed destinations only when given', () => {
+        expect(payload({ brief: '2n shimla 3n manali with chandratal' })).toEqual({
+            brief: '2n shimla 3n manali with chandratal',
+            knownOriginLocation: '',
+            knownTransportMode: ''
+        })
+        expect(payload({ brief: 'x', destinations: [] }).fixedDestinations).toBeUndefined()
+        expect(payload({ brief: 'x', destinations: [{ name: 'Manali', nights: 4 }] }).fixedDestinations).toEqual([
+            { name: 'Manali', nights: 4 }
+        ])
     })
 })
 

@@ -1925,58 +1925,6 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }))
     }
 
-    const handleGenerateFromPrompt = () => {
-        if (!packageForm.originLocation || packageForm.transportMode === 'On Own Vehicles') {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Please enter a origin location and transport mode.',
-                    variant: 'alert',
-                    alert: { color: 'warning' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            return
-        }
-        const parsedPrompt = parsePromptWithFallbackOrigin(draftPrompt, packageForm.originLocation)
-        const hydratedDestinations = parsedPrompt.destinations.map(item =>
-            buildDestinationRowFromValue(item.name, item.nights)
-        )
-
-        if (!hydratedDestinations.length) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Use lines like "2N Shimla, 2N Manali" so I can draft destinations automatically.',
-                    variant: 'alert',
-                    alert: { color: 'warning' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            return
-        }
-
-        const nextOriginLocation = parsedPrompt.originLocation
-        const nextTransportMode = parsedPrompt.transportMode || packageForm.transportMode
-        const generatedActivities = buildActivitiesFromDestinations(
-            hydratedDestinations,
-            nextOriginLocation,
-            nextTransportMode
-        )
-        setPackageForm(prev => ({
-            ...prev,
-            originLocation: nextOriginLocation,
-            transportMode: nextTransportMode,
-            name: prev.name || buildSuggestedPackageName(hydratedDestinations) || prev.name
-        }))
-        setDestinations(hydratedDestinations)
-        setActivities(generatedActivities)
-        hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
-        generatedActivities.forEach(scheduleActivityDescriptionAutofill)
-        autoFillImagesForActivities(generatedActivities)
-        setActiveStep(1)
-    }
-
     // ? writes day descriptions a few days per call; anything the agent typed meanwhile is kept
     const writeDescriptionsForRows = async ({ rows, packageName, originLocation, transportMode }) => {
         let failedDays = 0
@@ -2025,6 +1973,41 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }
     }
 
+    // ? the planner call; null when AI is unavailable or returned nothing usable
+    const requestAiPlan = async ({ brief, destinationRows }) => {
+        try {
+            const response = await runQueuedAiRequest(() =>
+                assistAi(
+                    buildPlannerRequest({
+                        brief,
+                        originLocation: packageForm.originLocation,
+                        transportMode: packageForm.transportMode,
+                        destinations: destinationRows?.map(row => ({
+                            name: row.name.trim(),
+                            nights: Number(row.nights) || 1
+                        }))
+                    })
+                ).unwrap()
+            )
+            const plan = normalizePlan(parseAiJson(response))
+            return plan.destinations.length ? plan : null
+        } catch (error) {
+            return null
+        }
+    }
+
+    // ? lays the plan onto the day rows for these destinations, then writes the descriptions
+    const applyAiPlan = ({ plan, destinationRows, originLocation, transportMode, packageName }) => {
+        const draftRows = buildActivitiesFromDestinations(destinationRows, originLocation, transportMode)
+        // ? planned rows already have their title, so the per-row title drafting must not pick them up
+        const plannedRows = applyPlanToRows(draftRows, plan.days).map(row => ({ ...row, isAiPending: false }))
+
+        setActivities(plannedRows)
+        setAiPlanSummary({ inclusions: matchInclusions(plannedRows, plan.mustInclude), warnings: plan.warnings })
+        autoFillImagesForActivities(plannedRows)
+        writeDescriptionsForRows({ rows: plannedRows, packageName, originLocation, transportMode })
+    }
+
     const handleBuildWithAi = async () => {
         const brief = draftPrompt.trim()
 
@@ -2046,33 +2029,16 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         setVoiceStatus('')
         setAiPlanSummary(null)
 
-        let plan = null
-        try {
-            const response = await runQueuedAiRequest(() =>
-                assistAi(
-                    buildPlannerRequest({
-                        brief,
-                        originLocation: packageForm.originLocation,
-                        transportMode: packageForm.transportMode
-                    })
-                ).unwrap()
-            )
-            plan = normalizePlan(parseAiJson(response))
-        } catch (error) {
-            // ? handled below: the pattern-based draft still works without AI
-        }
-
-        const aiPlanned = Boolean(plan?.destinations.length)
+        let plan = await requestAiPlan({ brief })
+        const aiPlanned = Boolean(plan)
         if (!aiPlanned) {
+            // ? the pattern-based draft still works without AI
             const parsed = parsePromptWithFallbackOrigin(brief, packageForm.originLocation)
             plan = {
                 packageName: '',
                 originLocation: parsed.originLocation,
                 transportMode: parsed.transportMode,
-                destinations: parsed.destinations,
-                days: [],
-                mustInclude: [],
-                warnings: []
+                destinations: parsed.destinations
             }
         }
 
@@ -2094,11 +2060,6 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         const nextOriginLocation = plan.originLocation || packageForm.originLocation
         const nextTransportMode = plan.transportMode || packageForm.transportMode
         const hydratedDestinations = plan.destinations.map(item => buildDestinationRowFromValue(item.name, item.nights))
-        const draftRows = buildActivitiesFromDestinations(hydratedDestinations, nextOriginLocation, nextTransportMode)
-        // ? planned rows already have their title, so the per-row title drafting must not pick them up
-        const plannedRows = aiPlanned
-            ? applyPlanToRows(draftRows, plan.days).map(row => ({ ...row, isAiPending: false }))
-            : draftRows
         const packageName = plan.packageName || buildSuggestedPackageName(hydratedDestinations)
 
         setPackageForm(prev => ({
@@ -2108,32 +2069,55 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             name: prev.name || packageName
         }))
         setDestinations(hydratedDestinations)
-        setActivities(plannedRows)
-        setAiPlanSummary(
-            aiPlanned ? { inclusions: matchInclusions(plannedRows, plan.mustInclude), warnings: plan.warnings } : null
-        )
         hydratedDestinations.forEach(scheduleDestinationHotelAutofill)
-        autoFillImagesForActivities(plannedRows)
-        setActiveStep(1)
         setVoiceDrafting(false)
+        // ? straight to the day plan, which is what the agent asked for
+        setActiveStep(2)
 
         if (aiPlanned) {
-            writeDescriptionsForRows({
-                rows: plannedRows,
-                packageName,
+            applyAiPlan({
+                plan,
+                destinationRows: hydratedDestinations,
                 originLocation: nextOriginLocation,
-                transportMode: nextTransportMode
+                transportMode: nextTransportMode,
+                packageName
             })
-        } else {
-            plannedRows.forEach(scheduleActivityDescriptionAutofill)
-            setVoiceStatus(
-                'AI planning is unavailable right now, so this draft was built from the destinations and nights in your text.'
-            )
+            return
         }
+
+        const draftRows = buildActivitiesFromDestinations(hydratedDestinations, nextOriginLocation, nextTransportMode)
+        setActivities(draftRows)
+        draftRows.forEach(scheduleActivityDescriptionAutofill)
+        autoFillImagesForActivities(draftRows)
+        setVoiceStatus(
+            'AI planning is unavailable right now, so this draft was built from the destinations and nights in your text.'
+        )
     }
 
-    const handleAutoBuildActivities = () => {
+    const handleAutoBuildActivities = async () => {
         const validDestinations = destinations.filter(item => item.name.trim())
+        const brief = draftPrompt.trim()
+
+        // ? with a request typed, re-plan around it for the destinations and nights set on this step, so the
+        //   places the guest asked for survive a rebuild instead of being replaced by generic days
+        if (brief && validDestinations.length) {
+            setVoiceDrafting(true)
+            const plan = await requestAiPlan({ brief, destinationRows: validDestinations })
+            setVoiceDrafting(false)
+
+            if (plan) {
+                applyAiPlan({
+                    plan,
+                    destinationRows: validDestinations,
+                    originLocation: packageForm.originLocation,
+                    transportMode: packageForm.transportMode,
+                    packageName: packageForm.name
+                })
+                setActiveStep(2)
+                return
+            }
+        }
+
         const generatedActivities = buildActivitiesFromDestinations(
             validDestinations,
             packageForm.originLocation,
@@ -2158,6 +2142,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             }
         })
 
+        setAiPlanSummary(null)
         setActivities(generatedActivities)
         generatedActivities.forEach(scheduleActivityDescriptionAutofill)
         autoFillImagesForActivities(generatedActivities)
@@ -2537,9 +2522,6 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                     >
                                         Build Package with AI
                                     </CustomButton>
-                                    <CustomButton variant='outlined' onClick={handleGenerateFromPrompt}>
-                                        Generate Draft
-                                    </CustomButton>
                                 </Stack>
                                 {voiceStatus ? (
                                     <Typography variant='body2' color='text.secondary'>
@@ -2812,6 +2794,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                     variant='outlined'
                                     startIcon={<AutoAwesome />}
                                     onClick={handleAutoBuildActivities}
+                                    loading={voiceDrafting}
                                 >
                                     Auto Build Day Plan
                                 </CustomButton>

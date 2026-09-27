@@ -26,7 +26,7 @@ Respond ONLY with a JSON object with these keys:
 - packageName: string — catchy, ending with "<days>D/<nights>N"
 - originLocation: string — pickup city if the brief or knownOriginLocation gives one, else ""
 - transportMode: string — the vehicle or mode as the agent wrote it (e.g. Innova, Cab, Tempo Traveller, Volvo, Train, Flight) if the brief or knownTransportMode gives one, else ""
-- destinations: array of { "name": string, "nights": integer } in travel order, as the brief lists them
+- destinations: array of { "name": string, "nights": integer } in travel order, as the brief lists them. If the input has fixedDestinations, the agent has already set them: use exactly those names, nights and order, even where the brief says otherwise
 - mustInclude: array of strings — every specific place, excursion or activity the brief asks for besides the destinations themselves, spelled properly (e.g. "Chandratal Lake", "Rohtang Pass")
 - days: array of { "day": integer, "destination": string, "type": "TransitStay" | "Stay" | "Transit", "title": string, "highlights": array of strings }
 - warnings: array of short strings for the agent
@@ -96,7 +96,13 @@ export const withDurationSuffix = (name, destinations) => {
     return base && nights ? `${base} ${nights + 1}D/${nights}N` : base
 }
 
-export const buildPlannerRequest = ({ brief, originLocation = '', transportMode = '' }) => ({
+/**
+ * @param {object} input
+ * @param {string} input.brief what the agent typed
+ * @param {{ name: string, nights: number }[]} [input.destinations] set when the agent has already fixed the
+ *        destinations and nights (the Destinations step) and only the day plan should be rebuilt around them
+ */
+export const buildPlannerRequest = ({ brief, originLocation = '', transportMode = '', destinations }) => ({
     system: PLANNER_SYSTEM_PROMPT,
     messages: [
         {
@@ -104,7 +110,8 @@ export const buildPlannerRequest = ({ brief, originLocation = '', transportMode 
             content: JSON.stringify({
                 brief,
                 knownOriginLocation: originLocation,
-                knownTransportMode: transportMode
+                knownTransportMode: transportMode,
+                ...(destinations?.length ? { fixedDestinations: destinations } : {})
             })
         }
     ]
