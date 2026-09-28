@@ -74,7 +74,7 @@ Respond ONLY with a JSON object:
 
 RULES:
 0. Every requiredAttractions item appears in exactly one cluster's "covers", or in "unplaceable" when it truly cannot be done from these stays. Never leave one out because it is long, remote or demanding — put the concern in "access" instead.
-1. Use real geography and real road routes. Never invent places.
+1. Use real geography and real road routes. Never invent places. "via" lists towns actually on the usual road between the two places, in order — never towns in another valley or off the route.
 2. access notes are general guidance only, phrased as something to check (e.g. "usually needs an online permit; check current status before travel"). Never state current road status, timings, prices or availability as fact.
 3. If "month" is given, reflect seasonal access for that month; otherwise say where access depends on the season.
 4. Respect the travellers and constraints (e.g. parents, no trekking) in how a place is visited.
