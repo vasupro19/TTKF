@@ -36,11 +36,11 @@ import {
     useUpdateItenaryClientMutation
 } from '@/app/store/slices/api/itenarySlice'
 import { useCreatePackageItenaryClientMutation } from '@/app/store/slices/api/packageItenarySlice'
-import TripBriefCard from './tripUi/TripBriefCard'
-import TripPlanView from './tripUi/TripPlanView'
-import DayPlanCard from './tripUi/DayPlanCard'
-import { applyPatch, emptyRequirements } from './tripEngine/requirements'
-import { editRequirements, planTrip, understand } from './tripEngine/pipeline'
+import SimplePlanner from './tripUi/SimplePlanner'
+import { DayDetail } from './tripUi/DayRow'
+import { addDestinationText, emptyPlannerInput, fromRequirements, toRequirements } from './tripUi/plannerInput'
+import { emptyRequirements, mergeRequirements, normalizeText, sameName } from './tripEngine/requirements'
+import { editRequirements, extractFromText, planTrip } from './tripEngine/pipeline'
 import { entryTypeFor, renderDayDescription, renderDayTitle } from './tripEngine/render'
 import { DAY_TYPES } from './tripEngine/route'
 
@@ -643,10 +643,16 @@ function PackageCreationWizard() {
     const [saving, setSaving] = useState(false)
     const [voiceSupported, setVoiceSupported] = useState(false)
     const [isListening, setIsListening] = useState(false)
-    const [voiceStatus, setVoiceStatus] = useState('')
+    const [, setVoiceStatus] = useState('')
     // ? the structured trip (requirements, journey legs, timed day plans) the engine builds; the rows in
     //   `activities` are what gets saved, rendered from it
-    const [tripForm, setTripForm] = useState(emptyRequirements)
+    // ? the simple planner's answers; the structured trip is planned from these
+    const [plannerInput, setPlannerInput] = useState(emptyPlannerInput)
+    const [plannerMode, setPlannerMode] = useState('simple')
+    const [readingMessage, setReadingMessage] = useState(false)
+    const [saveError, setSaveError] = useState('')
+    // ? what the AI understood from "anything you don't want to miss", so the same words are not re-sent
+    const extractionRef = useRef({ text: '', extracted: null })
     const [trip, setTrip] = useState(null)
     const [tripBusy, setTripBusy] = useState(false)
     const [tripError, setTripError] = useState('')
@@ -1703,7 +1709,13 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             })
         )
 
-        if (field !== 'image' && field !== 'description' && nextRowForImageAutofill) {
+        // ? a day from the planner already has its text and photo; editing it must not trigger AI rewrites
+        if (
+            field !== 'image' &&
+            field !== 'description' &&
+            nextRowForImageAutofill &&
+            !nextRowForImageAutofill.planKey
+        ) {
             scheduleImageAutofillForRow(nextRowForImageAutofill)
             scheduleActivityDescriptionAutofill(nextRowForImageAutofill)
         }
@@ -1750,7 +1762,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
     const removeActivityRow = rowId => setActivities(prev => prev.filter(item => item.id !== rowId))
 
     const fetchImagesForActivity = async row => {
-        const keyword = row.destinationName || row.title
+        const keyword = row.highlights?.[0] || row.destinationName || row.title
 
         if (!keyword?.trim()) {
             dispatch(
@@ -1902,73 +1914,165 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             const nextTrip = await build()
             const wasReady = trip?.status === 'ready'
             setTrip(nextTrip)
-            setTripForm(nextTrip.input)
             syncFromTrip(nextTrip)
             if (nextTrip.status === 'ready' && !wasReady) setActiveStep(2)
             return nextTrip
         } catch (error) {
-            setTripError(
-                'AI is busy right now — the free Gemini tier is at its limit. Nothing was changed; try again in a minute.'
-            )
+            setTripError('We couldn’t reach the planner just now. Nothing was lost — please try again in a minute.')
             return null
         } finally {
             setTripBusy(false)
         }
     }
 
-    const handleBuildTrip = () => {
-        if (!draftPrompt.trim() && !tripForm.destinations.length) {
-            showWarning('Describe the trip in the box, or add destinations under Trip details, first.')
-            return null
-        }
-        return runPlan(async () => {
-            const requirements = await understand({ text: draftPrompt, form: tripForm, ask: askAi })
-            return planTrip({ requirements, previous: null, ask: askAi })
-        })
-    }
-
     // ? every later change re-plans from the last trip, so only what changed is asked for again
     const replan = input => runPlan(() => planTrip({ requirements: input, previous: trip, ask: askAi }))
 
-    const handleUpdateTrip = () => replan(tripForm)
+    // ? the requirements for these answers: the fields, plus what the AI understood from the free text
+    const planFromInput = input =>
+        runPlan(async () => {
+            const form = toRequirements(input)
+            const text = input.mustSee.trim()
+            let requirements = form
+            if (text) {
+                if (extractionRef.current.text !== text) {
+                    extractionRef.current = {
+                        text,
+                        extracted: await extractFromText({ text: `Must see and wishes: ${text}`, form, ask: askAi })
+                    }
+                }
+                requirements = mergeRequirements(extractionRef.current.extracted, form)
+            }
+            return planTrip({ requirements, previous: trip, ask: askAi })
+        })
 
-    const handleAnswerQuestion = (question, answer) => {
-        const input = trip?.input || tripForm
-        if (question.field === 'destinations') {
-            return runPlan(async () =>
-                planTrip({
-                    requirements: await understand({ text: answer, form: input, ask: askAi }),
-                    previous: trip,
-                    ask: askAi
-                })
-            )
-        }
-        return replan(applyPatch(input, { type: 'set', field: question.field, value: answer }))
+    const updatePlanner = next => {
+        setPlannerInput(next)
+        return planFromInput(next)
     }
 
-    const handleApplyOption = option =>
-        option.patch.type === 'retry' ? replan(trip.input) : replan(applyPatch(trip.input, option.patch))
+    // ? a pasted customer message fills the planner's fields; nothing is planned until the agent continues
+    const handleReadMessage = async text => {
+        setReadingMessage(true)
+        try {
+            const extracted = await extractFromText({ text, ask: askAi })
+            const understood = mergeRequirements(extracted, {})
+            if (!understood.destinations.length && understood.suggestedDestinations.length) {
+                understood.destinations = understood.suggestedDestinations.map(({ name, nights }) => ({ name, nights }))
+            }
+            const next = fromRequirements(understood, plannerInput)
+            // ? remember what the message asked for, keyed by the must-see text it produced
+            extractionRef.current = { text: next.mustSee.trim(), extracted: understood }
+            setPlannerInput(next)
+            return next
+        } catch (error) {
+            showWarning('We couldn’t read that message just now. Try again, or fill in the trip yourself.')
+            return null
+        } finally {
+            setReadingMessage(false)
+        }
+    }
+
+    const handleExclude = name => updatePlanner({ ...plannerInput, excluded: [...plannerInput.excluded, name] })
+
+    const handleAnswerQuestion = (question, answer) => {
+        if (question.field === 'destinations') return updatePlanner(addDestinationText(plannerInput, answer))
+        const field = question.field === 'startDate' ? 'startDate' : question.field
+        return updatePlanner({ ...plannerInput, [field]: answer })
+    }
+
+    const handleApplyOption = option => {
+        const { patch } = option
+        if (patch.type === 'add-night') {
+            return updatePlanner({
+                ...plannerInput,
+                destinations: plannerInput.destinations.map(item =>
+                    sameName(item.name, patch.destination) ? { ...item, nights: item.nights + 1 } : item
+                )
+            })
+        }
+        if (patch.type === 'add-destination') {
+            const at = plannerInput.destinations.findIndex(item => sameName(item.name, patch.after))
+            const nextDestinations = [...plannerInput.destinations]
+            nextDestinations.splice(at === -1 ? nextDestinations.length : at + 1, 0, {
+                name: patch.name,
+                nights: patch.nights || 1
+            })
+            return updatePlanner({ ...plannerInput, destinations: nextDestinations })
+        }
+        if (patch.type === 'remove-required' && extractionRef.current.extracted) {
+            const { extracted } = extractionRef.current
+            const drop = item => patch.names.some(name => normalizeText(item.name).includes(normalizeText(name)))
+            extractionRef.current = {
+                ...extractionRef.current,
+                extracted: {
+                    ...extracted,
+                    requiredAttractions: extracted.requiredAttractions.filter(item => !drop(item))
+                }
+            }
+        }
+        return planFromInput(plannerInput)
+    }
 
     const handleAcceptRecommendation = item => {
-        const last = trip.input.destinations[trip.input.destinations.length - 1]?.name
-        return replan(
-            applyPatch(
-                trip.input,
-                item.kind === 'destination'
-                    ? { type: 'add-destination', name: item.name, nights: 1, after: last }
-                    : { type: 'add-required', name: item.name }
-            )
-        )
+        if (item.kind === 'destination') {
+            return handleApplyOption({
+                patch: {
+                    type: 'add-destination',
+                    name: item.name,
+                    nights: 1,
+                    after: plannerInput.destinations[plannerInput.destinations.length - 1]?.name
+                }
+            })
+        }
+        // ? added to the must-see text and to what was understood from it, so no new AI call is needed
+        const mustSee = [plannerInput.mustSee.trim(), item.name].filter(Boolean).join(', ')
+        const extracted = extractionRef.current.extracted || emptyRequirements()
+        extractionRef.current = {
+            text: mustSee,
+            extracted: {
+                ...extracted,
+                requiredAttractions: [...extracted.requiredAttractions, { name: item.name, destination: '' }]
+            }
+        }
+        return updatePlanner({ ...plannerInput, mustSee })
     }
 
     const handleChangeRequest = instruction =>
-        runPlan(async () =>
-            planTrip({
-                requirements: await editRequirements({ requirements: trip.input, instruction, ask: askAi }),
-                previous: trip,
-                ask: askAi
-            })
-        )
+        runPlan(async () => {
+            const requirements = await editRequirements({ requirements: trip.input, instruction, ask: askAi })
+            const next = fromRequirements(requirements, plannerInput)
+            extractionRef.current = { text: next.mustSee.trim(), extracted: requirements }
+            setPlannerInput(next)
+            return planTrip({ requirements, previous: trip, ask: askAi })
+        })
+
+    const handleStartOver = () => {
+        setPlannerInput(emptyPlannerInput())
+        extractionRef.current = { text: '', extracted: null }
+        setTrip(null)
+        setTripError('')
+        setSaveError('')
+        setActivities([])
+        setDestinations([createDestinationRow()])
+        setPackageForm(prev => ({ ...prev, name: '', originLocation: '', transportMode: '' }))
+    }
+
+    const hotelsFor = name => destinations.find(row => toNormalized(row.name) === toNormalized(name)) || null
+
+    const handleEditHotel = (rowId, field, value) =>
+        setDestinations(prev => prev.map(row => (row.id === rowId ? { ...row, [field]: value } : row)))
+
+    const openDetailedEditor = () => {
+        setPlannerMode('detailed')
+        setActiveStep(2)
+    }
+
+    const backToSimplePlanner = () => {
+        // ? nights or places changed in the detailed editor come back into the simple planner
+        if (trip?.input) setPlannerInput(prev => fromRequirements(trip.input, prev))
+        setPlannerMode('simple')
+    }
 
     const handleAutoBuildActivities = async () => {
         const validDestinations = destinations.filter(item => item.name.trim())
@@ -2149,7 +2253,9 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
 
     const handleBack = () => setActiveStep(prev => Math.max(prev - 1, 0))
 
-    const saveWizard = async () => {
+    const saveWizard = async (overrides = {}) => {
+        const packageName = (overrides.name ?? packageForm.name).trim()
+        const campaignId = Number(overrides.campaignId ?? packageForm.campaignId)
         try {
             if (Object.values(descriptionLoadingByRow).some(Boolean)) {
                 dispatch(
@@ -2185,8 +2291,8 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             setSaving(true)
 
             const packageResponse = await createPackageClient({
-                name: packageForm.name.trim(),
-                campaignId: Number(packageForm.campaignId)
+                name: packageName,
+                campaignId
             }).unwrap()
 
             const packageId = packageResponse?.data?.id
@@ -2216,7 +2322,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                             const updated = await updateDestinationClient({
                                 id: existing.id,
                                 name: row.name.trim(),
-                                campaignId: existing.campaignId || Number(packageForm.campaignId),
+                                campaignId: existing.campaignId || campaignId,
                                 ...nextHotels
                             }).unwrap()
 
@@ -2228,7 +2334,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
 
                     const created = await createDestinationClient({
                         name: row.name.trim(),
-                        campaignId: Number(packageForm.campaignId),
+                        campaignId,
                         delux_hotel: row.delux_hotel || '',
                         super_delux_hotel: row.super_delux_hotel || '',
                         luxury_hotel: row.luxury_hotel || '',
@@ -2269,7 +2375,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                 id: existing.id,
                                 title: existing.title,
                                 description: nextDescription,
-                                campaignId: existing.campaignId || Number(packageForm.campaignId)
+                                campaignId: existing.campaignId || campaignId
                             }).unwrap()
 
                             return [toNormalized(title), updated?.data || { ...existing, description: nextDescription }]
@@ -2281,7 +2387,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                     const created = await createItenaryClient({
                         title,
                         description: nextDescription,
-                        campaignId: Number(packageForm.campaignId)
+                        campaignId
                     }).unwrap()
 
                     return [toNormalized(title), created?.data]
@@ -2302,7 +2408,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                 // eslint-disable-next-line no-await-in-loop
                 await createPackageItenaryClient({
                     packageId,
-                    campaignId: Number(packageForm.campaignId),
+                    campaignId,
                     itenaryId: itenaryMap[toNormalized(row.title)]?.id,
                     destinationId: destinationRecord?.id || null,
                     entryType: row.entryType,
@@ -2320,7 +2426,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                 })
             )
 
-            navigate(`/master/packages/${packageForm.campaignId}`)
+            navigate(`/master/packages/${campaignId}`)
         } catch (error) {
             dispatch(
                 openSnackbar({
@@ -2336,54 +2442,84 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
         }
     }
 
+    const handleSimpleSave = () => {
+        const name = packageForm.name.trim()
+        if (name.length < 3) {
+            setSaveError('Give the package a name — at least 3 letters.')
+            return null
+        }
+        if (!packageForm.campaignId) {
+            setSaveError('Choose the campaign this package belongs to.')
+            return null
+        }
+        setSaveError('')
+        return saveWizard({ name, campaignId: packageForm.campaignId })
+    }
+
+    if (plannerMode === 'simple') {
+        return (
+            <MainCard content={false} sx={{ py: '2px' }}>
+                <SimplePlanner
+                    input={plannerInput}
+                    onInputChange={setPlannerInput}
+                    trip={trip}
+                    busy={tripBusy}
+                    error={tripError}
+                    onCreate={planFromInput}
+                    onReadMessage={handleReadMessage}
+                    reading={readingMessage}
+                    voice={{
+                        supported: voiceSupported,
+                        listening: isListening,
+                        transcript: draftPrompt,
+                        onToggle: isListening ? stopVoiceCapture : startVoiceCapture
+                    }}
+                    result={{
+                        rows: activities,
+                        onAnswer: handleAnswerQuestion,
+                        onApplyOption: handleApplyOption,
+                        onExclude: handleExclude,
+                        onAddIdea: handleAcceptRecommendation,
+                        onChangeRequest: handleChangeRequest,
+                        onEditRow: updateActivityRow,
+                        imageOptionsByRow,
+                        onFindImages: fetchImagesForActivity,
+                        hotelsFor,
+                        onEditHotel: handleEditHotel,
+                        save: {
+                            name: packageForm.name,
+                            onNameChange: value => setPackageForm(prev => ({ ...prev, name: value })),
+                            campaignId: packageForm.campaignId,
+                            onCampaignChange: value => setPackageForm(prev => ({ ...prev, campaignId: value })),
+                            campaignOptions,
+                            campaignLocked: Boolean(campaignContextId),
+                            onSave: handleSimpleSave,
+                            saving,
+                            error: saveError
+                        },
+                        onOpenDetailed: openDetailedEditor,
+                        onStartOver: handleStartOver
+                    }}
+                />
+            </MainCard>
+        )
+    }
+
     return (
         <MainCard content={false} sx={{ py: '2px' }}>
             <Box sx={{ p: 3 }}>
                 <Stack spacing={2}>
-                    <Box>
-                        <Typography variant='h3'>Package Creation Wizard</Typography>
-                        <Typography variant='body2' color='text.secondary'>
-                            Create package, destinations, and day-wise activities together so the team doesn&apos;t have
-                            to jump across masters.
-                        </Typography>
-                    </Box>
-
-                    <Card sx={{ borderRadius: 3, border: '1px solid #e5e7eb' }}>
-                        <CardContent>
-                            <Stack spacing={2}>
-                                <TripBriefCard
-                                    notes={draftPrompt}
-                                    onNotesChange={setDraftPrompt}
-                                    value={tripForm}
-                                    onChange={setTripForm}
-                                    onBuild={handleBuildTrip}
-                                    onUpdate={handleUpdateTrip}
-                                    building={tripBusy}
-                                    hasTrip={Boolean(trip)}
-                                    voice={{
-                                        supported: voiceSupported,
-                                        listening: isListening,
-                                        onToggle: isListening ? stopVoiceCapture : startVoiceCapture,
-                                        status: voiceStatus
-                                    }}
-                                />
-                                {tripError ? <Alert severity='warning'>{tripError}</Alert> : null}
-                                {trip ? (
-                                    <>
-                                        <Divider />
-                                        <TripPlanView
-                                            trip={trip}
-                                            onAnswer={handleAnswerQuestion}
-                                            onApplyOption={handleApplyOption}
-                                            onAcceptRecommendation={handleAcceptRecommendation}
-                                            onChangeRequest={handleChangeRequest}
-                                            busy={tripBusy}
-                                        />
-                                    </>
-                                ) : null}
-                            </Stack>
-                        </CardContent>
-                    </Card>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent='space-between' spacing={1}>
+                        <Box>
+                            <Typography variant='h3'>Detailed editor</Typography>
+                            <Typography variant='body2' color='text.secondary'>
+                                Every field of the package, for fine-tuning days, hotels and photos by hand.
+                            </Typography>
+                        </Box>
+                        <Button onClick={backToSimplePlanner} sx={{ alignSelf: { sm: 'center' } }}>
+                            Back to the simple planner
+                        </Button>
+                    </Stack>
 
                     <Stepper activeStep={activeStep} alternativeLabel>
                         {steps.map(label => (
@@ -2677,7 +2813,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                                     </Button>
                                                 )}
                                             </Stack>
-                                            {row.dayPlan ? <DayPlanCard day={row.dayPlan} showTitle={false} /> : null}
+                                            {row.dayPlan ? <DayDetail day={row.dayPlan} /> : null}
                                             {!row.dayPlan && row.highlights?.length ? (
                                                 <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap>
                                                     {row.highlights.map(item => (
@@ -2953,7 +3089,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                 Cancel
                             </Button>
                             {activeStep === steps.length - 1 ? (
-                                <CustomButton startIcon={<Save />} onClick={saveWizard} loading={saving}>
+                                <CustomButton startIcon={<Save />} onClick={() => saveWizard()} loading={saving}>
                                     Save Package Flow
                                 </CustomButton>
                             ) : (
