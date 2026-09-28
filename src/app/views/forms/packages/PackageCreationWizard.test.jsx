@@ -106,6 +106,17 @@ const model = ({ system, messages }) => {
             ]
         })
     }
+    if (system.includes('day-by-day descriptions')) {
+        calls.push(`write:${payload.days.length}`)
+        return reply({
+            days: payload.days.map(day => ({
+                day: day.day,
+                description: `${day.journey ? `Travel on to ${day.journey.to} through the hills. ` : ''}${day.places
+                    .map(place => `Enjoy ${place.name}, one of the loveliest spots around.`)
+                    .join(' ')} The rest of the day is yours to relax, with a comfortable night at the hotel.`
+            }))
+        })
+    }
     return reply({}) // hotel suggestions — not under test
 }
 
@@ -233,14 +244,20 @@ describe('Package planner — the simple flow', () => {
         expect(within(dayRow(6)).getByText('Manali → Delhi')).toBeInTheDocument()
         expect(screen.queryByText('you asked')).not.toBeInTheDocument()
 
+        // an opened day reads as one paragraph; the timings are there on request
         fireEvent.click(dayRow(4))
-        expect(screen.getAllByText('you asked')).toHaveLength(3)
+        expect(
+            screen.getByText(/^Enjoy Atal Tunnel, one of the loveliest spots around\. Enjoy Sissu/)
+        ).toBeInTheDocument()
         expect(screen.getByText(/needs an online permit/)).toBeInTheDocument()
+        expect(screen.queryByText('you asked')).not.toBeInTheDocument()
+        click('Timings and drive')
+        expect(screen.getAllByText('you asked')).toHaveLength(3)
 
-        expect(calls).toEqual(['understand', 'logistics:3', 'fill'])
+        expect(calls).toEqual(['understand', 'logistics:3', 'fill', 'write:6'])
     }, 40000)
 
-    test('removing something the AI added takes one click and asks the AI nothing', async () => {
+    test('removing something the AI added takes one click, and only that day is written again', async () => {
         renderPlanner()
         await planTheTrip()
         const [first] = within(screen.getByText('We added').parentElement).getAllByRole('button', { name: /^Remove / })
@@ -253,7 +270,7 @@ describe('Package planner — the simple flow', () => {
             () => expect(screen.queryByRole('button', { name: `Remove ${name}` })).not.toBeInTheDocument(),
             WAIT
         )
-        expect(calls).toEqual([])
+        expect(calls).toEqual(['write:1'])
     }, 40000)
 
     test('answering the date question updates the plan in place', async () => {

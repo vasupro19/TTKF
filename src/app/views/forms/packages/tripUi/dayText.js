@@ -2,7 +2,7 @@
  * The words a collapsed day shows: a headline and one summary line.
  */
 import { DAY_TYPES } from '../tripEngine/route'
-import { formatHours, formatWindow } from '../tripEngine/render'
+import { formatHours } from '../tripEngine/render'
 
 export const formatDate = isoDate =>
     isoDate
@@ -13,8 +13,6 @@ export const formatDate = isoDate =>
               timeZone: 'UTC'
           })
         : ''
-
-const clockOf = minutes => formatWindow(minutes, minutes).replace('approx. ', '')
 
 const words = value =>
     (value || '')
@@ -56,12 +54,8 @@ export const daySummary = day => {
             : 'Travel day'
         return places.length ? `${drive}, then ${places.slice(0, 2).join(' and ')}` : drive
     }
-    if (day.type === DAY_TYPES.EXCURSION && day.activities.length) {
-        const start = day.timeline.find(item => item.kind === 'depart')?.start ?? day.activities[0].start
-        const end =
-            day.timeline.filter(item => item.end != null).pop()?.end ?? day.activities[day.activities.length - 1].end
-        return `Day trip from ${day.location} · ${clockOf(start)} – ${clockOf(end)}`
-    }
+    // ? no clock times here: the day reads as places, and the timings sit behind "Timings and drive"
+    if (day.type === DAY_TYPES.EXCURSION && day.activities.length) return `Day trip from ${day.location}`
     if (day.type === DAY_TYPES.DEPARTURE)
         return places.length ? `${places[0]}, then onward` : 'Check out and head onward'
     return places.length ? places.slice(0, 3).join(', ') : 'At leisure'

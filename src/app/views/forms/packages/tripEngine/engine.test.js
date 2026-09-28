@@ -47,10 +47,15 @@ const LAHAUL = {
 }
 
 // ? a scripted model: answers each of the engine's calls and records what it was asked
-const fakeModel = ({ clusters = [LAHAUL], unplaceable = [] } = {}) => {
+const fakeModel = ({ clusters = [LAHAUL], unplaceable = [], write = null } = {}) => {
     const calls = []
     const ask = async request => {
         const payload = JSON.parse(request.messages[0].content)
+        if (request.system.includes('day-by-day descriptions')) {
+            calls.push({ kind: 'write', days: payload.days.map(day => day.day) })
+            if (!write) throw new Error('model unavailable')
+            return { days: payload.days.map(day => ({ day: day.day, description: write(day) })) }
+        }
         if (request.system.includes('route and destination-logistics')) {
             calls.push({ kind: 'logistics', legs: payload.legs.map(leg => `${leg.from}>${leg.to}`) })
             return {
@@ -336,7 +341,7 @@ describe('pipeline', () => {
         expect(trip.recommendations.map(item => item.name)).toEqual(['Kasol'])
         expect(trip.questions.map(item => item.id)).toEqual(['dates'])
         expect(trip.validation.checks.filter(item => !item.pass)).toEqual([])
-        expect(model.calls.map(call => call.kind)).toEqual(['logistics', 'fill'])
+        expect(model.calls.map(call => call.kind)).toEqual(['logistics', 'fill', 'write'])
     })
 
     test('changing the origin re-estimates only the two legs that changed', async () => {
@@ -358,7 +363,10 @@ describe('pipeline', () => {
     })
 
     test('"make it more relaxed" re-times the days without asking the model again', async () => {
-        const model = fakeModel()
+        const model = fakeModel({
+            write: day =>
+                `${day.journey ? `On to ${day.journey.to}. ` : ''}${day.places.map(place => `Visit ${place.name}.`).join(' ')} ${'An easy day. '.repeat(20)}`
+        })
         const first = await planTrip({ requirements: BASE, ask: model.ask })
         model.calls.length = 0
 
@@ -368,7 +376,8 @@ describe('pipeline', () => {
             ask: model.ask
         })
 
-        expect(model.calls).toEqual([])
+        // ? only days that lost a place are described again
+        expect(model.calls.filter(call => call.kind !== 'write')).toEqual([])
         const count = trip =>
             trip.days.reduce((sum, day) => sum + day.activities.filter(item => item.recommended).length, 0)
         expect(count(relaxed)).toBeLessThan(count(first))
@@ -403,13 +412,64 @@ describe('pipeline', () => {
         expect(trip.conflicts[0].options.map(option => option.patch.type)).toEqual(['remove-required'])
     })
 
-    test('the saved description shows the route, approximate times and permit notes as guidance', async () => {
+    test('without the model, each day is still one paragraph: the journey, every place, checks and the stay', async () => {
         const trip = await planTrip({ requirements: BASE, ask: fakeModel().ask })
-        const text = renderDayDescription(trip.days[3])
-        expect(text).toMatch(/Early start from Manali/)
-        expect(text).toMatch(/Rohtang Pass/)
-        expect(text).toMatch(/general guidance — verify before travel/)
-        expect(renderDayDescription(trip.days[0])).toMatch(/^Route: Delhi → Shimla via Chandigarh \(about 340–360 km/)
+        const texts = trip.days.map(renderDayDescription)
+
+        texts.forEach(text => {
+            expect(text).not.toMatch(/\n/)
+            expect(text).not.toMatch(/\d{1,2}:\d{2}|\b\d{1,2}\s*(AM|PM)\b|approx\./)
+        })
+        expect(texts[0]).toMatch(
+            /^Set off from Delhi for the drive to Shimla via Chandigarh — roughly 340–360 km and 7–8 hours by private cab\./
+        )
+        expect(texts[0]).toMatch(/On arrival in Shimla, check in at the hotel/)
+        expect(texts[0]).toMatch(/Overnight in Shimla\.$/)
+
+        const excursion = texts[trip.days.findIndex(day => day.type === 'EXCURSION')]
+        expect(excursion).toMatch(/full-day excursion to Atal Tunnel, Sissu and Rohtang Pass/)
+        expect(excursion).toMatch(/Good to know about Rohtang Pass: usually needs an online permit/)
+        expect(excursion).toMatch(/Overnight in Manali\.$/)
+        expect(texts[texts.length - 1]).toMatch(/The tour ends on arrival in Delhi/)
         expect(formatWindow(hm('23:30'), hm('25:00'))).toMatch(/next day/)
+    })
+
+    test("the model's paragraph is used when it names every place and gives no clock times", async () => {
+        const write = day =>
+            `A lovely day around ${day.location}${day.journey ? `, travelling on to ${day.journey.to}` : ''}. ${day.places
+                .map(place => `Spend time at ${place.name}, taking in the views and the atmosphere of the place.`)
+                .join(
+                    ' '
+                )} The evening is yours to relax and enjoy the mountain air before a comfortable night.`.padEnd(
+                220,
+                ' Relax.'
+            )
+        const trip = await planTrip({ requirements: BASE, ask: fakeModel({ write }).ask })
+        const excursion = trip.days.find(day => day.type === 'EXCURSION')
+        expect(renderDayDescription(excursion)).toMatch(/^A lovely day around Manali\. Spend time at Atal Tunnel/)
+    })
+
+    test('a paragraph with time slots or a missing place is not used — that day is built from the plan', async () => {
+        const write = day =>
+            day.places.length
+                ? `9:00 AM: ${day.places.map(place => place.name).join(', ')}. ${'A wonderful day in the hills. '.repeat(8)}`
+                : `${'A calm and easy day at your own pace, with plenty of time to rest. '.repeat(4)}`
+        const trip = await planTrip({ requirements: BASE, ask: fakeModel({ write }).ask })
+        const excursion = trip.days.find(day => day.type === 'EXCURSION')
+        expect(excursion.description).toBe('')
+        expect(renderDayDescription(excursion)).toMatch(/full-day excursion to Atal Tunnel, Sissu and Rohtang Pass/)
+        // ? day 1 drives to Shimla, and this text never says "Shimla"
+        expect(trip.days[0].description).toBe('')
+    })
+
+    test('a re-plan that changes nothing does not ask for the paragraphs again', async () => {
+        const write = day =>
+            `${day.journey ? `Travel on to ${day.journey.to}. ` : ''}${day.places.map(place => `Visit ${place.name}.`).join(' ')} ${'Enjoy the day at an easy pace. '.repeat(8)}`
+        const model = fakeModel({ write })
+        const first = await planTrip({ requirements: BASE, ask: model.ask })
+        const writes = model.calls.filter(call => call.kind === 'write').length
+        expect(writes).toBe(1)
+        await planTrip({ requirements: BASE, previous: first, ask: model.ask })
+        expect(model.calls.filter(call => call.kind === 'write').length).toBe(writes)
     })
 })

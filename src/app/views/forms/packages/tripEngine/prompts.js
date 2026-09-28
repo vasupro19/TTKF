@@ -6,6 +6,7 @@
  *   2. logistics   legs + required places → leg estimates, excursion clusters, access notes
  *   3. fill        fixed day skeleton     → recommended activities within each day's time
  *   4. edit        requirements + request → updated requirements (for incremental changes)
+ *   5. write       the finished days       → one guest-ready paragraph per day
  *
  * Route, day types, time budgets, scheduling and validation are code, not prompts.
  */
@@ -259,6 +260,74 @@ export const normalizeFill = (raw, dayNumbers) => {
             .filter(item => item.name)
             .slice(0, 3)
     }
+}
+
+// ---------------------------------------------------------------- 5. write
+
+export const WRITE_SYSTEM_PROMPT = `You write the day-by-day descriptions in an Indian holiday quotation that a travel agent sends to the guest. Each day's plan is already fixed — describe it, do not change it.
+
+Respond ONLY with a JSON object: { "days": [{ "day": number, "description": string }] }, one entry per input day.
+
+Each description:
+1. Is ONE flowing paragraph of 70–140 words in warm, professional quotation English — e.g. "After breakfast, drive to…", "In the evening, stroll along…".
+2. Covers everything the day offers, in the order given: the journey (from, to, the main towns on the way, roughly how long, the stops), then EVERY place in "places" by its exact name — what the guest sees and does there, using its "note" and well-known facts about it (views, history, activities) — then the evening and the overnight stay.
+3. Never gives clock times or time slots ("9:00 AM", "10–11 AM", "Morning:"), and never uses lists, headings or line breaks. "After breakfast", "by afternoon" and "in the evening" are fine.
+4. Names no attraction, restaurant or hotel that is not in the day's input.
+5. Mentions a "checks" item only as something to confirm, and with the place it belongs to, e.g. "Rohtang Pass usually needs a permit, which we will check before travel". Never states current road status, prices, timings or availability as fact.
+6. On a DEPARTURE day, ends with the drop-off and a warm farewell; on other days, ends with the overnight stay, e.g. "Overnight in Manali."
+
+Return JSON only.`
+
+export const buildWriteRequest = ({ days, requirements }) =>
+    request(WRITE_SYSTEM_PROMPT, {
+        travellers: requirements.travellers,
+        pace: requirements.pace,
+        days
+    })
+
+// ? words that do not identify a place: "Solang Valley" is named when "Solang" is
+const GENERIC_WORDS = new Set(
+    'the a an of and at in on to cafe cafes road temple valley pass point lake market bazaar walk shopping view viewpoint area old new top hill hills fort palace museum garden gardens park waterfall falls village town city dam tunnel'.split(
+        ' '
+    )
+)
+
+const mentions = (text, name) => {
+    const haystack = ` ${normalizeText(text)} `
+    const wanted = normalizeText(name.replace(/\([^)]*\)/g, ' '))
+    if (!wanted || haystack.includes(` ${wanted} `)) return true
+    const words = wanted.split(' ').filter(word => word.length > 1 && !GENERIC_WORDS.has(word))
+    return words.length > 0 && words.every(word => haystack.includes(` ${word}`))
+}
+
+const CLOCK_TIME =
+    /\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\b\.?|p\.?m\b\.?)|\b\d{1,2}:\d{2}\b|\b(?:morning|afternoon|evening|night)\s*:/i
+
+/**
+ * @description the model's paragraphs, each kept only if it reads as one paragraph, has no clock times, and
+ *              names every place of its day (and the journey's end) — a day that fails gets '' and falls back
+ *              to the paragraph built from the plan
+ * @returns {Record<number, string>}
+ */
+export const normalizeWrite = (raw, inputs) => {
+    const replies = new Map(
+        list(raw?.days).map(item => [Number(item?.day), typeof item?.description === 'string' ? item.description : ''])
+    )
+    return Object.fromEntries(
+        inputs.map(input => {
+            const text = (replies.get(input.day) || '')
+                .replace(/\s+/g, ' ')
+                .replace(/^\s*day\s*\d+\s*[:\-–—]\s*/i, '')
+                .trim()
+            const names = [...input.places.map(place => place.name), ...(input.journey ? [input.journey.to] : [])]
+            const ok =
+                text.length >= 200 &&
+                text.length <= 1600 &&
+                !CLOCK_TIME.test(text) &&
+                names.every(name => mentions(text, name))
+            return [input.day, ok ? text : '']
+        })
+    )
 }
 
 // ---------------------------------------------------------------- 4. edit

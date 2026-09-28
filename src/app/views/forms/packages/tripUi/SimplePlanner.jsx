@@ -17,7 +17,8 @@ const PLANNING_MESSAGES = [
     'Working out the drives',
     'Placing the places you asked for',
     'Choosing what to see each day',
-    'Checking the timings'
+    'Checking the timings',
+    'Writing each day’s description'
 ]
 
 function Progress({ step, reachable, onGo }) {
@@ -70,7 +71,7 @@ function Planning() {
                 Planning your trip…
             </Typography>
             <Typography color='text.secondary' sx={{ fontSize: '1rem', mb: 3 }}>
-                {PLANNING_MESSAGES[message]}. This usually takes 10–30 seconds.
+                {PLANNING_MESSAGES[message]}. This usually takes 20–40 seconds.
             </Typography>
             <LinearProgress sx={{ height: 2, borderRadius: 1, maxWidth: 320 }} />
         </Box>
