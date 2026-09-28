@@ -2,8 +2,7 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Button, ButtonBase, Collapse, Stack, TextField, Typography } from '@mui/material'
 import { ExpandLess, ExpandMore, WarningAmberRounded } from '@mui/icons-material'
-import { DAY_TYPES } from '../tripEngine/route'
-import { formatHours, formatKm, formatWindow } from '../tripEngine/render'
+import { formatHours, formatKm, formatWindow, renderDayDescription } from '../tripEngine/render'
 import { dayHeadline, daySummary, formatDate } from './dayText'
 import { dayShape, rowShape } from './shapes'
 
@@ -82,24 +81,47 @@ Timeline.propTypes = { day: dayShape.isRequired }
 export function DayDetail({ day, row = null, onEditRow = () => {}, imageOptions = [], onFindImages = () => {} }) {
     const [editing, setEditing] = useState(false)
     const [choosingPhoto, setChoosingPhoto] = useState(false)
+    const [showTimings, setShowTimings] = useState(false)
     const notes = noteLines(day)
+    const timingsId = `day-${day.dayNumber}-timings`
+    // ? what the quotation says: the agent's edit if there is one, else the day's paragraph
+    const text = row?.description || renderDayDescription(day)
 
     return (
         <Stack spacing={2.5}>
-            {day.leg?.estimate ? (
-                <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
-                    {[
-                        formatKm(day.leg.estimate.distanceKm),
-                        `${formatHours(day.leg.estimate.durationHours)} by ${day.leg.mode.toLowerCase()}`,
-                        day.leg.estimate.via.length ? `via ${day.leg.estimate.via.join(', ')}` : ''
-                    ]
-                        .filter(Boolean)
-                        .join(' · ')}{' '}
-                    (estimated)
-                </Typography>
+            {!editing ? (
+                <Typography sx={{ fontSize: '0.9375rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{text}</Typography>
             ) : null}
 
-            <Timeline day={day} />
+            <Box>
+                <Button
+                    size='small'
+                    onClick={() => setShowTimings(open => !open)}
+                    endIcon={showTimings ? <ExpandLess /> : <ExpandMore />}
+                    aria-expanded={showTimings}
+                    aria-controls={timingsId}
+                    sx={{ ml: -0.75, color: 'text.secondary' }}
+                >
+                    Timings and drive
+                </Button>
+                <Collapse in={showTimings} unmountOnExit>
+                    <Stack id={timingsId} spacing={2} sx={{ pt: 1.5 }}>
+                        {day.leg?.estimate ? (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
+                                {[
+                                    formatKm(day.leg.estimate.distanceKm),
+                                    `${formatHours(day.leg.estimate.durationHours)} by ${day.leg.mode.toLowerCase()}`,
+                                    day.leg.estimate.via.length ? `via ${day.leg.estimate.via.join(', ')}` : ''
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ')}{' '}
+                                (estimated)
+                            </Typography>
+                        ) : null}
+                        <Timeline day={day} />
+                    </Stack>
+                </Collapse>
+            </Box>
 
             {notes.length ? (
                 <Stack spacing={0.75}>
@@ -114,12 +136,6 @@ export function DayDetail({ day, row = null, onEditRow = () => {}, imageOptions 
                         </Stack>
                     ))}
                 </Stack>
-            ) : null}
-
-            {day.type !== DAY_TYPES.DEPARTURE && day.stay ? (
-                <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
-                    Overnight in {day.stay}
-                </Typography>
             ) : null}
 
             {row ? (

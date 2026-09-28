@@ -2,7 +2,7 @@
  * THE PIPELINE
  *
  *   input → understand → requirements → route → journey legs → time budgets
- *         → required excursions → recommendations → schedule → validate → Trip
+ *         → required excursions → recommendations → schedule → validate → write → Trip
  *
  * Model calls are cached by what they depend on, so a re-plan only asks for
  * what changed:
@@ -10,6 +10,8 @@
  *   - excursion clusters depend on (stays, required places, month, constraints)
  *   - a day's recommendations depend on (day type, place, leg, its excursions),
  *     and are re-timed — not re-asked — when only the pace or budget changes
+ *   - a day's written description depends on the facts it describes (route,
+ *     places, notes, stay), so a day that did not change keeps its paragraph
  *
  * `ask(request)` sends one request to the AI endpoint and resolves to parsed JSON.
  */
@@ -30,15 +32,19 @@ import {
     buildFillRequest,
     buildLogisticsRequest,
     buildUnderstandRequest,
+    buildWriteRequest,
     normalizeEdit,
     normalizeFill,
     normalizeLogistics,
-    normalizeUnderstanding
+    normalizeUnderstanding,
+    normalizeWrite
 } from './prompts'
+import { writeInputFor } from './render'
 
-export const emptyCache = () => ({ legs: {}, clusters: {}, days: {} })
+export const emptyCache = () => ({ legs: {}, clusters: {}, days: {}, writeups: {} })
 
 const FILL_CHUNK = 6
+const WRITE_CHUNK = 7
 const MAX_QUESTIONS = 2
 const PACE_RANK = { relaxed: 0, balanced: 1, packed: 2 }
 
@@ -173,6 +179,37 @@ const fetchFill = async ({ skeleton, budgets, assignment, requirements, cache, a
     }
 
     return recommendations
+}
+
+/**
+ * @description step "write": one guest-ready paragraph per day. Best effort — a day the model skips, or whose
+ *              text fails its checks, keeps no description and is rendered from the plan instead, so a slow or
+ *              failing model never costs the agent the plan itself.
+ */
+const writeDescriptions = async ({ days, requirements, cache, ask }) => {
+    const writeups = cache.writeups || {}
+    Object.assign(cache, { writeups })
+    const inputs = days.map(writeInputFor)
+    const keyOf = input => JSON.stringify({ ...input, travellers: requirements.travellers?.type || '' })
+    const missing = inputs.filter(input => writeups[keyOf(input)] === undefined)
+
+    for (let start = 0; start < missing.length; start += WRITE_CHUNK) {
+        const chunk = missing.slice(start, start + WRITE_CHUNK)
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const written = normalizeWrite(await ask(buildWriteRequest({ days: chunk, requirements })), chunk)
+            // ? a paragraph that failed its checks is remembered as '' too — asking again on every edit would
+            //   slow each change down for a day that already reads fine from the plan
+            chunk.forEach(input => {
+                writeups[keyOf(input)] = written[input.day] || ''
+            })
+        } catch (error) {
+            // ? no reply at all (rate limit, network): nothing is cached, so the next plan tries again; this
+            //   plan stands without the model's prose — see renderDayDescription
+        }
+    }
+
+    return days.map((day, index) => ({ ...day, description: writeups[keyOf(inputs[index])] || '' }))
 }
 
 const conflictOptions = (conflict, requirements) => {
@@ -356,6 +393,9 @@ export const planTrip = async ({ requirements: input, previous = null, ask }) =>
         })
     )
 
+    // ? only a plan the agent can save is worth describing
+    const describedDays = validation.ok ? await writeDescriptions({ days, requirements, cache, ask }) : days
+
     return {
         ...base,
         status: validation.ok ? 'ready' : 'conflict',
@@ -363,7 +403,7 @@ export const planTrip = async ({ requirements: input, previous = null, ask }) =>
         route,
         legs,
         profile,
-        days,
+        days: describedDays,
         conflicts,
         notes,
         warnings: assignment.warnings,
