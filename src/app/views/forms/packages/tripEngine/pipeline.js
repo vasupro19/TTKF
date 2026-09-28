@@ -62,10 +62,10 @@ const clusterCacheKey = requirements =>
     })
 
 /**
- * @description step 1: the typed notes and the form become one requirements object
+ * @description step 1a: what the typed text says, on its own. Cached by callers so the same text is not
+ *              sent to the model twice.
  */
-export const understand = async ({ text, form, ask }) => {
-    if (!text?.trim()) return mergeRequirements(emptyRequirements(), form)
+export const extractFromText = async ({ text, form = {}, ask }) => {
     const extracted = normalizeUnderstanding(
         await ask(buildUnderstandRequest({ text, form: normalizeRequirements(form) }))
     )
@@ -80,7 +80,15 @@ export const understand = async ({ text, form, ask }) => {
         extracted.destinations = suggested.map(({ name, nights }) => ({ name, nights }))
         extracted.suggestedDestinations = []
     }
-    return mergeRequirements(extracted, form)
+    return extracted
+}
+
+/**
+ * @description step 1: the typed notes and the form become one requirements object (the form wins)
+ */
+export const understand = async ({ text, form, ask }) => {
+    if (!text?.trim()) return mergeRequirements(emptyRequirements(), form)
+    return mergeRequirements(await extractFromText({ text, form, ask }), form)
 }
 
 /**

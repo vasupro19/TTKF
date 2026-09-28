@@ -3,49 +3,41 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import PackageCreationWizard from './PackageCreationWizard'
 
-// ? everything the wizard talks to is mocked; the itinerary engine, the wizard state and the UI are real
+// ? everything the planner talks to is mocked; the itinerary engine, the wizard state and the screens are real
 const assistAi = vi.fn()
 const dispatch = vi.fn()
+const saved = { packages: [], itineraries: [], days: [] }
+const mutation = (bucket, id) => [
+    vi.fn(body => {
+        saved[bucket].push(body)
+        return { unwrap: () => Promise.resolve({ data: { id: id ?? saved[bucket].length, ...body } }) }
+    })
+]
 
 vi.mock('react-redux', () => ({ useDispatch: () => dispatch }))
+vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => vi.fn() }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
 vi.mock('@/app/store/slices/api/campaignSlice', () => ({ getCampaigns: { initiate: () => ({ type: 'campaigns' }) } }))
 vi.mock('@/app/store/slices/api/aiSlice', () => ({
     getTravelImages: { initiate: keyword => ({ type: 'images', keyword }) },
     useAssistAiMutation: () => [assistAi]
 }))
-vi.mock('@/app/store/slices/api/packageSlice', () => ({ useCreatePackageClientMutation: () => [vi.fn()] }))
+vi.mock('@/app/store/slices/api/packageSlice', () => ({
+    useCreatePackageClientMutation: () => mutation('packages', 7)
+}))
 vi.mock('@/app/store/slices/api/packageItenarySlice', () => ({
-    useCreatePackageItenaryClientMutation: () => [vi.fn()]
+    useCreatePackageItenaryClientMutation: () => mutation('days')
 }))
 vi.mock('@/app/store/slices/api/destinationSlice', () => ({
     getDestinationClients: { initiate: () => ({ type: 'destinations' }) },
-    useCreateDestinationClientMutation: () => [vi.fn()],
-    useUpdateDestinationClientMutation: () => [vi.fn()]
+    useCreateDestinationClientMutation: () => mutation('itineraries'),
+    useUpdateDestinationClientMutation: () => mutation('itineraries')
 }))
 vi.mock('@/app/store/slices/api/itenarySlice', () => ({
     getItenaryClients: { initiate: () => ({ type: 'itenaries' }) },
-    useCreateItenaryClientMutation: () => [vi.fn()],
-    useUpdateItenaryClientMutation: () => [vi.fn()]
+    useCreateItenaryClientMutation: () => mutation('itineraries'),
+    useUpdateItenaryClientMutation: () => mutation('itineraries')
 }))
-
-const NOTES =
-    "I want 2 nights Shimla and 3 nights Manali from Delhi, we're a couple and want a private cab. We definitely want Rohtang, Sissu and Atal tunnel."
-
-const UNDERSTOOD = {
-    origin: 'Delhi',
-    destinations: [
-        { name: 'Shimla', nights: 2 },
-        { name: 'Manali', nights: 3 }
-    ],
-    travellers: { adults: 2, type: 'couple' },
-    transport: { mode: 'Private cab' },
-    requiredAttractions: [
-        { name: 'Rohtang Pass', destination: 'Manali' },
-        { name: 'Sissu', destination: 'Manali' },
-        { name: 'Atal Tunnel', destination: 'Manali' }
-    ]
-}
 
 const LEGS = {
     'Delhi>Shimla': {
@@ -56,7 +48,9 @@ const LEGS = {
         stops: [{ name: 'Murthal', kind: 'meal' }]
     },
     'Shimla>Manali': { durationHours: [7, 8], distanceKm: [240, 260], terrain: 'mountain', via: ['Mandi'] },
-    'Manali>Delhi': { durationHours: [11, 13], distanceKm: [520, 550], terrain: 'mixed', suggestedDeparture: '06:00' }
+    'Manali>Delhi': { durationHours: [11, 13], distanceKm: [520, 550], terrain: 'mixed', suggestedDeparture: '06:00' },
+    'Chandigarh>Manali': { durationHours: [8, 9], distanceKm: [300, 310], terrain: 'mixed' },
+    'Manali>Chandigarh': { durationHours: [8, 9], distanceKm: [300, 310], terrain: 'mixed' }
 }
 
 const LAHAUL = {
@@ -71,16 +65,12 @@ const LAHAUL = {
     returnMinutes: 90,
     fullDay: true,
     covers: ['Rohtang Pass', 'Sissu', 'Atal Tunnel'],
-    access: [{ place: 'Rohtang Pass', kind: 'permit', note: 'Usually needs an online permit; check before travel.' }]
+    access: [{ place: 'Rohtang Pass', kind: 'permit', note: 'Usually needs an online permit.' }]
 }
 
 let understood
-let edited
 let unplaceable
 let calls
-
-// ? the wizard spaces AI requests 1.4s apart, so a build of three calls takes a few seconds even when mocked
-const WAIT = { timeout: 15000 }
 
 const reply = body => ({ unwrap: () => Promise.resolve({ content: [{ text: JSON.stringify(body) }] }) })
 
@@ -88,7 +78,7 @@ const model = ({ system, messages }) => {
     const payload = JSON.parse(messages[0].content)
     if (system.includes("travel agent's notes")) {
         calls.push('understand')
-        return reply(understood)
+        return reply(understood(payload.notes))
     }
     if (system.includes('route and destination-logistics')) {
         calls.push(`logistics:${payload.legs.length}`)
@@ -99,12 +89,12 @@ const model = ({ system, messages }) => {
         })
     }
     if (system.includes('senior destination expert')) {
-        calls.push(`fill:${payload.days.map(day => day.day).join(',')}`)
+        calls.push('fill')
         return reply({
             days: payload.days.map(day => ({
                 day: day.day,
-                title: day.fixed.length ? 'Atal Tunnel, Sissu & Rohtang' : `${day.location} day ${day.day}`,
-                activities: [1, 2, 3, 4].map(n => ({
+                title: `${day.location} day ${day.day}`,
+                activities: [1, 2].map(n => ({
                     name: `${day.location} sight ${day.day}.${n}`,
                     minutes: 60,
                     travelFromPreviousMinutes: 20,
@@ -116,38 +106,50 @@ const model = ({ system, messages }) => {
             ]
         })
     }
-    if (system.includes("update a trip's requirements")) {
-        calls.push('edit')
-        return reply(edited(payload.requirements))
-    }
     return reply({}) // hotel suggestions — not under test
 }
 
-const renderWizard = () =>
+// ? the wizard spaces AI requests 1.4s apart, so a build takes a few seconds even when mocked
+const WAIT = { timeout: 20000 }
+
+const renderPlanner = () =>
     render(
         <MemoryRouter>
             <PackageCreationWizard />
         </MemoryRouter>
     )
 
-const build = notes => {
-    fireEvent.change(screen.getByLabelText('Trip notes'), { target: { value: notes } })
-    fireEvent.click(screen.getByRole('button', { name: /build itinerary/i }))
+const type = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
+const click = name => fireEvent.click(screen.getByRole('button', { name }))
+
+// ? the primary test traveller: Delhi, Shimla 2N + Manali 3N, couple, private cab, relaxed, Rohtang/Atal/Sissu
+const planTheTrip = async ({ mustSee = 'Rohtang, Atal Tunnel, Sissu' } = {}) => {
+    type('Starting from', 'Delhi')
+    type('Going to', '2 nights Shimla, 3 nights Manali')
+    fireEvent.keyDown(screen.getByLabelText('Going to'), { key: 'Enter' })
+    click('Continue')
+    await screen.findByText('Make it yours')
+    click('Couple')
+    click('Relaxed')
+    click('Private cab')
+    type('Anything you don’t want to miss', mustSee)
+    click('Create itinerary')
+    await screen.findByText('Your trip', undefined, WAIT)
 }
 
-const dayHeading = number => screen.getByText(new RegExp(`^Day ${number} – `))
-const dayCard = number => dayHeading(number).closest('.MuiCardContent-root')
-// ? the day-type chip (the transfer panel also has "Departure" and "Arrival" labels)
-const dayType = number =>
-    within(dayCard(number))
-        .getAllByText(/^(Arrival|Full day|Transfer|Excursion|Departure)$/)
-        .find(node => node.classList.contains('MuiChip-label')).textContent
+const dayRow = number => screen.getByText(`Day ${number}`, { selector: 'p' }).closest('button')
 
 beforeEach(() => {
     assistAi.mockReset()
     dispatch.mockReset()
-    understood = UNDERSTOOD
-    edited = requirements => requirements
+    Object.values(saved).forEach(list => list.splice(0))
+    understood = () => ({
+        requiredAttractions: [
+            { name: 'Rohtang Pass', destination: 'Manali' },
+            { name: 'Atal Tunnel', destination: 'Manali' },
+            { name: 'Sissu', destination: 'Manali' }
+        ]
+    })
     unplaceable = []
     calls = []
     assistAi.mockImplementation(model)
@@ -158,120 +160,207 @@ beforeEach(() => {
     })
 })
 
-describe('PackageCreationWizard — itinerary engine', () => {
-    test('plain notes become the whole journey: origin, stays, typed days, required places first', async () => {
-        renderWizard()
-        build(NOTES)
+describe('Package planner — the simple flow', () => {
+    test('opens on one clear question with only the basics', () => {
+        renderPlanner()
+        expect(screen.getByRole('heading', { name: 'Where’s the trip?' })).toBeInTheDocument()
+        expect(screen.getByLabelText('Starting from')).toBeInTheDocument()
+        expect(screen.getByLabelText('Going to')).toBeInTheDocument()
+        expect(screen.getByLabelText('Start date')).toBeInTheDocument()
+        // nothing about pace, hotels, campaigns or day types yet
+        expect(screen.queryByText(/campaign/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/hotel/i)).not.toBeInTheDocument()
+        expect(screen.queryByText('Pace')).not.toBeInTheDocument()
+    })
 
-        // the journey, origin to origin
-        const journey = await screen.findByLabelText('Journey overview', undefined, WAIT)
+    test('the destination box understands “2 nights Shimla, 3 nights Manali”; nights are a simple stepper', () => {
+        renderPlanner()
+        type('Going to', '2 nights Shimla, 3 nights Manali')
+        fireEvent.keyDown(screen.getByLabelText('Going to'), { key: 'Enter' })
+
+        expect(screen.getByText('Shimla')).toBeInTheDocument()
+        expect(screen.getByText('Manali')).toBeInTheDocument()
+        expect(screen.getByText('5 nights · 6 days')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'One more night in Manali' }))
+        expect(screen.getByText('6 nights · 7 days')).toBeInTheDocument()
+    })
+
+    test('a route typed as “Delhi → Shimla → Manali → Delhi” fills the starting city too', () => {
+        renderPlanner()
+        type('Going to', 'Delhi → Shimla → Manali → Delhi')
+        fireEvent.keyDown(screen.getByLabelText('Going to'), { key: 'Enter' })
+        expect(screen.getByLabelText('Starting from')).toHaveValue('Delhi')
+        expect(screen.getByText('4 nights · 5 days')).toBeInTheDocument()
+    })
+
+    test('continuing without the basics explains what is missing, in plain words', () => {
+        renderPlanner()
+        click('Continue')
+        expect(screen.getByRole('alert')).toHaveTextContent('Add where the trip starts')
+    })
+
+    test('the whole Delhi → Shimla → Manali → Delhi trip: journey first, requests vs additions, collapsed days', async () => {
+        renderPlanner()
+        await planTheTrip()
+
+        // the journey, origin to origin, with nights
+        const journey = screen.getByRole('list', { name: 'Journey' })
         expect(
             within(journey)
-                .getAllByText(/^(DELHI|SHIMLA|MANALI)$/)
+                .getAllByText(/^(Delhi|Shimla|Manali)$/)
                 .map(node => node.textContent)
-        ).toEqual(['DELHI', 'SHIMLA', 'MANALI', 'DELHI'])
-        expect(within(journey).getByText('2 NIGHTS')).toBeInTheDocument()
-        expect(within(journey).getByText('3 NIGHTS')).toBeInTheDocument()
+        ).toEqual(['Delhi', 'Shimla', 'Manali', 'Delhi'])
+        expect(within(journey).getByText('2 nights')).toBeInTheDocument()
+        expect(within(journey).getByText('3 nights')).toBeInTheDocument()
 
-        // lands on the day plan; every day typed; road days lead with the transfer panel
-        await screen.findByText(/^Day 6 – /, undefined, WAIT)
-        expect(screen.queryByText(/^Day 7 – /)).not.toBeInTheDocument()
-        expect([1, 2, 3, 4, 5, 6].map(dayType)).toEqual([
-            'Arrival',
-            'Full day',
-            'Transfer',
-            'Excursion',
-            'Full day',
-            'Departure'
-        ])
-        expect(within(dayCard(1)).getByText('Murthal')).toBeInTheDocument()
-        expect(within(dayCard(1)).getByText(/about 340–360 km/)).toBeInTheDocument()
+        // what was asked for, and what the AI added — separately
+        const asked = screen.getByText('Included because you asked').parentElement
+        ;['Rohtang Pass', 'Atal Tunnel', 'Sissu'].forEach(name =>
+            expect(within(asked).getByText(name)).toBeInTheDocument()
+        )
+        expect(screen.getByText('We added')).toBeInTheDocument()
+        expect(screen.getByText(/Could also fit: Kasol — needs one more night/)).toBeInTheDocument()
 
-        // the requested places are on the excursion day, marked as requested
-        const excursion = dayCard(4)
-        expect(within(excursion).getAllByText('Requested')).toHaveLength(3)
-        expect(within(excursion).getByText('Rohtang Pass')).toBeInTheDocument()
-        expect(within(excursion).getByText(/general guidance — verify before travel/)).toBeInTheDocument()
-
-        // the drive home is a travel day, not a sightseeing day
-        expect(within(dayCard(6)).queryByText('AI pick')).not.toBeInTheDocument()
-
-        // AI ideas are offered, not inserted; assumptions and the one question that matters are shown
-        expect(screen.getByText('Kasol')).toBeInTheDocument()
-        expect(screen.queryByText(/Kasol sight/)).not.toBeInTheDocument()
-        expect(screen.getByText('The trip ends back in Delhi.')).toBeInTheDocument()
+        // one question, because dates matter in the mountains
         expect(screen.getByText(/What date does the trip start/)).toBeInTheDocument()
-        expect(calls).toEqual(['understand', 'logistics:3', 'fill:1,2,3,4,5,6'])
-    }, 30000)
 
-    test('"make it more relaxed" re-times the plan without asking the AI again', async () => {
-        edited = requirements => ({ ...requirements, pace: 'relaxed' })
-        renderWizard()
-        build(NOTES)
-        await screen.findByText(/^Day 6 – /, undefined, WAIT)
-        const picksBefore = screen.getAllByText('AI pick').length
+        // six days, each one line until opened
+        expect(within(dayRow(1)).getByText('Delhi → Shimla')).toBeInTheDocument()
+        expect(within(dayRow(3)).getByText('Shimla → Manali')).toBeInTheDocument()
+        expect(within(dayRow(4)).getByText('Atal Tunnel → Sissu → Rohtang Pass')).toBeInTheDocument()
+        expect(within(dayRow(4)).getByText(/^Day trip from Manali/)).toBeInTheDocument()
+        expect(within(dayRow(6)).getByText('Manali → Delhi')).toBeInTheDocument()
+        expect(screen.queryByText('you asked')).not.toBeInTheDocument()
+
+        fireEvent.click(dayRow(4))
+        expect(screen.getAllByText('you asked')).toHaveLength(3)
+        expect(screen.getByText(/needs an online permit/)).toBeInTheDocument()
+
+        expect(calls).toEqual(['understand', 'logistics:3', 'fill'])
+    }, 40000)
+
+    test('removing something the AI added takes one click and asks the AI nothing', async () => {
+        renderPlanner()
+        await planTheTrip()
+        const [first] = within(screen.getByText('We added').parentElement).getAllByRole('button', { name: /^Remove / })
+        const name = first.getAttribute('aria-label').replace('Remove ', '')
         calls = []
 
-        fireEvent.change(screen.getByLabelText('Change request'), { target: { value: 'make it more relaxed' } })
-        fireEvent.click(screen.getByRole('button', { name: /apply change/i }))
+        fireEvent.click(first)
 
-        await waitFor(() => expect(screen.getAllByText('AI pick').length).toBeLessThan(picksBefore), WAIT)
-        expect(calls).toEqual(['edit'])
-    }, 30000)
+        await waitFor(
+            () => expect(screen.queryByRole('button', { name: `Remove ${name}` })).not.toBeInTheDocument(),
+            WAIT
+        )
+        expect(calls).toEqual([])
+    }, 40000)
 
-    test('answering the date question updates the plan, re-asking only what depends on the month', async () => {
-        renderWizard()
-        build(NOTES)
-        await screen.findByText(/^Day 6 – /, undefined, WAIT)
+    test('answering the date question updates the plan in place', async () => {
+        renderPlanner()
+        await planTheTrip()
         calls = []
 
-        fireEvent.change(screen.getByLabelText(/What date does the trip start/), { target: { value: '2026-10-30' } })
-        fireEvent.click(screen.getByRole('button', { name: /update plan/i }))
+        fireEvent.change(screen.getByLabelText(/What date does the trip start/), { target: { value: '2026-10-12' } })
+        click('Use this date')
 
         await waitFor(() => expect(screen.queryByText(/What date does the trip start/)).not.toBeInTheDocument(), WAIT)
+        expect(within(dayRow(1)).getByText(/12 Oct/)).toBeInTheDocument()
         expect(calls[0]).toBe('logistics:0')
-        expect(within(dayCard(1)).getByText(/30 Oct/)).toBeInTheDocument()
-    }, 30000)
+    }, 40000)
 
-    test('a required place that cannot fit is a conflict with options — no days are shown until it is resolved', async () => {
+    test('something that cannot fit is explained with choices, and no days are shown until it is resolved', async () => {
         unplaceable = [{ name: 'Spiti Valley', reason: 'too far from these stays' }]
-        understood = {
-            ...UNDERSTOOD,
-            requiredAttractions: [...UNDERSTOOD.requiredAttractions, { name: 'Spiti Valley' }]
-        }
-        renderWizard()
-        build(`${NOTES} Also Spiti Valley.`)
+        understood = () => ({
+            requiredAttractions: [
+                { name: 'Rohtang Pass', destination: 'Manali' },
+                { name: 'Spiti Valley', destination: '' }
+            ]
+        })
+        renderPlanner()
+        await planTheTrip({ mustSee: 'Rohtang, Spiti Valley' })
 
-        expect(await screen.findByText('This cannot fit as asked', undefined, WAIT)).toBeInTheDocument()
-        expect(screen.queryByText(/^Day 1 – /)).not.toBeInTheDocument()
+        expect(screen.getByText('This doesn’t quite fit')).toBeInTheDocument()
+        expect(screen.queryByText('Day 1', { selector: 'p' })).not.toBeInTheDocument()
 
         unplaceable = []
-        fireEvent.click(screen.getByRole('button', { name: 'Leave out Spiti Valley' }))
+        click('Leave out Spiti Valley')
 
-        expect(await screen.findByText(/^Day 6 – /, undefined, WAIT)).toBeInTheDocument()
-        expect(screen.queryByText('This cannot fit as asked')).not.toBeInTheDocument()
-    }, 30000)
+        expect(await screen.findByText('Day 1', { selector: 'p' }, WAIT)).toBeInTheDocument()
+        expect(screen.queryByText('This doesn’t quite fit')).not.toBeInTheDocument()
+    }, 40000)
 
-    test('"Auto Build Day Plan" re-plans around the nights set on the Destinations step', async () => {
-        renderWizard()
-        build(NOTES)
-        await screen.findByText(/^Day 6 – /, undefined, WAIT)
+    test('saving asks only for the campaign — the name is suggested — and saves every day in order', async () => {
+        renderPlanner()
+        await planTheTrip()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-        const manaliNights = screen.getAllByDisplayValue('3').find(input => input.type === 'number')
-        fireEvent.change(manaliNights, { target: { value: '4' } })
-        fireEvent.click(screen.getByRole('button', { name: /auto build day plan/i }))
+        expect(screen.getByLabelText('Package name')).toHaveValue('Shimla - Manali 6D/5N')
+        click('Save package')
+        expect(screen.getByRole('alert')).toHaveTextContent('Choose the campaign')
 
-        expect(await screen.findByText(/^Day 7 – /, undefined, WAIT)).toBeInTheDocument()
-        expect(dayType(7)).toBe('Departure')
-    }, 30000)
+        fireEvent.mouseDown(screen.getByLabelText('Campaign'))
+        fireEvent.click(await screen.findByRole('option', { name: 'Summer' }))
+        click('Save package')
 
-    test('when the AI is unavailable nothing is replaced and the agent is told to retry', async () => {
+        await waitFor(() => expect(saved.days).toHaveLength(6), WAIT)
+        expect(saved.packages[0]).toEqual({ name: 'Shimla - Manali 6D/5N', campaignId: 1 })
+        expect(saved.days.map(day => day.entryType)).toEqual([
+            'TransitStay',
+            'Stay',
+            'TransitStay',
+            'Stay',
+            'Stay',
+            'Transit'
+        ])
+    }, 40000)
+
+    test('a pasted customer message fills the planner in', async () => {
+        understood = () => ({
+            origin: 'Chandigarh',
+            destinations: [{ name: 'Manali', nights: 4 }],
+            travellers: { type: 'family', notes: ['travelling with parents'] },
+            requiredAttractions: [{ name: 'Sissu' }]
+        })
+        renderPlanner()
+        click('Have the request as a message? Paste it')
+        type('Trip request message', 'we are a family with parents, 4 nights manali from chandigarh, want sissu')
+        click('Fill it in for me')
+
+        expect(
+            await screen.findByText('We filled this in from the message. Check it and continue.', undefined, WAIT)
+        ).toBeInTheDocument()
+        expect(screen.getByLabelText('Starting from')).toHaveValue('Chandigarh')
+        expect(screen.getByText('4 nights · 5 days')).toBeInTheDocument()
+
+        click('Continue')
+        await screen.findByText('Make it yours')
+        expect(screen.getByRole('button', { name: 'Family' })).toHaveAttribute('aria-pressed', 'true')
+        expect(screen.getByLabelText('Anything you don’t want to miss')).toHaveValue('Sissu')
+    }, 40000)
+
+    test('when the planner is unreachable the agent is told simply, and nothing is lost', async () => {
+        renderPlanner()
+        type('Starting from', 'Delhi')
+        type('Going to', 'Shimla + Manali')
+        fireEvent.keyDown(screen.getByLabelText('Going to'), { key: 'Enter' })
+        click('Continue')
+        await screen.findByText('Make it yours')
+        type('Anything you don’t want to miss', 'Rohtang')
         assistAi.mockImplementation(() => ({ unwrap: () => Promise.reject(new Error('502')) }))
-        renderWizard()
-        build(NOTES)
+        click('Create itinerary')
 
-        expect(await screen.findByText(/AI is busy right now/, undefined, WAIT)).toBeInTheDocument()
-        expect(screen.queryByLabelText('Journey overview')).not.toBeInTheDocument()
-    }, 30000)
+        expect(await screen.findByText(/couldn’t reach the planner/, undefined, WAIT)).toBeInTheDocument()
+        expect(screen.getByLabelText('Anything you don’t want to miss')).toHaveValue('Rohtang')
+    }, 40000)
+
+    test('the detailed editor is one link away, and comes back', async () => {
+        renderPlanner()
+        await planTheTrip()
+
+        click('Fine-tune in the detailed editor')
+        expect(screen.getByText('Detailed editor')).toBeInTheDocument()
+
+        click('Back to the simple planner')
+        expect(screen.getByText('Your trip')).toBeInTheDocument()
+    }, 40000)
 })

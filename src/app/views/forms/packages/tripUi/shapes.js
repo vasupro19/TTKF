@@ -80,4 +80,30 @@ export const tripShape = shape({
     recommendations: arrayOf(shape({ kind: string, name: string, reason: string, impact: string }))
 })
 
-export const voiceShape = shape({ supported: bool, listening: bool, status: string, onToggle: PropTypes.func })
+export const voiceShape = shape({ supported: bool, listening: bool, transcript: string, onToggle: PropTypes.func })
+
+export const plannerInputShape = shape({
+    origin: string,
+    endsAt: string,
+    destinations: arrayOf(shape({ name: string, nights: oneOfType([number, string]) })),
+    startDate: string,
+    who: string,
+    adults: number,
+    children: number,
+    withParents: bool,
+    pace: string,
+    transport: string,
+    vehicle: string,
+    interests: arrayOf(string),
+    mustSee: string,
+    budget: string,
+    excluded: arrayOf(string)
+})
+
+export const rowShape = shape({
+    id: string,
+    title: string,
+    description: string,
+    image: string,
+    planKey: string
+})
