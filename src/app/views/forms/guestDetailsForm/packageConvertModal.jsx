@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import PropTypes from 'prop-types'
 import { Box, Button, Grid, TextField, Autocomplete, Typography, CircularProgress } from '@mui/material'
 import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert'
 
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
 
-function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }) {
-    console.log(quotationNo, 'PackageConversion')
+function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData = null }) {
     const [convertPackage, { isLoading }] = useConvertPackageMutation()
-    const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
         leadId,
         quotationNo,
@@ -40,8 +39,7 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
                 setIsOpen(false)
             }
         } catch (error) {
-            // Error is caught by your customResponseHandler usually
-            console.error('Conversion failed', error)
+            // ? the API's message is shown by customResponseHandler; the dialog stays open to retry
         }
     }
     useEffect(() => {
@@ -62,7 +60,7 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    width: 450,
+                    width: { xs: 'calc(100vw - 32px)', sm: 450 },
                     bgcolor: 'background.paper',
                     p: 4,
                     borderRadius: 3,
@@ -70,7 +68,7 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
                 }}
             >
                 <Typography variant='h6' mb={3} fontWeight='bold' color='primary'>
-                    Convert to Confirmed Package
+                    Book Quote {quotationNo}
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -111,17 +109,25 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData }
                             fullWidth
                             color='success'
                             size='large'
-                            disabled={loading}
+                            disabled={isLoading || !formData.selectedPackage}
                             onClick={handleSaveAction}
                             sx={{ py: 1.5, fontWeight: 'bold', borderRadius: '10px' }}
                         >
-                            {loading ? <CircularProgress size={24} color='inherit' /> : 'Confirm Conversion'}
+                            {isLoading ? <CircularProgress size={24} color='inherit' /> : 'Confirm booking'}
                         </Button>
                     </Grid>
                 </Grid>
             </Box>
         </GlobalModal>
     )
+}
+
+PackageConversion.propTypes = {
+    isOpen: PropTypes.bool.isRequired,
+    setIsOpen: PropTypes.func.isRequired,
+    leadId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    quotationNo: PropTypes.number.isRequired,
+    priceData: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number]))
 }
 
 export default PackageConversion
