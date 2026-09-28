@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -6,7 +6,7 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
-import { Box, Divider, Grid } from '@mui/material'
+import { Box, Button, CircularProgress, Divider, Grid, Stack, Typography } from '@mui/material'
 
 // components
 import FormComponent from '@core/components/forms/FormComponent'
@@ -31,7 +31,8 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
 import IdentityCard from '@/core/components/IdentityCard'
-import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
+import { useAssistAiMutation } from '@/app/store/slices/api/aiSlice'
+import { HOTEL_FIELDS, HOTELS_PER_CATEGORY, buildHotelRequest, parseHotelReply } from './hotelSuggestions'
 
 // CONSTANTS - assuming you have a way to import Select component data
 
@@ -158,6 +159,60 @@ function DestinationClientsForm() {
         validateOnChange: true
     })
 
+    // --- Hotel suggestions: the top hotels of the destination, filled in as the name is typed ---
+
+    const [assistAi] = useAssistAiMutation()
+    const [hotelStatus, setHotelStatus] = useState({ state: 'idle', place: '' })
+    // ? what the AI last put in each field — a field still holding it may be replaced, one the agent typed may not
+    const aiFilledRef = useRef({})
+    const requestRef = useRef(0)
+    const valuesRef = useRef(formik.values)
+    valuesRef.current = formik.values
+
+    const replaceable = field => {
+        const current = (valuesRef.current[field] || '').trim()
+        return !current || current === aiFilledRef.current[field]
+    }
+
+    const suggestHotels = async ({ replaceAll = false } = {}) => {
+        const place = (valuesRef.current.name || '').trim()
+        if (place.length < 3) return
+        requestRef.current += 1
+        const request = requestRef.current
+        setHotelStatus({ state: 'loading', place })
+        try {
+            const response = await assistAi(buildHotelRequest(place)).unwrap()
+            // ? a newer name was typed while this one was being looked up
+            if (request !== requestRef.current) return
+            const { hotels, count } = parseHotelReply(response, place)
+            HOTEL_FIELDS.forEach(({ field }) => {
+                if (hotels[field] && (replaceAll || replaceable(field))) {
+                    formik.setFieldValue(field, hotels[field])
+                    aiFilledRef.current[field] = hotels[field]
+                }
+            })
+            setHotelStatus({ state: count ? 'done' : 'empty', place })
+        } catch (error) {
+            if (request === requestRef.current) setHotelStatus({ state: 'error', place })
+        }
+    }
+
+    // ? a new destination gets suggestions once its name has been typed; editing one never overwrites silently
+    useEffect(() => {
+        const place = (formik.values.name || '').trim()
+        if (formId || place.length < 3 || place === hotelStatus.place) return undefined
+        if (!HOTEL_FIELDS.some(({ field }) => replaceable(field))) return undefined
+        const timer = setTimeout(() => suggestHotels(), 900)
+        return () => clearTimeout(timer)
+        // ? runs on the name only; suggestHotels reads the latest form values through a ref
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formik.values.name, formId])
+
+    const allTypedByAgent = !HOTEL_FIELDS.some(({ field }) => replaceable(field))
+    let suggestLabel = 'Suggest again'
+    if (hotelStatus.state === 'idle') suggestLabel = 'Suggest hotels'
+    if (allTypedByAgent) suggestLabel = 'Replace with suggestions'
+
     // --- Data Fetching and Edit Logic ---
 
     const getDestinationData = async id => {
@@ -241,6 +296,7 @@ function DestinationClientsForm() {
                 },
                 {
                     name: 'delux_hotel',
+                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
                     label: 'Delux Hotel Details',
                     type: 'textarea', // Use multiline-text for better input area
                     minRows: 3,
@@ -251,6 +307,7 @@ function DestinationClientsForm() {
                 },
                 {
                     name: 'super_delux_hotel',
+                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
                     label: 'Super Delux Hotel Details',
                     type: 'textarea',
                     minRows: 3,
@@ -261,6 +318,7 @@ function DestinationClientsForm() {
                 },
                 {
                     name: 'luxury_hotel',
+                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
                     label: 'Luxury Hotel Details',
                     type: 'textarea',
                     minRows: 3,
@@ -271,6 +329,7 @@ function DestinationClientsForm() {
                 },
                 {
                     name: 'premium_hotel',
+                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
                     label: 'Premium Hotel Details',
                     type: 'textarea',
                     minRows: 3,
@@ -323,21 +382,39 @@ function DestinationClientsForm() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         {/* We use the first (and only) tab's fields */}
                         <Box sx={{ padding: 2 }}>
-                            <AiFormAssistant
-                                fields={tabsFields[0].fields}
-                                formik={formik}
-                                context={`Travel destination form for hotel details. User enters a destination name and needs hotel information for 4 categories: Delux, Super Delux, Luxury, and Premium. Each hotel field should include hotel name, amenities, room details, and pricing hints. Current destination: "${formik.values.name || 'not set yet'}"`}
-                                suggestions={[
-                                    `Suggest hotels for ${formik.values.name || 'this destination'}`,
-                                    'Fill delux hotel details',
-                                    'Fill all hotel categories',
-                                    'Suggest luxury hotels in Shimla',
-                                    'Suggest hotels in Manali',
-                                    'Suggest hotels in Dharamshala',
-                                    'Suggest hotels in Dalhousie',
-                                    'Suggest hotels in Amritsar'
-                                ]}
-                            />
+                            <Stack
+                                direction={{ xs: 'column', sm: 'row' }}
+                                spacing={1}
+                                alignItems={{ xs: 'flex-start', sm: 'center' }}
+                                justifyContent='space-between'
+                                sx={{ mb: 2, minHeight: 36 }}
+                                role='status'
+                                aria-live='polite'
+                            >
+                                <Stack direction='row' spacing={1} alignItems='center'>
+                                    {hotelStatus.state === 'loading' ? <CircularProgress size={16} /> : null}
+                                    <Typography variant='body2' color='text.secondary'>
+                                        {
+                                            {
+                                                idle: `Type the destination name and we'll suggest its top ${HOTELS_PER_CATEGORY} hotels in each category.`,
+                                                loading: `Finding the top hotels in ${hotelStatus.place}…`,
+                                                done: `Suggested the top hotels in ${hotelStatus.place}. Check them before quoting — you can edit any of them.`,
+                                                empty: `We couldn't find hotels we're sure of for "${hotelStatus.place}". Add them yourself, or check the spelling.`,
+                                                error: `Couldn't get hotel suggestions right now.`
+                                            }[hotelStatus.state]
+                                        }
+                                    </Typography>
+                                </Stack>
+                                {(formik.values.name || '').trim().length >= 3 && hotelStatus.state !== 'loading' ? (
+                                    <Button
+                                        size='small'
+                                        onClick={() => suggestHotels({ replaceAll: allTypedByAgent })}
+                                        sx={{ textTransform: 'none', flexShrink: 0 }}
+                                    >
+                                        {suggestLabel}
+                                    </Button>
+                                ) : null}
+                            </Stack>
                             <FormComponent
                                 fields={tabsFields[0].fields} // Use fields from the single tab
                                 formik={formik}
