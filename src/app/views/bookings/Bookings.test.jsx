@@ -67,6 +67,16 @@ vi.mock('@/app/store/slices/api/guestSlice', () => ({
             }
         })
 }))
+vi.mock('@/app/store/slices/api/guestTourSlice', () => ({
+    useGetGuestTourByIdQuery: () =>
+        query({
+            data: [
+                { id: 2, quoteNo: 1, order: 2, title: 'Shimla sightseeing', destination: { name: 'Shimla' } },
+                { id: 1, quoteNo: 1, order: 1, title: 'Delhi to Shimla', destination: { name: 'Shimla' } },
+                { id: 9, quoteNo: 2, order: 1, title: 'Quote two: Delhi to Manali', destination: { name: 'Manali' } }
+            ]
+        })
+}))
 vi.mock('@/app/store/slices/api/supplierSlice', () => ({
     useGetSuppliersQuery: () => ({
         data: { data: [{ id: 5, businessname: 'Hotel Willow Banks', city: 'Shimla' }] },
@@ -187,6 +197,16 @@ describe('One booking', () => {
         expect(within(payments).getByText('Ref UTR123')).toBeInTheDocument()
         expect(screen.getByText('Price − supplier costs')).toBeInTheDocument()
         expect(screen.getByText('₹70,000')).toBeInTheDocument()
+    })
+
+    test('the itinerary shows only the booked quote, in order', () => {
+        renderBooking()
+        const itinerary = screen.getByRole('region', { name: 'Itinerary · Quote 1' })
+        const days = within(itinerary).getAllByRole('listitem')
+        expect(days).toHaveLength(2)
+        expect(within(days[0]).getByText('Delhi to Shimla')).toBeInTheDocument()
+        expect(within(days[1]).getByText('Shimla sightseeing')).toBeInTheDocument()
+        expect(screen.queryByText('Quote two: Delhi to Manali')).not.toBeInTheDocument()
     })
 
     test('the next-step button opens the right form', async () => {

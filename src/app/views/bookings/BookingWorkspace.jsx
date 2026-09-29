@@ -24,6 +24,7 @@ import {
 import { usePaySupplierMutation } from '@/app/store/slices/api/confirmedService'
 import { useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
 import { useGetGuestByIdQuery } from '@/app/store/slices/api/guestSlice'
+import { useGetGuestTourByIdQuery } from '@/app/store/slices/api/guestTourSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import {
     STEPS,
@@ -83,6 +84,7 @@ function BookingWorkspace() {
     const paymentsQuery = useGetGuestPaymentHistoryQuery(packageId, { ...fresh, skip: !packageId })
     const { data: leadData } = useGetLeadByIdQuery(leadId)
     const { data: guestData } = useGetGuestByIdQuery(leadId)
+    const { data: tourData } = useGetGuestTourByIdQuery(leadId, fresh)
 
     const [addService, { isLoading: savingService }] = useAddServiceToPackageMutation()
     const [deleteService] = useDeleteServiceMutation()
@@ -107,6 +109,11 @@ function BookingWorkspace() {
     const taxis = listOf(taxisQuery.data)
     const services = [...hotels, ...taxis]
     const payments = listOf(paymentsQuery.data)
+    // ? only the quote that was booked — a lead can hold several
+    const bookedQuote = Number(booking?.quotationNo) || 1
+    const bookedDays = listOf(tourData)
+        .filter(day => (Number(day.quoteNo) || 1) === bookedQuote)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     const progress = progressOf({ booking, services })
     const step = nextStep(progress)
     const money = guestMoney(booking)
@@ -334,17 +341,6 @@ function BookingWorkspace() {
                     <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
                         {tripLine.join(' · ')}
                     </Typography>
-                    <Button
-                        size='small'
-                        sx={{ minWidth: 0, px: 0.75 }}
-                        onClick={() =>
-                            navigate(`/process/guest/add/${leadId}`, {
-                                state: { convertedQuoteNo: booking.quotationNo }
-                            })
-                        }
-                    >
-                        Open the quotation
-                    </Button>
                 </Stack>
 
                 <Box
@@ -421,6 +417,57 @@ function BookingWorkspace() {
                         <MoneyCard title='Margin' lines={[['Shown once hotels and transport are added', '']]} />
                     )}
                 </Stack>
+
+                <Section
+                    id='itinerary'
+                    title={`Itinerary · Quote ${bookedQuote}`}
+                    action={
+                        <Button
+                            onClick={() =>
+                                navigate(`/process/guest/add/${leadId}`, { state: { convertedQuoteNo: bookedQuote } })
+                            }
+                        >
+                            Open the quotation
+                        </Button>
+                    }
+                >
+                    {bookedDays.length ? (
+                        <Box component='ol' sx={{ m: 0, p: 0 }}>
+                            {bookedDays.map((day, index) => (
+                                <Stack
+                                    component='li'
+                                    key={day.id}
+                                    direction='row'
+                                    spacing={2}
+                                    sx={{ listStyle: 'none', borderTop: '1px solid', borderColor: 'divider', py: 1.25 }}
+                                >
+                                    <Typography
+                                        sx={{ fontSize: '0.875rem', fontWeight: 600, width: 56, flexShrink: 0 }}
+                                    >
+                                        Day {index + 1}
+                                    </Typography>
+                                    <Box sx={{ minWidth: 0 }}>
+                                        <Typography sx={{ fontSize: '0.9375rem' }}>
+                                            {day.title || 'Untitled day'}
+                                        </Typography>
+                                        {day.destination?.name ? (
+                                            <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
+                                                {day.destination.name}
+                                            </Typography>
+                                        ) : null}
+                                    </Box>
+                                </Stack>
+                            ))}
+                        </Box>
+                    ) : (
+                        <Typography
+                            color='text.secondary'
+                            sx={{ fontSize: '0.9375rem', borderTop: '1px solid', borderColor: 'divider', pt: 2 }}
+                        >
+                            Quote {bookedQuote} has no days.
+                        </Typography>
+                    )}
+                </Section>
 
                 {serviceList('Hotel', hotels)}
                 {serviceList('Taxi', taxis)}
