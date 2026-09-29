@@ -43,6 +43,7 @@ import { emptyRequirements, mergeRequirements, normalizeText, sameName } from '.
 import { editRequirements, extractFromText, planTrip } from './tripEngine/pipeline'
 import { entryTypeFor, renderDayDescription, renderDayTitle } from './tripEngine/render'
 import { DAY_TYPES } from './tripEngine/route'
+import { HOTEL_FIELDS, buildHotelRequest, parseHotelReply } from '../destinations/hotelSuggestions'
 
 const steps = ['Package', 'Destinations', 'Activities', 'Review']
 
@@ -606,28 +607,6 @@ const extractHotelNameList = value => {
     return [...new Set(cleaned)]
 }
 
-const normalizeHotelSuggestions = value => extractHotelNameList(value).slice(0, 4).join(' | ')
-const hasFourHotels = value => extractHotelNameList(value).length >= 4
-const mergeHotelSuggestions = (...values) => [...new Set(values.flatMap(extractHotelNameList))].slice(0, 4).join(' | ')
-const ensureFourHotels = (value, destinationName, categoryLabel) => {
-    const base = extractHotelNameList(value).slice(0, 4)
-    const destinationPrefix = destinationName?.trim() || 'Destination'
-    const fallback = [
-        `${destinationPrefix} ${categoryLabel} Hotel 1`,
-        `${destinationPrefix} ${categoryLabel} Hotel 2`,
-        `${destinationPrefix} ${categoryLabel} Hotel 3`,
-        `${destinationPrefix} ${categoryLabel} Hotel 4`
-    ]
-
-    fallback.forEach(item => {
-        if (base.length < 4 && !base.includes(item)) {
-            base.push(item)
-        }
-    })
-
-    return base.slice(0, 4).join(' | ')
-}
-
 function PackageCreationWizard() {
     const navigate = useNavigate()
     const location = useLocation()
@@ -800,6 +779,28 @@ function PackageCreationWizard() {
         [existingDestinationMap]
     )
     const getMatchedItenary = useCallback(title => existingItenaryMap[toNormalized(title)], [existingItenaryMap])
+
+    // ? the campaign's saved destinations arrive after the plan (the campaign is picked at save). A row for one of
+    //   them then shows its saved hotels — the AI's list only where the saved destination has none — so what the
+    //   agent sees is exactly what is saved, and nothing is duplicated
+    useEffect(() => {
+        if (!existingDestinations.length) return
+        setDestinations(prev =>
+            prev.map(row => {
+                const saved = existingDestinationMap[toNormalized(row.name)]
+                if (!saved || row.hotelsTouched) return row
+                const savedFields = HOTEL_FIELDS.map(({ field }) => field).filter(
+                    field => extractHotelNameList(saved[field]).length && row[field] !== saved[field]
+                )
+                if (!savedFields.length) return row
+                return {
+                    ...row,
+                    ...Object.fromEntries(savedFields.map(field => [field, saved[field]])),
+                    aiHotelFields: (row.aiHotelFields || []).filter(field => !savedFields.includes(field))
+                }
+            })
+        )
+    }, [existingDestinations, existingDestinationMap])
 
     const buildDestinationRowFromValue = (name = '', nights = 1) => ({
         ...createDestinationRow(name, nights),
@@ -1424,6 +1425,9 @@ DESCRIPTION RULES:
         return () => Object.values(timeouts).forEach(id => clearTimeout(id))
     }, [])
 
+    // ? the AI only fills a hotel category that is completely empty. A destination already saved with hotels, or
+    //   a list the agent typed, is never added to — appending to it duplicated hotels in the destination every
+    //   time a package was built, and "Shimla Deluxe Hotel 1"-style padding reached real quotations.
     const scheduleDestinationHotelAutofill = useCallback(
         row => {
             const destinationName = row.name?.trim()
@@ -1431,13 +1435,10 @@ DESCRIPTION RULES:
                 return
             }
 
-            const hasAllHotels =
-                hasFourHotels(row.delux_hotel) &&
-                hasFourHotels(row.super_delux_hotel) &&
-                hasFourHotels(row.luxury_hotel) &&
-                hasFourHotels(row.premium_hotel)
-
-            if (hasAllHotels) {
+            const emptyFields = HOTEL_FIELDS.map(({ field }) => field).filter(
+                field => !extractHotelNameList(row[field]).length
+            )
+            if (!emptyFields.length) {
                 return
             }
 
@@ -1451,143 +1452,26 @@ DESCRIPTION RULES:
 
                 try {
                     const response = await runQueuedAiRequest(() =>
-                        assistAi({
-                            system: `You are a destination research assistant for a travel package wizard.
-
-Respond ONLY with a valid JSON object.
-Allowed keys:
-- delux_hotel
-- super_delux_hotel
-- luxury_hotel
-- premium_hotel
-
-Rules:
-1. Output pure JSON only
-2. Every key must contain exactly 4 hotel names
-3. Return hotel names only, with no descriptions, prices, numbering, bullets, or commentary
-4. Separate the 4 hotel names with " | "
-5. Hotels must be destination-specific and realistic for Indian travel planning
-6. Keep category quality distinct:
-   - delux_hotel: strong budget/deluxe properties
-   - super_delux_hotel: better super deluxe or 4-star style properties
-   - luxury_hotel: recognized luxury properties
-   - premium_hotel: top-tier premium, iconic, or high-end boutique properties
-7. If exact certainty is limited, still give the best-fit plausible hotel names for that destination`,
-                            messages: [
-                                {
-                                    role: 'user',
-                                    content: JSON.stringify({
-                                        destination: destinationName,
-                                        existingHotels: {
-                                            delux_hotel: extractHotelNameList(row.delux_hotel),
-                                            super_delux_hotel: extractHotelNameList(row.super_delux_hotel),
-                                            luxury_hotel: extractHotelNameList(row.luxury_hotel),
-                                            premium_hotel: extractHotelNameList(row.premium_hotel)
-                                        },
-                                        instruction:
-                                            'Keep useful existing hotel names if present, and add enough more destination-specific hotel names so every category has exactly 4 names.'
-                                    })
-                                }
-                            ]
-                        }).unwrap()
+                        assistAi(buildHotelRequest(destinationName)).unwrap()
                     )
-
-                    const parsed = parseAiJson(response)
-                    const nextDeluxHotel = normalizeHotelSuggestions(
-                        parsed.delux_hotel || parsed.deluxe_hotel || parsed.deluxeHotel || ''
-                    )
-                    const nextSuperDeluxHotel = normalizeHotelSuggestions(
-                        parsed.super_delux_hotel || parsed.superDeluxeHotel || parsed.super_deluxe_hotel || ''
-                    )
-                    const nextLuxuryHotel = normalizeHotelSuggestions(parsed.luxury_hotel || parsed.luxuryHotel || '')
-                    const nextPremiumHotel = normalizeHotelSuggestions(
-                        parsed.premium_hotel || parsed.premiumHotel || ''
-                    )
-
-                    let finalDeluxHotel = mergeHotelSuggestions(row.delux_hotel, nextDeluxHotel)
-                    let finalSuperDeluxHotel = mergeHotelSuggestions(row.super_delux_hotel, nextSuperDeluxHotel)
-                    let finalLuxuryHotel = mergeHotelSuggestions(row.luxury_hotel, nextLuxuryHotel)
-                    let finalPremiumHotel = mergeHotelSuggestions(row.premium_hotel, nextPremiumHotel)
-
-                    let strictRetryCount = 0
-                    while (
-                        strictRetryCount < 3 &&
-                        (!hasFourHotels(finalDeluxHotel) ||
-                            !hasFourHotels(finalSuperDeluxHotel) ||
-                            !hasFourHotels(finalLuxuryHotel) ||
-                            !hasFourHotels(finalPremiumHotel))
-                    ) {
-                        // eslint-disable-next-line no-await-in-loop
-                        const strictResponse = await runQueuedAiRequest(() =>
-                            assistAi({
-                                system: `Return ONLY valid JSON with exactly these keys:
-delux_hotel, super_delux_hotel, luxury_hotel, premium_hotel.
-
-Each key must contain exactly 4 hotel names.
-Output format per key: "Hotel 1 | Hotel 2 | Hotel 3 | Hotel 4"
-No descriptions. No prices. No amenities. No bullets. No markdown.`,
-                                messages: [
-                                    {
-                                        role: 'user',
-                                        content: `Destination: ${destinationName}. Return exactly 4 hotel names in each category.`
-                                    }
-                                ]
-                            }).unwrap()
-                        )
-
-                        const strictParsed = parseAiJson(strictResponse)
-                        if (!hasFourHotels(finalDeluxHotel)) {
-                            finalDeluxHotel = mergeHotelSuggestions(
-                                finalDeluxHotel,
-                                strictParsed.delux_hotel || strictParsed.deluxe_hotel || strictParsed.deluxeHotel || ''
-                            )
-                        }
-                        if (!hasFourHotels(finalSuperDeluxHotel)) {
-                            finalSuperDeluxHotel = mergeHotelSuggestions(
-                                finalSuperDeluxHotel,
-                                strictParsed.super_delux_hotel ||
-                                    strictParsed.superDeluxeHotel ||
-                                    strictParsed.super_deluxe_hotel ||
-                                    ''
-                            )
-                        }
-                        if (!hasFourHotels(finalLuxuryHotel)) {
-                            finalLuxuryHotel = mergeHotelSuggestions(
-                                finalLuxuryHotel,
-                                strictParsed.luxury_hotel || strictParsed.luxuryHotel || ''
-                            )
-                        }
-                        if (!hasFourHotels(finalPremiumHotel)) {
-                            finalPremiumHotel = mergeHotelSuggestions(
-                                finalPremiumHotel,
-                                strictParsed.premium_hotel || strictParsed.premiumHotel || ''
-                            )
-                        }
-
-                        strictRetryCount += 1
-                    }
-
-                    const resolvedDeluxHotel = ensureFourHotels(finalDeluxHotel, destinationName, 'Delux')
-                    const resolvedSuperDeluxHotel = ensureFourHotels(
-                        finalSuperDeluxHotel,
-                        destinationName,
-                        'Super Delux'
-                    )
-                    const resolvedLuxuryHotel = ensureFourHotels(finalLuxuryHotel, destinationName, 'Luxury')
-                    const resolvedPremiumHotel = ensureFourHotels(finalPremiumHotel, destinationName, 'Premium')
+                    const { hotels } = parseHotelReply(response, destinationName)
 
                     setDestinations(prev =>
                         prev.map(item => {
                             if (item.id !== row.id) {
                                 return item
                             }
-
+                            // ? the agent may have typed into a field while the AI was answering; that wins
+                            const filled = emptyFields.filter(
+                                field => hotels[field] && !extractHotelNameList(item[field]).length
+                            )
+                            if (!filled.length) {
+                                return item
+                            }
                             return {
                                 ...item,
-                                delux_hotel: resolvedDeluxHotel,
-                                super_delux_hotel: resolvedSuperDeluxHotel,
-                                luxury_hotel: resolvedLuxuryHotel,
-                                premium_hotel: resolvedPremiumHotel
+                                ...Object.fromEntries(filled.map(field => [field, hotels[field]])),
+                                aiHotelFields: [...new Set([...(item.aiHotelFields || []), ...filled])]
                             }
                         })
                     )
@@ -1617,8 +1501,16 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
 
                 const updated = { ...item, [field]: value }
 
+                // ? a hotel list the agent edits here is theirs to save over the destination's
+                if (HOTEL_FIELDS.some(entry => entry.field === field)) {
+                    updated.hotelsTouched = true
+                    updated.aiHotelFields = (item.aiHotelFields || []).filter(name => name !== field)
+                }
+
                 if (field === 'name') {
                     const matchedDestination = getMatchedDestination(value)
+                    updated.hotelsTouched = false
+                    updated.aiHotelFields = []
                     if (matchedDestination) {
                         Object.assign(updated, copyHotelsFromDestination(matchedDestination))
                     } else {
@@ -2290,6 +2182,16 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
 
             setSaving(true)
 
+            // ? what this campaign already has, read now: the list loaded on screen can still be on its way when the
+            //   campaign was only just picked, and saving against an empty list created a second "Shimla" with no
+            //   hotels (and second copies of saved days) instead of reusing the saved ones
+            const [savedDestinationsResponse, savedItenariesResponse] = await Promise.all([
+                dispatch(getDestinationClients.initiate(`?campaignId=${campaignId}`, { forceRefetch: true })),
+                dispatch(getItenaryClients.initiate(`?campaignId=${campaignId}`, { forceRefetch: true }))
+            ])
+            const savedDestinations = savedDestinationsResponse?.data?.data || existingDestinations
+            const savedItenaries = savedItenariesResponse?.data?.data || existingItenaries
+
             const packageResponse = await createPackageClient({
                 name: packageName,
                 campaignId
@@ -2300,24 +2202,22 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             const validDestinations = destinations.filter(item => item.name.trim())
             const destinationResults = await Promise.all(
                 validDestinations.map(async row => {
-                    const existing = existingDestinations.find(
-                        item => toNormalized(item.name) === toNormalized(row.name)
-                    )
+                    const existing = savedDestinations.find(item => toNormalized(item.name) === toNormalized(row.name))
 
                     if (existing) {
-                        const nextHotels = {
-                            delux_hotel: row.delux_hotel || '',
-                            super_delux_hotel: row.super_delux_hotel || '',
-                            luxury_hotel: row.luxury_hotel || '',
-                            premium_hotel: row.premium_hotel || ''
-                        }
+                        // ? a saved destination keeps its hotels: only a category it has none in takes the
+                        //   wizard's (AI) list, unless the agent edited the hotels here themselves
+                        const nextHotels = Object.fromEntries(
+                            HOTEL_FIELDS.map(({ field }) => {
+                                const saved = existing[field] || ''
+                                const keepSaved = !row.hotelsTouched && extractHotelNameList(saved).length > 0
+                                return [field, keepSaved ? saved : row[field] || '']
+                            })
+                        )
 
                         if (
                             row.name.trim() !== (existing.name || '') ||
-                            nextHotels.delux_hotel !== (existing.delux_hotel || '') ||
-                            nextHotels.super_delux_hotel !== (existing.super_delux_hotel || '') ||
-                            nextHotels.luxury_hotel !== (existing.luxury_hotel || '') ||
-                            nextHotels.premium_hotel !== (existing.premium_hotel || '')
+                            HOTEL_FIELDS.some(({ field }) => nextHotels[field] !== (existing[field] || ''))
                         ) {
                             const updated = await updateDestinationClient({
                                 id: existing.id,
@@ -2362,7 +2262,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
 
             const itenaryResults = await Promise.all(
                 uniqueActivityTitles.map(async title => {
-                    const existing = existingItenaries.find(item => toNormalized(item.title) === toNormalized(title))
+                    const existing = savedItenaries.find(item => toNormalized(item.title) === toNormalized(title))
                     const sourceActivity = validActivities.find(
                         item => toNormalized(item.title) === toNormalized(title)
                     )
