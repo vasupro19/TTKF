@@ -69,3 +69,20 @@ describe('quote days', () => {
         expect(formatRupees(null)).toBe('')
     })
 })
+
+describe('the campaign of a quote', () => {
+    const quoteDay = (itenaryCampaign, destinationCampaign = itenaryCampaign) => ({
+        fullItem: {
+            itenary: itenaryCampaign ? { campaignId: itenaryCampaign } : null,
+            destination: destinationCampaign ? { campaignId: destinationCampaign } : null
+        }
+    })
+
+    test('the campaign most of its days come from; a tie goes to the lead’s', async () => {
+        const { campaignOfDays } = await import('./quoteDays')
+        expect(campaignOfDays([quoteDay(2), quoteDay(2), quoteDay(1)], 1)).toBe(2)
+        expect(campaignOfDays([quoteDay(2), quoteDay(1)], 1)).toBe(1)
+        expect(campaignOfDays([quoteDay(null, 3)], 1)).toBe(3)
+        expect(campaignOfDays([], 1)).toBeNull()
+    })
+})

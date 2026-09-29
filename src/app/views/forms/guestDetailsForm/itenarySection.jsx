@@ -11,6 +11,8 @@ import {
     DialogContent,
     DialogTitle,
     IconButton,
+    Menu,
+    MenuItem,
     Stack,
     Table,
     TableBody,
@@ -33,6 +35,8 @@ import { confirmedShape, priceShape, quoteDayShape } from './quote/shapes'
 
 const packageShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    campaignId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    campaign: PropTypes.shape({ title: PropTypes.string }),
     name: PropTypes.string,
     packageItenaries: PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.number }))
 })
@@ -56,7 +60,12 @@ function SectionTitle({ children, aside = null }) {
 
 SectionTitle.propTypes = { children: PropTypes.node.isRequired, aside: PropTypes.node }
 
-function QuoteBar({ quotes, current, onSelect, onNew }) {
+const campaignShape = PropTypes.shape({ id: PropTypes.number, title: PropTypes.string })
+
+function QuoteBar({ quotes, current, onSelect, onNew, campaigns, labels, defaultCampaignId = null }) {
+    const [menuAnchor, setMenuAnchor] = useState(null)
+    // ? with one campaign there is nothing to ask; with several, a new quote says which trip it is for
+    const askCampaign = campaigns.length > 1
     return (
         <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap role='group' aria-label='Quotes'>
             {quotes.map(quoteNo => {
@@ -79,12 +88,40 @@ function QuoteBar({ quotes, current, onSelect, onNew }) {
                         })}
                     >
                         Quote {quoteNo}
+                        {labels[quoteNo] ? (
+                            <Box component='span' sx={{ ml: 0.75, fontWeight: 400, color: 'text.secondary' }}>
+                                · {labels[quoteNo]}
+                            </Box>
+                        ) : null}
                     </ButtonBase>
                 )
             })}
-            <Button startIcon={<Add />} onClick={onNew} sx={{ borderRadius: 999 }}>
+            <Button
+                startIcon={<Add />}
+                onClick={event => (askCampaign ? setMenuAnchor(event.currentTarget) : onNew(defaultCampaignId))}
+                aria-haspopup={askCampaign ? 'menu' : undefined}
+                sx={{ borderRadius: 999 }}
+            >
                 New quote
             </Button>
+            <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+                <MenuItem disabled sx={{ fontSize: '0.8125rem', opacity: '1 !important', color: 'text.secondary' }}>
+                    Which trip is the new quote for?
+                </MenuItem>
+                {[...campaigns]
+                    .sort((a, b) => (b.id === defaultCampaignId) - (a.id === defaultCampaignId))
+                    .map(campaign => (
+                        <MenuItem
+                            key={campaign.id}
+                            onClick={() => {
+                                setMenuAnchor(null)
+                                onNew(campaign.id)
+                            }}
+                        >
+                            {campaign.title}
+                        </MenuItem>
+                    ))}
+            </Menu>
         </Stack>
     )
 }
@@ -93,16 +130,26 @@ QuoteBar.propTypes = {
     quotes: PropTypes.arrayOf(PropTypes.number).isRequired,
     current: PropTypes.number.isRequired,
     onSelect: PropTypes.func.isRequired,
-    onNew: PropTypes.func.isRequired
+    onNew: PropTypes.func.isRequired,
+    campaigns: PropTypes.arrayOf(campaignShape).isRequired,
+    labels: PropTypes.objectOf(PropTypes.string).isRequired,
+    defaultCampaignId: PropTypes.number
 }
 
-function PackagePicker({ packages, loading, replacing, busy, onPick }) {
+function PackagePicker({ packages, loading, replacing, busy, onPick, campaignId = null }) {
     const [input, setInput] = useState('')
+    // ? this quote's campaign first, then the others, each under its campaign's name
+    const ordered = [...packages].sort(
+        (a, b) =>
+            (Number(b.campaignId) === campaignId) - (Number(a.campaignId) === campaignId) ||
+            String(a.campaign?.title || '').localeCompare(String(b.campaign?.title || ''))
+    )
     return (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
             <Autocomplete
                 sx={{ width: { xs: '100%', sm: 380 } }}
-                options={packages}
+                options={ordered}
+                groupBy={option => option.campaign?.title || 'Other packages'}
                 loading={loading}
                 disabled={busy}
                 value={null}
@@ -137,6 +184,7 @@ function PackagePicker({ packages, loading, replacing, busy, onPick }) {
 }
 
 PackagePicker.propTypes = {
+    campaignId: PropTypes.number,
     packages: PropTypes.arrayOf(packageShape).isRequired,
     loading: PropTypes.bool.isRequired,
     replacing: PropTypes.bool.isRequired,
@@ -241,6 +289,10 @@ export default function ItinerarySection({
     currentQuoteNo,
     onSelectQuote,
     onNewQuote,
+    campaigns = [],
+    quoteCampaigns = {},
+    currentCampaignId = null,
+    leadCampaignId = null,
     tripLine = '',
     onEditTrip,
     startDate = '',
@@ -284,7 +336,21 @@ export default function ItinerarySection({
     return (
         <Box sx={{ width: '100%', '& .MuiButton-root, & .MuiToggleButton-root': { textTransform: 'none' } }}>
             <Stack spacing={2} sx={{ mb: 5 }}>
-                <QuoteBar quotes={quotes} current={currentQuoteNo} onSelect={onSelectQuote} onNew={onNewQuote} />
+                <QuoteBar
+                    quotes={quotes}
+                    current={currentQuoteNo}
+                    onSelect={onSelectQuote}
+                    onNew={onNewQuote}
+                    campaigns={campaigns}
+                    labels={
+                        // ? campaign names only say something when the quotes are for different trips
+                        new Set(Object.values(quoteCampaigns).filter(Boolean)).size > 1 ||
+                        (currentCampaignId && leadCampaignId && currentCampaignId !== leadCampaignId)
+                            ? quoteCampaigns
+                            : {}
+                    }
+                    defaultCampaignId={currentCampaignId}
+                />
                 <Stack direction='row' spacing={1} alignItems='baseline' flexWrap='wrap' useFlexGap>
                     <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
                         {tripLine || 'Trip details not added yet'}
@@ -293,6 +359,12 @@ export default function ItinerarySection({
                         Edit trip details
                     </Button>
                 </Stack>
+                {currentCampaignId && leadCampaignId && currentCampaignId !== leadCampaignId ? (
+                    <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: -1 }}>
+                        Quote {currentQuoteNo} is for {quoteCampaigns[currentQuoteNo] || 'another campaign'}: its
+                        inclusions, notes and bank details come from that campaign.
+                    </Typography>
+                ) : null}
             </Stack>
 
             <Box component='section' aria-labelledby='quote-days' sx={{ mb: 6 }}>
@@ -334,6 +406,7 @@ export default function ItinerarySection({
 
                 <Box sx={{ mb: 2.5 }}>
                     <PackagePicker
+                        campaignId={currentCampaignId}
                         packages={packages}
                         loading={loadingPackages}
                         replacing={hasDays}
@@ -494,6 +567,10 @@ export default function ItinerarySection({
 }
 
 ItinerarySection.propTypes = {
+    campaigns: PropTypes.arrayOf(campaignShape),
+    quoteCampaigns: PropTypes.objectOf(PropTypes.string),
+    currentCampaignId: PropTypes.number,
+    leadCampaignId: PropTypes.number,
     quotes: PropTypes.arrayOf(PropTypes.number).isRequired,
     currentQuoteNo: PropTypes.number.isRequired,
     onSelectQuote: PropTypes.func.isRequired,

@@ -19,7 +19,9 @@ const { api, dispatch, thunk, mutation, idle } = vi.hoisted(() => {
             updateGuest: vi.fn(),
             createTour: vi.fn(),
             updateTour: vi.fn(),
-            removeTour: vi.fn()
+            removeTour: vi.fn(),
+            createItenary: vi.fn(),
+            createSingleTour: vi.fn()
         },
         dispatch: mockDispatch,
         thunk: thunkAction,
@@ -42,7 +44,7 @@ vi.mock('@/app/store/slices/api/guestTourSlice', () => ({
     useCreateGuestTourMutation: mutation((...args) => api.createTour(...args)),
     useUpdateGuestTourMutation: mutation((...args) => api.updateTour(...args)),
     useRemoveGuestTourItenaryMutation: mutation((...args) => api.removeTour(...args)),
-    useCreateSingleGuestTourItenaryMutation: idle,
+    useCreateSingleGuestTourItenaryMutation: mutation((...args) => api.createSingleTour(...args)),
     getGuestTourById: { initiate: () => thunk(() => ({ data: { data: api.tourRows } })) }
 }))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
@@ -63,8 +65,25 @@ vi.mock('@/app/store/slices/api/packageSlice', () => ({
         data: {
             data: [
                 {
+                    id: 6,
+                    name: 'Char Dham Yatra',
+                    campaignId: 2,
+                    campaign: { title: 'Uttarakhand' },
+                    packageItenaries: [
+                        {
+                            id: 61,
+                            title: 'Haridwar arrival',
+                            itenary: { id: 961 },
+                            destination: { id: 71 },
+                            entryType: 'Stay'
+                        }
+                    ]
+                },
+                {
                     id: 5,
                     name: 'Manali Escape',
+                    campaignId: 1,
+                    campaign: { title: 'Himachal' },
                     packageItenaries: [
                         {
                             id: 51,
@@ -88,7 +107,7 @@ vi.mock('@/app/store/slices/api/packageSlice', () => ({
     })
 }))
 vi.mock('@/app/store/slices/api/itenarySlice', () => ({
-    useCreateItenaryClientMutation: idle,
+    useCreateItenaryClientMutation: mutation((...args) => api.createItenary(...args)),
     useUpdateItenaryClientMutation: idle,
     useGetItenaryClientsQuery: () => ({ data: { data: [] }, isLoading: false })
 }))
@@ -96,6 +115,16 @@ vi.mock('@/app/store/slices/api/destinationSlice', () => ({
     useCreateDestinationClientMutation: idle,
     useUpdateDestinationClientMutation: idle,
     useGetDestinationClientsQuery: () => ({ data: { data: [] }, isLoading: false })
+}))
+vi.mock('@/app/store/slices/api/campaignSlice', () => ({
+    useGetCampaignsQuery: () => ({
+        data: {
+            data: [
+                { id: 1, title: 'Himachal' },
+                { id: 2, title: 'Uttarakhand' }
+            ]
+        }
+    })
 }))
 vi.mock('@/app/store/slices/api/guestTourPrice', () => ({
     useGetGuestTourPriceQuery: () => ({ data: undefined, isFetching: false }),
@@ -133,6 +162,8 @@ beforeEach(() => {
     api.createTour.mockImplementation(() => ({ success: true }))
     api.updateTour.mockImplementation(() => ({ success: true }))
     api.removeTour.mockImplementation(() => ({ success: true }))
+    api.createItenary.mockImplementation(payload => ({ success: true, data: { id: 555, ...payload } }))
+    api.createSingleTour.mockImplementation(() => ({ success: true }))
 })
 
 describe('Quotation for a verified lead', () => {
@@ -233,5 +264,32 @@ describe('Quotation for a verified lead', () => {
                 { title: 'Solang Valley', itenaryId: 902, image: '', destinationId: 31, entryType: 'Stay', quoteNo: 1 }
             ]
         })
+    })
+
+    test('a new quote can be for another trip: its packages come first and its new days are saved in that campaign', async () => {
+        api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
+        api.tourRows = [row(1, 1, 'Arrive Shimla')]
+        renderPage()
+
+        fireEvent.click(await screen.findByRole('button', { name: 'New quote' }))
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Uttarakhand' }))
+        expect(screen.getByRole('button', { name: /Quote 2 · Uttarakhand/ })).toHaveAttribute('aria-pressed', 'true')
+        expect(screen.getByText(/Quote 2 is for Uttarakhand/)).toBeInTheDocument()
+
+        // ? Uttarakhand's packages are listed first for this quote
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Start from a package' }))
+        const options = await screen.findAllByRole('option')
+        expect(options[0]).toHaveTextContent('Char Dham Yatra')
+
+        // a day typed for this quote is saved in Uttarakhand, not the lead's Himachal
+        fireEvent.keyDown(document.activeElement, { key: 'Escape' })
+        fireEvent.click(screen.getByRole('button', { name: 'Add a day' }))
+        const title = await screen.findByRole('combobox', { name: 'Day title' })
+        fireEvent.change(title, { target: { value: 'Rishikesh rafting' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Add day' }))
+        await waitFor(() => expect(api.createItenary).toHaveBeenCalled())
+        expect(api.createItenary.mock.calls[0][0]).toMatchObject({ title: 'Rishikesh rafting', campaignId: 2 })
+        await waitFor(() => expect(api.createSingleTour).toHaveBeenCalled())
+        expect(api.createSingleTour.mock.calls[0][0]).toMatchObject({ quoteNo: 2, itenaryId: 555 })
     })
 })
