@@ -42,6 +42,7 @@ import {
     useUpdateDestinationClientMutation
 } from '@/app/store/slices/api/destinationSlice'
 import { useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
+import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -52,7 +53,7 @@ import ItinerarySection from './itenarySection'
 import TripDetailsStep from './TripDetailsStep'
 import DayEditor from './quote/DayEditor'
 import { emptyTripDetails, fromGuestDetail, toGuestPayload, tripSummary } from './tripDetails'
-import { byOrder, reorderDays, stayBreakdown } from './quote/quoteDays'
+import { byOrder, campaignOfDays, reorderDays, stayBreakdown } from './quote/quoteDays'
 
 const buildQuoteDayDescription = ({ entryType, title, destinationName }) => {
     if (entryType === 'Transit') {
@@ -266,11 +267,26 @@ function GuestForm() {
     const quotes = availableQuotes.includes(currentQuoteNo)
         ? availableQuotes
         : [...availableQuotes, currentQuoteNo].sort((a, b) => a - b)
-    const currentDays = quoteDays.filter(item => (item.fullItem?.quoteNo || 1) === currentQuoteNo).sort(byOrder)
+    const daysOfQuote = quoteNo => quoteDays.filter(item => (item.fullItem?.quoteNo || 1) === quoteNo).sort(byOrder)
+    const currentDays = daysOfQuote(currentQuoteNo)
 
-    const handleNewQuote = () => {
+    // --- A quote's campaign: a guest can ask for Himachal as Quote 1 and Uttarakhand as Quote 2 ---
+
+    const { data: campaignsData } = useGetCampaignsQuery()
+    const campaigns = (campaignsData?.data || []).map(item => ({ id: Number(item.id), title: item.title }))
+    const leadCampaignId = Number(leadData?.data?.campaignId) || null
+    // ? the campaign picked for a quote that has no days yet; once it has days, they decide
+    const [chosenQuoteCampaigns, setChosenQuoteCampaigns] = useState({})
+    const campaignOfQuote = quoteNo =>
+        campaignOfDays(daysOfQuote(quoteNo), leadCampaignId) || chosenQuoteCampaigns[quoteNo] || leadCampaignId
+    const campaignTitle = id => campaigns.find(item => item.id === Number(id))?.title || ''
+    const currentCampaignId = campaignOfQuote(currentQuoteNo)
+    const quoteCampaigns = Object.fromEntries(quotes.map(quoteNo => [quoteNo, campaignTitle(campaignOfQuote(quoteNo))]))
+
+    const handleNewQuote = campaignId => {
         const nextQuoteNo = Math.max(...quotes) + 1
         setAvailableQuotes([...quotes, nextQuoteNo])
+        setChosenQuoteCampaigns(current => ({ ...current, [nextQuoteNo]: Number(campaignId) || leadCampaignId }))
         setCurrentQuoteNo(nextQuoteNo)
     }
 
@@ -402,7 +418,8 @@ function GuestForm() {
     }, [openItenaryModal, formData.title, formData.destinationName])
 
     async function ensureQuoteMasterIds(payload = formData) {
-        const campaignId = leadData?.data?.campaignId
+        // ? a day typed for Quote 2 (Uttarakhand) is saved in Uttarakhand, not the lead's Himachal campaign
+        const campaignId = currentCampaignId
         const nextPayload = {
             ...payload,
             title: payload.title?.trim?.() || '',
@@ -419,7 +436,7 @@ function GuestForm() {
 
         if (!nextPayload.itenaryId && nextPayload.title?.trim()) {
             if (!campaignId) {
-                throw new Error('Assign a campaign to this lead before creating a custom itinerary.')
+                throw new Error('Choose a campaign for this quote before adding a new day.')
             }
 
             const createdItenary = await createItenaryClient({
@@ -452,7 +469,7 @@ function GuestForm() {
             nextPayload.destinationName?.trim()
         ) {
             if (!campaignId) {
-                throw new Error('Assign a campaign to this lead before creating a custom destination.')
+                throw new Error('Choose a campaign for this quote before adding a new destination.')
             }
 
             const createdDestination = await createDestinationClient({
@@ -991,6 +1008,10 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                         currentQuoteNo={currentQuoteNo}
                         onSelectQuote={setCurrentQuoteNo}
                         onNewQuote={handleNewQuote}
+                        campaigns={campaigns}
+                        quoteCampaigns={quoteCampaigns}
+                        currentCampaignId={currentCampaignId}
+                        leadCampaignId={leadCampaignId}
                         tripLine={tripSummary(tripValues)}
                         onEditTrip={() => setActiveTab(0)}
                         startDate={tripValues.pickupDate}

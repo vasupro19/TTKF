@@ -109,3 +109,22 @@ export const formatRupees = value => {
         ? `₹${amount.toLocaleString('en-IN')}`
         : ''
 }
+
+/**
+ * @description the campaign a quote belongs to: the one most of its days come from (each day's saved day, else its
+ *              destination); on a tie the lead's campaign if it is one of them. A quote with no days has none of
+ *              its own — the caller falls back to the campaign chosen for it, then the lead's. Mirrors the API's
+ *              Helpers/quoteCampaign.helper.js, which picks the inclusions and bank details the guest sees.
+ * @returns {number|null}
+ */
+export const campaignOfDays = (days, leadCampaignId = null) => {
+    const counts = new Map()
+    days.forEach(day => {
+        const id = Number(day?.fullItem?.itenary?.campaignId ?? day?.fullItem?.destination?.campaignId) || null
+        if (id) counts.set(id, (counts.get(id) || 0) + 1)
+    })
+    if (!counts.size) return null
+    const most = Math.max(...counts.values())
+    const leaders = [...counts].filter(([, count]) => count === most).map(([id]) => id)
+    return leaders.includes(Number(leadCampaignId)) ? Number(leadCampaignId) : leaders[0]
+}
