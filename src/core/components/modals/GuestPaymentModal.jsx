@@ -28,8 +28,9 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
         }
     }, [open, today])
 
-    // Calculate remaining balance for UI display
-    const remainingBalance = (row?.sellingPrice || 0) - (row?.guestPaidAmount || 0)
+    // Calculate remaining balance for UI display (amounts may arrive as decimal strings)
+    const remainingBalance = Math.max(0, (Number(row?.sellingPrice) || 0) - (Number(row?.guestPaidAmount) || 0))
+    const rupees = value => `₹${(Number(value) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
     return (
         <Modal open={open} onClose={onClose}>
@@ -39,7 +40,9 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    width: 450, // Slightly wider for better layout
+                    width: { xs: 'calc(100vw - 32px)', sm: 450 },
+                    maxHeight: 'calc(100dvh - 32px)',
+                    overflowY: 'auto',
                     bgcolor: 'background.paper',
                     p: 4,
                     borderRadius: 2,
@@ -53,14 +56,14 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
 
                 <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
                     <Typography variant='subtitle2' color='textSecondary'>
-                        Guest: <b>{row?.lead?.guestName || row?.lead?.name || 'N/A'}</b>
+                        Guest: <b>{row?.guestName || row?.lead?.fullName || 'Guest'}</b>
                     </Typography>
                     <Stack direction='row' justifyContent='space-between' mt={1}>
                         <Typography variant='body2'>
-                            Total: <b>₹{row?.sellingPrice}</b>
+                            Total: <b>{rupees(row?.sellingPrice)}</b>
                         </Typography>
                         <Typography variant='body2' color='error'>
-                            Pending: <b>₹{remainingBalance}</b>
+                            Pending: <b>{rupees(remainingBalance)}</b>
                         </Typography>
                     </Stack>
                 </Box>

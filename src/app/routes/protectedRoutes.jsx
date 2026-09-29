@@ -80,6 +80,7 @@ const MasterLeadsTable = lazy(() => import('@views/masters/leads'))
 const LeadsForm = lazy(() => import('@views/masters/leads/create'))
 const GuestForm = lazy(() => import('@views/forms/guestDetailsForm'))
 const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
+const BookingWorkspace = lazy(() => import('@views/bookings/BookingWorkspace'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
 
 // ---- integrations & careers ----
@@ -171,6 +172,7 @@ const protectedRoutes = {
         { path: '/process/leads/edit/:id', element: page(LeadsForm) },
         { path: '/process/guest/add/:leadId', element: page(GuestForm) },
         { path: '/process/packages', element: page(FinalPackageTable) },
+        { path: '/process/packages/:leadId', element: page(BookingWorkspace) },
         { path: '/process/transactions', element: page(ServiceLedgerTable) },
 
         // ---- integrations & careers ----

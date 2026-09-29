@@ -4,6 +4,8 @@
     src: url('../assets/font/Bookerly.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
+    /* text shows at once in a fallback font instead of staying invisible while Bookerly loads */
+    font-display: swap;
 }
 
 body {

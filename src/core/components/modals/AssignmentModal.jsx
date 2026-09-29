@@ -43,7 +43,9 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
                 <Box display='flex' alignItems='center' justifyContent='space-between'>
                     <Box display='flex' alignItems='center' gap={1}>
                         {type === 'Hotel' ? <Apartment color='primary' /> : <DirectionsCar color='secondary' />}
-                        <Typography variant='h4'>Assign {type}</Typography>
+                        <Typography variant='h4'>
+                            {row?.id ? 'Edit' : 'Add'} {type === 'Hotel' ? 'hotel booking' : 'transport'}
+                        </Typography>
                     </Box>
                     <IconButton onClick={onClose} size='small'>
                         <Close />
@@ -55,7 +57,7 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
             <DialogContent>
                 <Box sx={{ mt: 1 }}>
                     <Typography variant='body2' color='textSecondary' gutterBottom>
-                        Assigning for: <strong>{row?.guestName}</strong>
+                        For <strong>{row?.guestName || 'this booking'}</strong>
                     </Typography>
                     <SupplierAssignmentForm type={type} row={row} onDataChange={handleDataChange} />
                 </Box>
@@ -71,7 +73,7 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
                     disabled={isLoading || !formData.supplierId || !formData.cost}
                 >
                     {isLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-                    Save Details
+                    {row?.id ? 'Save changes' : 'Add to booking'}
                 </CustomButton>
             </DialogActions>
         </Dialog>

@@ -1,0 +1,217 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import BookingsPage from './BookingsPage'
+import BookingWorkspace from './BookingWorkspace'
+
+const api = vi.hoisted(() => {
+    const call = () => vi.fn(() => ({ unwrap: () => Promise.resolve({ success: true }) }))
+    return {
+        list: [],
+        booking: null,
+        hotels: [],
+        taxis: [],
+        payments: [],
+        addService: call(),
+        deleteService: call(),
+        sendSupplierEmail: call(),
+        addGuestPayment: call(),
+        paySupplier: call(),
+        sendVoucher: call(),
+        sendHotel: call(),
+        sendTaxi: call(),
+        downloadPdf: call()
+    }
+})
+
+const query = data => ({ data, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() })
+const navigate = vi.hoisted(() => vi.fn())
+
+vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => navigate }))
+vi.mock('react-redux', () => ({
+    useDispatch: () => action =>
+        action?.type === 'preview' ? Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } }) : action,
+    useSelector: select => select({ loading: {} })
+}))
+vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
+vi.mock('@/app/store/slices/api/packageConvert', () => ({
+    useGetAllConfirmedPackagesQuery: () => query({ data: api.list }),
+    useGetPackageByLeadIdQuery: () => query({ data: api.booking }),
+    useGetServicesByPackageQuery: ({ type }) => query({ data: type === 'Hotel' ? api.hotels : api.taxis }),
+    useGetGuestPaymentHistoryQuery: () => query({ data: api.payments }),
+    useAddServiceToPackageMutation: () => [api.addService, { isLoading: false }],
+    useDeleteServiceMutation: () => [api.deleteService],
+    useSendSupplierEmailMutation: () => [api.sendSupplierEmail],
+    useAddGuestPaymentMutation: () => [api.addGuestPayment, { isLoading: false }],
+    useSendVoucherEmailMutation: () => [api.sendVoucher],
+    useSendGuestHotelConfirmationEmailMutation: () => [api.sendHotel],
+    useSendGuestTaxiConfirmationEmailMutation: () => [api.sendTaxi],
+    useDownloadConfirmedVoucherPdfMutation: () => [api.downloadPdf],
+    getConfirmedVoucherPreview: { initiate: () => ({ type: 'preview' }) }
+}))
+vi.mock('@/app/store/slices/api/confirmedService', () => ({
+    usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
+}))
+vi.mock('@/app/store/slices/api/leadSlice', () => ({
+    useGetLeadByIdQuery: () =>
+        query({ data: { fullName: 'Asha Verma', phone: '9876543210', senderEmail: 'asha@example.com' } })
+}))
+vi.mock('@/app/store/slices/api/guestSlice', () => ({
+    useGetGuestByIdQuery: () =>
+        query({
+            data: {
+                adults: 2,
+                children: 1,
+                pickupDate: '2026-12-12T00:00:00.000Z',
+                dropDate: '2026-12-17T00:00:00.000Z'
+            }
+        })
+}))
+vi.mock('@/app/store/slices/api/supplierSlice', () => ({
+    useGetSuppliersQuery: () => ({
+        data: { data: [{ id: 5, businessname: 'Hotel Willow Banks', city: 'Shimla' }] },
+        isLoading: false
+    })
+}))
+
+const listRow = over => ({
+    id: 1,
+    leadId: 11,
+    guestName: 'Asha Verma',
+    phone: '9876543210',
+    selectedPackage: 'Deluxe',
+    quotationNo: 1,
+    sellingPrice: 90000,
+    guestPaidAmount: 45000,
+    guestPaymentStatus: 'Partially Paid',
+    hotelAssigned: true,
+    taxiAssigned: false,
+    supplierPaymentStatus: 'Unpaid',
+    status: 'Confirmed',
+    travelDate: '2026-12-12T00:00:00.000Z',
+    travelEnd: '2026-12-17T00:00:00.000Z',
+    ...over
+})
+
+beforeEach(() => {
+    vi.clearAllMocks()
+    api.list = [
+        listRow(),
+        listRow({ id: 2, leadId: 12, guestName: 'Rohan Das', hotelAssigned: false, guestPaidAmount: 0 })
+    ]
+    api.booking = {
+        id: 1,
+        leadId: 11,
+        sellingPrice: '90000.00',
+        guestPaidAmount: '45000.00',
+        guestPaymentStatus: 'Partially Paid',
+        status: 'Confirmed',
+        selectedPackage: 'Deluxe',
+        quotationNo: 1
+    }
+    api.hotels = [
+        {
+            id: 21,
+            type: 'Hotel',
+            cost: '20000.00',
+            paidAmount: '5000.00',
+            paymentStatus: 'Partially Paid',
+            startDate: '2026-12-12T00:00:00.000Z',
+            endDate: '2026-12-14T00:00:00.000Z',
+            quantity: 2,
+            supplierId: 5,
+            supplier: { businessname: 'Hotel Willow Banks', phone: '01772222' }
+        }
+    ]
+    api.taxis = []
+    api.payments = [
+        {
+            id: 1,
+            amount: '45000.00',
+            paymentDate: '2026-11-01T00:00:00.000Z',
+            paymentMethod: 'UPI',
+            transactionId: 'UTR123'
+        }
+    ]
+})
+
+describe('Bookings list', () => {
+    test('each booking shows its money and its next step; filters and search narrow the list', () => {
+        render(
+            <MemoryRouter>
+                <BookingsPage />
+            </MemoryRouter>
+        )
+        expect(
+            screen.getByText('2 bookings · ₹1,35,000 still to collect from guests · 1 not started')
+        ).toBeInTheDocument()
+        const asha = screen.getByRole('button', { name: 'Open the booking for Asha Verma' })
+        expect(within(asha).getByText('Next: Add transport')).toBeInTheDocument()
+        expect(within(asha).getByText(/12 Dec 2026 – 17 Dec 2026 · Deluxe · Quote 1/)).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /Not started/ }))
+        expect(screen.queryByRole('button', { name: 'Open the booking for Asha Verma' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Open the booking for Rohan Das' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+        fireEvent.change(screen.getByLabelText('Search bookings'), { target: { value: 'rohan' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Open the booking for Rohan Das' }))
+        expect(navigate).toHaveBeenCalledWith('/process/packages/12')
+    })
+})
+
+const renderBooking = () =>
+    render(
+        <MemoryRouter initialEntries={['/process/packages/11']}>
+            <Routes>
+                <Route path='/process/packages/:leadId' element={<BookingWorkspace />} />
+            </Routes>
+        </MemoryRouter>
+    )
+
+describe('One booking', () => {
+    test('progress, the next step, money, hotels and payments on one page', () => {
+        renderBooking()
+        expect(screen.getByRole('heading', { name: 'Asha Verma' })).toBeInTheDocument()
+        expect(screen.getByText(/12 Dec 2026 – 17 Dec 2026 · 2 adults, 1 child · Deluxe · Quote 1/)).toBeInTheDocument()
+        expect(screen.getByText('1 of 5 done')).toBeInTheDocument()
+        expect(screen.getByText('Next: Add transport')).toBeInTheDocument()
+
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        expect(within(hotels).getByText('Hotel Willow Banks')).toBeInTheDocument()
+        expect(within(hotels).getByText(/12 Dec 2026 – 14 Dec 2026 · 2 rooms/)).toBeInTheDocument()
+        expect(within(hotels).getByText('₹5,000 paid · ₹15,000 due')).toBeInTheDocument()
+
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        expect(within(payments).getByText('₹45,000')).toBeInTheDocument()
+        expect(within(payments).getByText('Ref UTR123')).toBeInTheDocument()
+        expect(screen.getByText('Price − supplier costs')).toBeInTheDocument()
+        expect(screen.getByText('₹70,000')).toBeInTheDocument()
+    })
+
+    test('the next-step button opens the right form', async () => {
+        renderBooking()
+        // ? the first "Add transport" is the next-step button at the top; the second is the section's own
+        fireEvent.click(screen.getAllByRole('button', { name: 'Add transport' })[0])
+        expect(await screen.findByText('Add transport', { selector: 'h4' })).toBeInTheDocument()
+    })
+
+    test('removing a supplier asks first', async () => {
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        fireEvent.click(within(hotels).getByRole('button', { name: 'Remove' }))
+        expect(within(hotels).getByText('Remove Hotel Willow Banks from this booking?')).toBeInTheDocument()
+        expect(api.deleteService).not.toHaveBeenCalled()
+        fireEvent.click(within(hotels).getByRole('button', { name: 'Remove' }))
+        await waitFor(() => expect(api.deleteService).toHaveBeenCalledWith(21))
+    })
+
+    test('the voucher is previewed before it is sent', async () => {
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Preview and email' }))
+        const send = await screen.findByRole('button', { name: 'Send to asha@example.com' })
+        expect(api.sendVoucher).not.toHaveBeenCalled()
+        fireEvent.click(send)
+        await waitFor(() => expect(api.sendVoucher).toHaveBeenCalledWith(1))
+    })
+})

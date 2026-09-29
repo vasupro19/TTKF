@@ -1,7 +1,3 @@
-import FinalPackageTable from '@/app/views/tables/finalPackage'
+import BookingsPage from '@/app/views/bookings/BookingsPage'
 
-function Index() {
-    return <FinalPackageTable />
-}
-
-export default Index
+export default BookingsPage
