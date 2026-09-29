@@ -848,6 +848,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false)
     const [previewOpen, setPreviewOpen] = useState(false)
     const [previewHtml, setPreviewHtml] = useState('')
+    const [previewSubject, setPreviewSubject] = useState('')
     const [loadingPreview, setLoadingPreview] = useState(false)
 
     const handleShare = async () => {
@@ -921,6 +922,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         try {
             const { data } = await dispatch(getLeadPreview.initiate({ leadId, quoteNo: currentQuoteNo }))
             setPreviewHtml(data?.data?.html || '')
+            setPreviewSubject(data?.data?.subject || '')
         } catch (err) {
             notify('Failed to load preview', 'error')
             setPreviewOpen(false)
@@ -1087,9 +1089,18 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                             borderColor: 'divider'
                         }}
                     >
-                        <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>
-                            Email preview · Quote {currentQuoteNo}
-                        </Typography>
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>
+                                Email preview · Quote {currentQuoteNo}
+                            </Typography>
+                            {!loadingPreview && (previewSubject || leadData?.data?.senderEmail) ? (
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: 0.25 }} noWrap>
+                                    {leadData?.data?.senderEmail ? `To ${leadData.data.senderEmail}` : ''}
+                                    {leadData?.data?.senderEmail && previewSubject ? ' · ' : ''}
+                                    {previewSubject}
+                                </Typography>
+                            ) : null}
+                        </Box>
                         <IconButton aria-label='Close' onClick={() => setPreviewOpen(false)}>
                             <Close />
                         </IconButton>
