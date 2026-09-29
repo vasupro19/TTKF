@@ -2351,6 +2351,15 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
             const validActivities = activities.filter(item => item.title.trim())
             const uniqueActivityTitles = [...new Set(validActivities.map(item => item.title.trim()))]
 
+            // ? a workspace database whose text columns were never widened (VARCHAR(191)) silently cuts a long day
+            //   description; the API returns what was stored, so a shorter value means it was cut
+            const shortened = []
+            const noteIfShortened = (record, sent) => {
+                if (record && typeof record.description === 'string' && sent && record.description.length < sent.length)
+                    shortened.push(record.title || '')
+                return record
+            }
+
             const itenaryResults = await Promise.all(
                 uniqueActivityTitles.map(async title => {
                     const existing = existingItenaries.find(item => toNormalized(item.title) === toNormalized(title))
@@ -2378,7 +2387,13 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                                 campaignId: existing.campaignId || campaignId
                             }).unwrap()
 
-                            return [toNormalized(title), updated?.data || { ...existing, description: nextDescription }]
+                            return [
+                                toNormalized(title),
+                                noteIfShortened(updated?.data, nextDescription) || {
+                                    ...existing,
+                                    description: nextDescription
+                                }
+                            ]
                         }
 
                         return [toNormalized(title), existing]
@@ -2390,7 +2405,7 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                         campaignId
                     }).unwrap()
 
-                    return [toNormalized(title), created?.data]
+                    return [toNormalized(title), noteIfShortened(created?.data, nextDescription)]
                 })
             )
 
@@ -2416,15 +2431,23 @@ No descriptions. No prices. No amenities. No bullets. No markdown.`,
                 }).unwrap()
             }
 
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Package wizard completed successfully.',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
+            if (shortened.length) {
+                showWarning(
+                    `Package saved, but the database cut ${shortened.length} day description${
+                        shortened.length === 1 ? '' : 's'
+                    } short. The server's database needs its latest updates (tenant migrations) to store long day text.`
+                )
+            } else {
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: 'Package wizard completed successfully.',
+                        variant: 'alert',
+                        alert: { color: 'success' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
+            }
 
             navigate(`/master/packages/${campaignId}`)
         } catch (error) {

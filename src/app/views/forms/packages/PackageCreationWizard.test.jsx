@@ -7,10 +7,16 @@ import PackageCreationWizard from './PackageCreationWizard'
 const assistAi = vi.fn()
 const dispatch = vi.fn()
 const saved = { packages: [], itineraries: [], days: [] }
+// ? set to 191 to behave like a workspace database whose text columns were never widened
+const database = { cutTextAt: 0 }
+const stored = body =>
+    database.cutTextAt && typeof body.description === 'string'
+        ? { ...body, description: body.description.slice(0, database.cutTextAt) }
+        : body
 const mutation = (bucket, id) => [
     vi.fn(body => {
         saved[bucket].push(body)
-        return { unwrap: () => Promise.resolve({ data: { id: id ?? saved[bucket].length, ...body } }) }
+        return { unwrap: () => Promise.resolve({ data: { id: id ?? saved[bucket].length, ...stored(body) } }) }
     })
 ]
 
@@ -154,6 +160,7 @@ beforeEach(() => {
     assistAi.mockReset()
     dispatch.mockReset()
     Object.values(saved).forEach(list => list.splice(0))
+    database.cutTextAt = 0
     understood = () => ({
         requiredAttractions: [
             { name: 'Rohtang Pass', destination: 'Manali' },
@@ -329,6 +336,21 @@ describe('Package planner — the simple flow', () => {
             'Stay',
             'Transit'
         ])
+    }, 40000)
+
+    test('when the database cuts a long day description, saving says so instead of reporting success', async () => {
+        database.cutTextAt = 191
+        renderPlanner()
+        await planTheTrip()
+
+        fireEvent.mouseDown(screen.getByLabelText('Campaign'))
+        fireEvent.click(await screen.findByRole('option', { name: 'Summer' }))
+        click('Save package')
+
+        await waitFor(() => expect(saved.days).toHaveLength(6), WAIT)
+        const messages = dispatch.mock.calls.map(([action]) => action?.payload?.message).filter(Boolean)
+        expect(messages.some(message => /the database cut \d+ day descriptions? short/.test(message))).toBe(true)
+        expect(messages).not.toContain('Package wizard completed successfully.')
     }, 40000)
 
     test('a pasted customer message fills the planner in', async () => {
