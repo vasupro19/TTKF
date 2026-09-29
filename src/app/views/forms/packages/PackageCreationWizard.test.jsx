@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import PackageCreationWizard from './PackageCreationWizard'
@@ -123,7 +123,17 @@ const model = ({ system, messages }) => {
             }))
         })
     }
-    return reply({}) // hotel suggestions — not under test
+    if (system.includes('hotel expert for Indian holidays')) {
+        const town = payload.destination
+        return reply({
+            destination: town,
+            delux: [{ name: `AI ${town} Deluxe`, town }],
+            super_delux: [{ name: `AI ${town} Super Deluxe`, town }],
+            luxury: [{ name: `AI ${town} Luxury`, town }],
+            premium: [{ name: `AI ${town} Premium`, town }]
+        })
+    }
+    return reply({})
 }
 
 // ? the wizard spaces AI requests 1.4s apart, so a build takes a few seconds even when mocked
@@ -336,6 +346,52 @@ describe('Package planner — the simple flow', () => {
             'Stay',
             'Transit'
         ])
+    }, 40000)
+
+    test('a destination already saved with hotels keeps them; the AI fills only a category it has none in', async () => {
+        const savedShimla = {
+            id: 40,
+            name: 'Shimla',
+            campaignId: 1,
+            delux_hotel: 'Hotel Willow Banks | Hotel Combermere',
+            super_delux_hotel: '',
+            luxury_hotel: 'The Oberoi Cecil',
+            premium_hotel: 'Wildflower Hall'
+        }
+        const base = dispatch.getMockImplementation()
+        dispatch.mockImplementation(action =>
+            action?.type === 'destinations' ? Promise.resolve({ data: { data: [savedShimla] } }) : base(action)
+        )
+        renderPlanner()
+        await planTheTrip()
+        // ? the AI's hotel lists for Shimla and Manali, asked for while the campaign was still unknown
+        const hotelAsks = () =>
+            assistAi.mock.calls.filter(([request]) => request.system.includes('hotel expert')).length
+        await waitFor(() => expect(hotelAsks()).toBe(2), WAIT)
+        await act(async () => {
+            await new Promise(resolve => {
+                setTimeout(resolve, 50)
+            })
+        })
+
+        fireEvent.mouseDown(screen.getByLabelText('Campaign'))
+        fireEvent.click(await screen.findByRole('option', { name: 'Summer' }))
+        click('Save package')
+        await waitFor(() => expect(saved.days).toHaveLength(6), WAIT)
+
+        const shimlaWrites = saved.itineraries.filter(body => body.name === 'Shimla')
+        expect(shimlaWrites).toHaveLength(1)
+        expect(shimlaWrites[0]).toMatchObject({
+            id: 40,
+            delux_hotel: 'Hotel Willow Banks | Hotel Combermere',
+            luxury_hotel: 'The Oberoi Cecil',
+            premium_hotel: 'Wildflower Hall',
+            super_delux_hotel: 'AI Shimla Super Deluxe'
+        })
+        // ? a new destination gets the AI's hotels, and nothing is ever padded with made-up names
+        const manali = saved.itineraries.find(body => body.name === 'Manali')
+        expect(manali.delux_hotel).toBe('AI Manali Deluxe')
+        expect(JSON.stringify(saved.itineraries)).not.toMatch(/Hotel \d/)
     }, 40000)
 
     test('when the database cuts a long day description, saving says so instead of reporting success', async () => {
