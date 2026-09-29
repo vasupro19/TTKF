@@ -131,6 +131,7 @@ const LeadsForm = lazy(() => import('@/app/views/masters/leads/create'))
 
 const GuestForm = lazy(() => import('@views/forms/guestDetailsForm'))
 const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
+const BookingWorkspace = lazy(() => import('@views/bookings/BookingWorkspace'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
 
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
@@ -477,6 +478,14 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <FinalPackageTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/packages/:leadId',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <BookingWorkspace />
                 </Suspense>
             )
         },

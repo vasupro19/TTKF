@@ -109,7 +109,18 @@ function SupplierAssignmentForm({ type, onDataChange, row }) {
                     />
                 </Grid>
 
-                {/* ... Repeat 'value={formState.xyz}' for other fields like quantity and paidAmount ... */}
+                {type === 'Hotel' ? (
+                    <Grid item xs={6}>
+                        <TextField
+                            fullWidth
+                            label='Rooms'
+                            type='number'
+                            value={formState.quantity}
+                            inputProps={{ min: 1 }}
+                            onChange={e => updateParent({ quantity: e.target.value })}
+                        />
+                    </Grid>
+                ) : null}
             </Grid>
 
             <TextField
