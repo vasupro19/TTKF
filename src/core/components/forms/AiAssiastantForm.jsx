@@ -112,6 +112,8 @@ Example response:
         try {
             const response = await fetch(`${import.meta.env.VITE_APP_BASE_URL}/ai/assist`, {
                 method: 'POST',
+                // ? the AI needs a signed-in session: send the session cookie
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     system: buildSystemPrompt(),
@@ -120,6 +122,13 @@ Example response:
             })
 
             const data = await response.json()
+            if (!response.ok) {
+                // ? e.g. the per-minute AI limit, or a session that has ended
+                setAiResponse({
+                    _error: data?.message || 'The AI assistant is not available right now. Please try again.'
+                })
+                return
+            }
             const text = data?.content?.[0]?.text || ''
 
             // Strip markdown fences if present
