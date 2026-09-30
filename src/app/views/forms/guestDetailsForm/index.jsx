@@ -55,6 +55,7 @@ import TripDetailsStep from './TripDetailsStep'
 import DayEditor from './quote/DayEditor'
 import { emptyTripDetails, fromGuestDetail, toGuestPayload, tripSummary } from './tripDetails'
 import { byOrder, campaignOfDays, reorderDays, stayBreakdown } from './quote/quoteDays'
+import { headCount } from './quote/pricing'
 
 const buildQuoteDayDescription = ({ entryType, title, destinationName }) => {
     if (entryType === 'Transit') {
@@ -1079,6 +1080,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                 quotationNo={currentQuoteNo}
                                 activeTab={activeTab}
                                 guestCategory={tripValues.packageType}
+                                people={headCount(tripValues)}
                             />
                         }
                         priceData={price?.data || null}
@@ -1124,6 +1126,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                 leadId={leadId}
                 quotationNo={currentQuoteNo}
                 priceData={price?.data}
+                people={headCount(tripValues)}
             />
 
             <Modal open={previewOpen} onClose={() => setPreviewOpen(false)}>

@@ -139,6 +139,14 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 }
             }
         }),
+        // ? the booking request to a hotel or transporter, exactly as it will be emailed
+        getSupplierEmailPreview: build.query({
+            query: serviceId => ({
+                url: `/package/supplier/email/${serviceId}/preview`,
+                method: 'GET',
+                responseHandler: async result => customResponseHandler({ result })
+            })
+        }),
         getConfirmedVoucherPreview: build.query({
             query: packageId => ({
                 url: `/package/preview/${packageId}`,
@@ -198,5 +206,11 @@ export const {
     useDownloadConfirmedVoucherPdfMutation,
     useGetGuestPaymentHistoryQuery,
     useGetPackageByLeadIdQuery,
-    endpoints: { getConfirmedBooking, convertPackage, getAllConfirmedPackages, getConfirmedVoucherPreview }
+    endpoints: {
+        getConfirmedBooking,
+        convertPackage,
+        getAllConfirmedPackages,
+        getConfirmedVoucherPreview,
+        getSupplierEmailPreview
+    }
 } = bookingSlice

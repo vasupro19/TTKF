@@ -20,7 +20,9 @@ const api = vi.hoisted(() => {
         sendVoucher: call(),
         sendHotel: call(),
         sendTaxi: call(),
-        downloadPdf: call()
+        downloadPdf: call(),
+        supplierPreview: null,
+        snackbars: []
     }
 })
 
@@ -29,8 +31,12 @@ const navigate = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => navigate }))
 vi.mock('react-redux', () => ({
-    useDispatch: () => action =>
-        action?.type === 'preview' ? Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } }) : action,
+    useDispatch: () => action => {
+        if (action?.type === 'preview') return Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } })
+        if (action?.type === 'supplierPreview') return Promise.resolve(api.supplierPreview)
+        if (action?.type === 'snackbar') api.snackbars.push(action.payload.message)
+        return action
+    },
     useSelector: select => select({ loading: {} })
 }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
@@ -47,7 +53,8 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useSendGuestHotelConfirmationEmailMutation: () => [api.sendHotel],
     useSendGuestTaxiConfirmationEmailMutation: () => [api.sendTaxi],
     useDownloadConfirmedVoucherPdfMutation: () => [api.downloadPdf],
-    getConfirmedVoucherPreview: { initiate: () => ({ type: 'preview' }) }
+    getConfirmedVoucherPreview: { initiate: () => ({ type: 'preview' }) },
+    getSupplierEmailPreview: { initiate: id => ({ type: 'supplierPreview', id }) }
 }))
 vi.mock('@/app/store/slices/api/confirmedService', () => ({
     usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
@@ -134,6 +141,16 @@ beforeEach(() => {
         }
     ]
     api.taxis = []
+    api.snackbars = []
+    api.supplierPreview = {
+        data: {
+            data: {
+                to: 'rooms@willowbanks.example',
+                subject: 'Room booking request – Asha Verma, 12 Dec 2026 (2 nights) – TravelKart',
+                html: '<p>request</p>'
+            }
+        }
+    }
     api.payments = [
         {
             id: 1,
@@ -233,5 +250,32 @@ describe('One booking', () => {
         expect(api.sendVoucher).not.toHaveBeenCalled()
         fireEvent.click(send)
         await waitFor(() => expect(api.sendVoucher).toHaveBeenCalledWith(1))
+    })
+
+    test('a hotel’s booking request is previewed, with who it goes to and the subject, before it is sent', async () => {
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Email hotel' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Booking request to Hotel Willow Banks' })
+        expect(within(dialog).getByText('To rooms@willowbanks.example')).toBeInTheDocument()
+        expect(
+            within(dialog).getByText('Subject: Room booking request – Asha Verma, 12 Dec 2026 (2 nights) – TravelKart')
+        ).toBeInTheDocument()
+        expect(api.sendSupplierEmail).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to rooms@willowbanks.example' }))
+        await waitFor(() => expect(api.sendSupplierEmail).toHaveBeenCalledWith(21))
+    })
+
+    test('a supplier without an email says so, and nothing opens or is sent', async () => {
+        api.supplierPreview = {
+            error: { data: { message: 'Hotel Willow Banks has no email address. Add one under Suppliers.' } }
+        }
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Email hotel' }))
+        await waitFor(() =>
+            expect(api.snackbars).toContain('Hotel Willow Banks has no email address. Add one under Suppliers.')
+        )
+        expect(screen.queryByRole('dialog', { name: 'Booking request to Hotel Willow Banks' })).not.toBeInTheDocument()
+        expect(api.sendSupplierEmail).not.toHaveBeenCalled()
     })
 })

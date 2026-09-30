@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { Box, Button, CircularProgress, IconButton, Modal, Stack, Typography } from '@mui/material'
-import { Add, ArrowBack, Close, Send } from '@mui/icons-material'
+import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { Add, ArrowBack } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
 import AssignmentModal from '@/core/components/modals/AssignmentModal'
 import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal'
 import SupplierPaymentModal from '@/core/components/modals/SupplierPaymentModal'
 import {
     getConfirmedVoucherPreview,
+    getSupplierEmailPreview,
     useAddGuestPaymentMutation,
     useAddServiceToPackageMutation,
     useDeleteServiceMutation,
@@ -38,7 +39,7 @@ import {
     supplierMoney,
     urgency
 } from './bookingFacts'
-import { MoneyCard, PaymentRow, Section, ServiceRow, StepsBar } from './bookingParts'
+import { EmailPreview, MoneyCard, PaymentRow, Section, ServiceRow, StepsBar } from './bookingParts'
 
 const listOf = response => (Array.isArray(response?.data) ? response.data : [])
 
@@ -100,7 +101,19 @@ function BookingWorkspace() {
     const [guestPaymentOpen, setGuestPaymentOpen] = useState(false)
     const [supplierPayment, setSupplierPayment] = useState(null)
     const [busy, setBusy] = useState('')
-    const [preview, setPreview] = useState({ open: false, loading: false, html: '' })
+    // ? the email being checked before it is sent: the guest's voucher, or a booking request to a supplier
+    const closedMail = {
+        open: false,
+        loading: false,
+        kind: '',
+        service: null,
+        title: '',
+        to: '',
+        subject: '',
+        html: ''
+    }
+    const [mail, setMail] = useState(closedMail)
+    const closeMail = () => setMail(current => ({ ...current, open: false }))
 
     const lead = leadData?.data || {}
     const guest = guestData?.data || {}
@@ -196,25 +209,71 @@ function BookingWorkspace() {
     }
 
     const openPreview = async () => {
-        setPreview({ open: true, loading: true, html: '' })
+        setMail({
+            ...closedMail,
+            open: true,
+            loading: true,
+            kind: 'voucher',
+            title: 'Booking voucher',
+            to: lead.senderEmail
+        })
         const { data, error } = await dispatch(getConfirmedVoucherPreview.initiate(packageId, { forceRefetch: true }))
         if (error) {
-            setPreview({ open: false, loading: false, html: '' })
+            setMail(closedMail)
             notify(errorText(error, 'Couldn’t load the voucher.'), 'error')
             return
         }
-        setPreview({ open: true, loading: false, html: data?.data?.html || '' })
+        setMail(current => ({ ...current, loading: false, html: data?.data?.html || '' }))
     }
 
-    const sendVoucher = async () => {
-        const ok = await run(
-            'voucher',
-            () => sendVoucherEmail(packageId).unwrap(),
-            `Voucher emailed to ${guestName}`,
-            'Couldn’t send the voucher.'
-        )
-        if (ok) setPreview(current => ({ ...current, open: false }))
+    const openSupplierEmail = async service => {
+        const name = service.supplier?.businessname || 'the supplier'
+        setMail({
+            ...closedMail,
+            open: true,
+            loading: true,
+            kind: 'supplier',
+            service,
+            title: `Booking request to ${name}`
+        })
+        const { data, error } = await dispatch(getSupplierEmailPreview.initiate(service.id, { forceRefetch: true }))
+        if (error) {
+            setMail(closedMail)
+            notify(errorText(error, 'Couldn’t prepare the email.'), 'error')
+            return
+        }
+        const email = data?.data || {}
+        setMail(current => ({
+            ...current,
+            loading: false,
+            to: email.to || '',
+            subject: email.subject || '',
+            html: email.html || ''
+        }))
     }
+
+    const sendMail = async () => {
+        const { kind, service } = mail
+        const ok =
+            kind === 'voucher'
+                ? await run(
+                      'voucher',
+                      () => sendVoucherEmail(packageId).unwrap(),
+                      `Voucher emailed to ${guestName}`,
+                      'Couldn’t send the voucher.'
+                  )
+                : await run(
+                      `email-${service.id}`,
+                      () => sendSupplierEmail(service.id).unwrap(),
+                      `Booking request emailed to ${service.supplier?.businessname || 'the supplier'}`,
+                      'Couldn’t email the supplier.'
+                  )
+        if (ok) closeMail()
+    }
+
+    let mailSendLabel = 'Send'
+    if (mail.to) mailSendLabel = `Send to ${mail.to}`
+    else if (mail.kind === 'voucher') mailSendLabel = 'No guest email on this lead'
 
     const doNext = () => {
         if (!step) return
@@ -283,14 +342,7 @@ function BookingWorkspace() {
                                 service={service}
                                 emailing={busy === `email-${service.id}`}
                                 onPay={setSupplierPayment}
-                                onEmail={item =>
-                                    run(
-                                        `email-${item.id}`,
-                                        () => sendSupplierEmail(item.id).unwrap(),
-                                        `Booking request emailed to ${item.supplier?.businessname || 'the supplier'}`,
-                                        'Couldn’t email the supplier.'
-                                    )
-                                }
+                                onEmail={openSupplierEmail}
                                 onEdit={item => openServiceForm(type, item)}
                                 onRemove={item =>
                                     run(
@@ -617,79 +669,19 @@ function BookingWorkspace() {
                 onSave={saveSupplierPayment}
             />
 
-            <Modal open={preview.open} onClose={() => setPreview(current => ({ ...current, open: false }))}>
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: { xs: '100vw', sm: '85vw' },
-                        maxWidth: 900,
-                        height: { xs: '100dvh', sm: '85vh' },
-                        bgcolor: 'background.paper',
-                        borderRadius: { xs: 0, sm: 2 },
-                        boxShadow: 24,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        '& .MuiButton-root': { textTransform: 'none' }
-                    }}
-                >
-                    <Stack
-                        direction='row'
-                        alignItems='center'
-                        justifyContent='space-between'
-                        sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}
-                    >
-                        <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>Booking voucher</Typography>
-                            {lead.senderEmail ? (
-                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
-                                    To {lead.senderEmail}
-                                </Typography>
-                            ) : null}
-                        </Box>
-                        <IconButton
-                            aria-label='Close'
-                            onClick={() => setPreview(current => ({ ...current, open: false }))}
-                        >
-                            <Close />
-                        </IconButton>
-                    </Stack>
-                    <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                        {preview.loading ? (
-                            <Box
-                                sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                                <CircularProgress />
-                            </Box>
-                        ) : (
-                            <iframe
-                                srcDoc={preview.html}
-                                title='Booking voucher'
-                                style={{ width: '100%', height: '100%', border: 'none' }}
-                            />
-                        )}
-                    </Box>
-                    <Stack
-                        direction='row'
-                        justifyContent='flex-end'
-                        spacing={2}
-                        sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}
-                    >
-                        <Button onClick={() => setPreview(current => ({ ...current, open: false }))}>Cancel</Button>
-                        <Button
-                            variant='contained'
-                            startIcon={busy === 'voucher' ? <CircularProgress size={16} color='inherit' /> : <Send />}
-                            disabled={busy === 'voucher' || preview.loading || !lead.senderEmail}
-                            onClick={sendVoucher}
-                        >
-                            {lead.senderEmail ? `Send to ${lead.senderEmail}` : 'No guest email on this lead'}
-                        </Button>
-                    </Stack>
-                </Box>
-            </Modal>
+            <EmailPreview
+                open={mail.open}
+                title={mail.title || 'Email'}
+                to={mail.to || ''}
+                subject={mail.subject}
+                html={mail.html}
+                loading={mail.loading}
+                sending={busy === 'voucher' || (mail.service ? busy === `email-${mail.service.id}` : false)}
+                canSend={Boolean(mail.to)}
+                sendLabel={mailSendLabel}
+                onClose={closeMail}
+                onSend={sendMail}
+            />
         </MainCard>
     )
 }

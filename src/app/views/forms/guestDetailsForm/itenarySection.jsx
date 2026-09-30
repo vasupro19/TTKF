@@ -567,7 +567,9 @@ export default function ItinerarySection({
                     </Box>
                     {HOTEL_TIERS.some(tier => formatRupees(priceData?.[tier.priceKey])) ? (
                         <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2.5 }}>
-                            <Typography sx={{ fontWeight: 600, mb: 1 }}>Price per person</Typography>
+                            <Typography sx={{ fontWeight: 600, mb: 1 }}>
+                                {priceData?.priceBasis === 'total' ? 'Total price' : 'Price per person'}
+                            </Typography>
                             <Stack direction='row' spacing={3} flexWrap='wrap' useFlexGap>
                                 {HOTEL_TIERS.filter(tier => formatRupees(priceData?.[tier.priceKey])).map(tier => (
                                     <Box key={tier.key}>
