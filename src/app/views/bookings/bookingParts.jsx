@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import PropTypes from 'prop-types'
-import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
-import { CheckCircle, RadioButtonUnchecked } from '@mui/icons-material'
+import { Box, Button, CircularProgress, IconButton, Modal, Stack, Typography } from '@mui/material'
+import { CheckCircle, Close, RadioButtonUnchecked, Send } from '@mui/icons-material'
 import { STEPS, amount, dateRange, rupees, shortDate } from './bookingFacts'
 import { paymentShape, serviceShape } from './bookingShapes'
 
@@ -182,7 +182,7 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
                             disabled={emailing}
                             startIcon={emailing ? <CircularProgress size={14} color='inherit' /> : null}
                         >
-                            {emailing ? 'Sending…' : 'Email supplier'}
+                            {emailing ? 'Sending…' : `Email ${service.type === 'Hotel' ? 'hotel' : 'transporter'}`}
                         </Button>
                         <Button size='small' onClick={() => onEdit(service)}>
                             Edit
@@ -231,3 +231,110 @@ export function PaymentRow({ payment }) {
 }
 
 PaymentRow.propTypes = { payment: paymentShape.isRequired }
+
+/**
+ * An email exactly as it will be sent — the voucher to the guest, or a booking request to a hotel or transporter —
+ * with the recipient and subject, and a button to send it.
+ */
+export function EmailPreview({
+    open,
+    title,
+    to = '',
+    subject = '',
+    html = '',
+    loading = false,
+    sending = false,
+    sendLabel,
+    canSend = true,
+    onClose,
+    onSend
+}) {
+    return (
+        <Modal open={open} onClose={onClose}>
+            <Box
+                role='dialog'
+                aria-label={title}
+                sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: { xs: '100vw', sm: '85vw' },
+                    maxWidth: 900,
+                    height: { xs: '100dvh', sm: '85vh' },
+                    bgcolor: 'background.paper',
+                    borderRadius: { xs: 0, sm: 2 },
+                    boxShadow: 24,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    '& .MuiButton-root': { textTransform: 'none' }
+                }}
+            >
+                <Stack
+                    direction='row'
+                    alignItems='flex-start'
+                    justifyContent='space-between'
+                    spacing={2}
+                    sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+                >
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>{title}</Typography>
+                        {to ? (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
+                                To {to}
+                            </Typography>
+                        ) : null}
+                        {subject ? (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
+                                Subject: {subject}
+                            </Typography>
+                        ) : null}
+                    </Box>
+                    <IconButton aria-label='Close' onClick={onClose}>
+                        <Close />
+                    </IconButton>
+                </Stack>
+                <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'grey.50' }}>
+                    {loading ? (
+                        <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <CircularProgress aria-label='Loading the email' />
+                        </Box>
+                    ) : (
+                        <iframe srcDoc={html} title={title} style={{ width: '100%', height: '100%', border: 'none' }} />
+                    )}
+                </Box>
+                <Stack
+                    direction='row'
+                    justifyContent='flex-end'
+                    spacing={2}
+                    sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}
+                >
+                    <Button onClick={onClose}>Cancel</Button>
+                    <Button
+                        variant='contained'
+                        startIcon={sending ? <CircularProgress size={16} color='inherit' /> : <Send />}
+                        disabled={sending || loading || !canSend}
+                        onClick={onSend}
+                    >
+                        {sendLabel}
+                    </Button>
+                </Stack>
+            </Box>
+        </Modal>
+    )
+}
+
+EmailPreview.propTypes = {
+    open: PropTypes.bool.isRequired,
+    title: PropTypes.string.isRequired,
+    to: PropTypes.string,
+    subject: PropTypes.string,
+    html: PropTypes.string,
+    loading: PropTypes.bool,
+    sending: PropTypes.bool,
+    sendLabel: PropTypes.string.isRequired,
+    canSend: PropTypes.bool,
+    onClose: PropTypes.func.isRequired,
+    onSend: PropTypes.func.isRequired
+}

@@ -4,8 +4,22 @@ import { Box, Button, Grid, TextField, Autocomplete, Typography, CircularProgres
 import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert'
 
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
+import { formatRupees } from './quote/quoteDays'
+import { TOTAL, groupPrice, guestsLabel, priceBasisOf } from './quote/pricing'
 
-function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData = null }) {
+const CATEGORIES = ['deluxePrice', 'superDeluxePrice', 'luxuryPrice', 'premiumPrice']
+const CATEGORY_LABELS = {
+    deluxePrice: 'Deluxe',
+    superDeluxePrice: 'Super Deluxe',
+    luxuryPrice: 'Luxury',
+    premiumPrice: 'Premium'
+}
+
+/**
+ * Books one quote. A per-person price is multiplied by the guests (adults and children) to give what the client
+ * pays; a total price is used as it is. The agent can still change the final amount.
+ */
+function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData = null, people = 0 }) {
     const [convertPackage, { isLoading }] = useConvertPackageMutation()
     const [formData, setFormData] = useState({
         leadId,
@@ -18,14 +32,34 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
         setFormData(prev => ({ ...prev, [field]: value }))
     }
 
+    const basis = priceBasisOf(priceData?.priceBasis)
+    const priceOf = key => Number(priceData?.[key]) || 0
+    // ? only the categories this quote was priced in; all four when none is priced yet
+    const priced = CATEGORIES.filter(key => priceOf(key) > 0)
+    const options = priced.length ? priced : CATEGORIES
+    const optionLabel = key => {
+        const shown = formatRupees(priceOf(key) || '')
+        if (!priceOf(key)) return CATEGORY_LABELS[key] || key
+        return `${CATEGORY_LABELS[key]} · ${shown}${basis === TOTAL ? ' for the group' : ' per person'}`
+    }
+
     const handlePackageSelect = value => {
-        // Auto-fill price from priceData based on selection (e.g., deluxePrice)
-        const price = priceData && value ? priceData[value] : ''
+        const total = value ? groupPrice(priceOf(value), basis, people) : 0
         setFormData(prev => ({
             ...prev,
             selectedPackage: value ?? null,
-            sellingPrice: price || ''
+            sellingPrice: total ? String(total) : ''
         }))
+    }
+
+    // ? how the amount was worked out, so the agent can check it before booking
+    let working = 'This is the price the client will pay.'
+    const chosen = formData.selectedPackage ? priceOf(formData.selectedPackage) : 0
+    if (chosen && basis === TOTAL) working = 'The total for the group, as quoted.'
+    else if (chosen && people) {
+        working = `${formatRupees(chosen)} per person × ${guestsLabel(people)} = ${formatRupees(chosen * people)}`
+    } else if (chosen) {
+        working = `${formatRupees(chosen)} per person. Add the guests in trip details to multiply by them.`
     }
 
     const handleSaveAction = async () => {
@@ -74,32 +108,24 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
                 <Grid container spacing={3}>
                     <Grid item xs={12}>
                         <Autocomplete
-                            options={['deluxePrice', 'superDeluxePrice', 'luxuryPrice', 'premiumPrice']}
+                            options={options}
                             value={formData.selectedPackage}
                             onChange={(e, value) => handlePackageSelect(value)}
                             isOptionEqualToValue={(option, val) => option === val}
-                            getOptionLabel={option => {
-                                const labels = {
-                                    deluxePrice: 'Deluxe',
-                                    superDeluxePrice: 'Super Deluxe',
-                                    luxuryPrice: 'Luxury',
-                                    premiumPrice: 'Premium'
-                                }
-                                return labels[option] || option
-                            }}
+                            getOptionLabel={optionLabel}
                             // eslint-disable-next-line react/jsx-props-no-spreading
-                            renderInput={params => <TextField {...params} label='Select Package Category' fullWidth />}
+                            renderInput={params => <TextField {...params} label='Hotel category' fullWidth />}
                         />
                     </Grid>
 
                     <Grid item xs={12}>
                         <TextField
                             fullWidth
-                            label='Final Selling Price'
+                            label='Final selling price'
                             type='number'
                             value={formData.sellingPrice}
                             onChange={e => handleChange('sellingPrice', e.target.value)}
-                            helperText='This is the price the client will pay.'
+                            helperText={working}
                         />
                     </Grid>
 
@@ -109,7 +135,7 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
                             fullWidth
                             color='success'
                             size='large'
-                            disabled={isLoading || !formData.selectedPackage}
+                            disabled={isLoading || !formData.selectedPackage || !(Number(formData.sellingPrice) > 0)}
                             onClick={handleSaveAction}
                             sx={{ py: 1.5, fontWeight: 'bold', borderRadius: '10px' }}
                         >
@@ -127,7 +153,8 @@ PackageConversion.propTypes = {
     setIsOpen: PropTypes.func.isRequired,
     leadId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     quotationNo: PropTypes.number.isRequired,
-    priceData: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number]))
+    priceData: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+    people: PropTypes.number
 }
 
 export default PackageConversion

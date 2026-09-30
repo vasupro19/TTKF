@@ -19,7 +19,8 @@ export const priceShape = shape({
     deluxePrice: oneOfType([number, string]),
     superDeluxePrice: oneOfType([number, string]),
     luxuryPrice: oneOfType([number, string]),
-    premiumPrice: oneOfType([number, string])
+    premiumPrice: oneOfType([number, string]),
+    priceBasis: string
 })
 
 export const confirmedShape = shape({
