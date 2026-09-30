@@ -43,6 +43,7 @@ import {
 } from '@/app/store/slices/api/destinationSlice'
 import { useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
+import { useGetGuestQuotesQuery, useSetGuestQuoteCampaignMutation } from '@/app/store/slices/api/guestQuote'
 
 import { openSnackbar } from '@app/store/slices/snackbar'
 
@@ -264,9 +265,24 @@ function GuestForm() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, leadId])
 
-    const quotes = availableQuotes.includes(currentQuoteNo)
-        ? availableQuotes
-        : [...availableQuotes, currentQuoteNo].sort((a, b) => a - b)
+    // ? the trip picked for each quote, kept on the server (GuestQuote); `justSaved` shows a pick before the refetch
+    const { data: savedQuotesData, refetch: refetchSavedQuotes } = useGetGuestQuotesQuery(leadId, { skip: !leadId })
+    const [setGuestQuoteCampaign, { isLoading: savingQuoteCampaign }] = useSetGuestQuoteCampaignMutation()
+    const [justSaved, setJustSaved] = useState({})
+    const savedQuoteCampaigns = {
+        ...Object.fromEntries(
+            (Array.isArray(savedQuotesData?.data) ? savedQuotesData.data : []).map(item => [
+                Number(item.quoteNo),
+                Number(item.campaignId) || null
+            ])
+        ),
+        ...justSaved
+    }
+
+    // ? a quote made with its trip picked but no days yet is still a quote after a reload
+    const quotes = [
+        ...new Set([...availableQuotes, ...Object.keys(savedQuoteCampaigns).map(Number), currentQuoteNo])
+    ].sort((a, b) => a - b)
     const daysOfQuote = quoteNo => quoteDays.filter(item => (item.fullItem?.quoteNo || 1) === quoteNo).sort(byOrder)
     const currentDays = daysOfQuote(currentQuoteNo)
 
@@ -275,19 +291,47 @@ function GuestForm() {
     const { data: campaignsData } = useGetCampaignsQuery()
     const campaigns = (campaignsData?.data || []).map(item => ({ id: Number(item.id), title: item.title }))
     const leadCampaignId = Number(leadData?.data?.campaignId) || null
-    // ? the campaign picked for a quote that has no days yet; once it has days, they decide
+    // ? the trip the agent picked wins (the server uses it too — Helpers/quoteCampaign.helper.js). A quote with
+    // ? none saved — made before this, or in a workspace not updated yet — takes its days' campaign; the pick
+    // ? kept only in this page covers a quote with no days
     const [chosenQuoteCampaigns, setChosenQuoteCampaigns] = useState({})
     const campaignOfQuote = quoteNo =>
-        campaignOfDays(daysOfQuote(quoteNo), leadCampaignId) || chosenQuoteCampaigns[quoteNo] || leadCampaignId
+        savedQuoteCampaigns[quoteNo] ||
+        campaignOfDays(daysOfQuote(quoteNo), leadCampaignId) ||
+        chosenQuoteCampaigns[quoteNo] ||
+        leadCampaignId
     const campaignTitle = id => campaigns.find(item => item.id === Number(id))?.title || ''
     const currentCampaignId = campaignOfQuote(currentQuoteNo)
     const quoteCampaigns = Object.fromEntries(quotes.map(quoteNo => [quoteNo, campaignTitle(campaignOfQuote(quoteNo))]))
 
+    const saveQuoteCampaign = async (quoteNo, campaignId, { quiet = false } = {}) => {
+        try {
+            await setGuestQuoteCampaign({ leadId: Number(leadId), quoteNo, campaignId }).unwrap()
+            setJustSaved(current => ({ ...current, [quoteNo]: campaignId }))
+            refetchSavedQuotes()
+            return true
+        } catch (error) {
+            if (!quiet) notify(error?.data?.message || 'Couldn’t save the trip for this quote.', 'error')
+            return false
+        }
+    }
+
     const handleNewQuote = campaignId => {
         const nextQuoteNo = Math.max(...quotes) + 1
+        const id = Number(campaignId) || leadCampaignId
         setAvailableQuotes([...quotes, nextQuoteNo])
-        setChosenQuoteCampaigns(current => ({ ...current, [nextQuoteNo]: Number(campaignId) || leadCampaignId }))
+        setChosenQuoteCampaigns(current => ({ ...current, [nextQuoteNo]: id }))
         setCurrentQuoteNo(nextQuoteNo)
+        // ? with one campaign there was no choice to report on, so a workspace not updated yet stays quiet
+        if (id) saveQuoteCampaign(nextQuoteNo, id, { quiet: campaigns.length < 2 })
+    }
+
+    const handleQuoteCampaignChange = async campaignId => {
+        const id = Number(campaignId)
+        if (!id || id === currentCampaignId) return
+        if (await saveQuoteCampaign(currentQuoteNo, id)) {
+            notify(`Quote ${currentQuoteNo} is now for ${campaignTitle(id)}`)
+        }
     }
 
     const applyPackage = async pkg => {
@@ -1012,6 +1056,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                         quoteCampaigns={quoteCampaigns}
                         currentCampaignId={currentCampaignId}
                         leadCampaignId={leadCampaignId}
+                        onChangeQuoteCampaign={handleQuoteCampaignChange}
+                        savingQuoteCampaign={savingQuoteCampaign}
                         tripLine={tripSummary(tripValues)}
                         onEditTrip={() => setActiveTab(0)}
                         startDate={tripValues.pickupDate}

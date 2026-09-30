@@ -293,6 +293,8 @@ export default function ItinerarySection({
     quoteCampaigns = {},
     currentCampaignId = null,
     leadCampaignId = null,
+    onChangeQuoteCampaign = () => {},
+    savingQuoteCampaign = false,
     tripLine = '',
     onEditTrip,
     startDate = '',
@@ -359,11 +361,31 @@ export default function ItinerarySection({
                         Edit trip details
                     </Button>
                 </Stack>
-                {currentCampaignId && leadCampaignId && currentCampaignId !== leadCampaignId ? (
-                    <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: -1 }}>
-                        Quote {currentQuoteNo} is for {quoteCampaigns[currentQuoteNo] || 'another campaign'}: its
-                        inclusions, notes and bank details come from that campaign.
-                    </Typography>
+                {campaigns.length > 1 ? (
+                    <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={{ xs: 1, sm: 1.5 }}
+                        alignItems={{ sm: 'center' }}
+                    >
+                        <TextField
+                            select
+                            size='small'
+                            label={`Trip for Quote ${currentQuoteNo}`}
+                            value={campaigns.some(item => item.id === currentCampaignId) ? currentCampaignId : ''}
+                            onChange={event => onChangeQuoteCampaign(event.target.value)}
+                            disabled={savingQuoteCampaign}
+                            sx={{ minWidth: 220 }}
+                        >
+                            {campaigns.map(campaign => (
+                                <MenuItem key={campaign.id} value={campaign.id}>
+                                    {campaign.title}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }}>
+                            This trip’s inclusions, exclusions, notes and bank details go on Quote {currentQuoteNo}.
+                        </Typography>
+                    </Stack>
                 ) : null}
             </Stack>
 
@@ -571,6 +593,8 @@ ItinerarySection.propTypes = {
     quoteCampaigns: PropTypes.objectOf(PropTypes.string),
     currentCampaignId: PropTypes.number,
     leadCampaignId: PropTypes.number,
+    onChangeQuoteCampaign: PropTypes.func,
+    savingQuoteCampaign: PropTypes.bool,
     quotes: PropTypes.arrayOf(PropTypes.number).isRequired,
     currentQuoteNo: PropTypes.number.isRequired,
     onSelectQuote: PropTypes.func.isRequired,
