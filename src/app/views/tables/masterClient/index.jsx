@@ -35,7 +35,9 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 // import { SettingsGearAnimIcon } from '@/assets/icons/SettingsGearAnimIcon'
 import SettingsIcon from '@mui/icons-material/Settings'
+import KeyIcon from '@mui/icons-material/Key'
 import { headers } from './helper'
+import AiKeysDialog from './AiKeysDialog'
 
 // const slimTextFieldStyle = {
 //     '& .MuiInputBase-input': {
@@ -58,6 +60,8 @@ function MasterClientTable() {
     const [users, setUsers] = useState([])
     const [removeId, setRemoveId] = useState(null)
     const [isActive, setIsActive] = useState(true)
+    // ? the client whose AI keys are open
+    const [aiClient, setAiClient] = useState(null)
 
     const [excelHandler, setExcelHandler] = useState(false)
     const [search, setSearch] = useState({
@@ -163,6 +167,12 @@ function MasterClientTable() {
                 label: 'Edit',
                 icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
                 onClick: row => editHandler(row.id, row),
+                condition: row => hasEditAccess
+            },
+            {
+                label: 'AI keys',
+                icon: <KeyIcon fontSize='small' sx={{ color: 'primary.main' }} />,
+                onClick: row => setAiClient({ id: Number(row.id), name: row.name }),
                 condition: row => hasEditAccess
             },
             {
@@ -327,6 +337,20 @@ function MasterClientTable() {
                                 </IconButton>
                             </UiAccessGuard>
 
+                            {/* the client's own AI keys */}
+                            <UiAccessGuard type='edit'>
+                                <IconButton
+                                    sx={{ color: 'primary.main' }}
+                                    size='small'
+                                    aria-label={`AI keys for ${row.name || 'this client'}`}
+                                    onClick={() => setAiClient({ id: Number(row.id), name: row.name })}
+                                >
+                                    <Tooltip title='AI keys'>
+                                        <KeyIcon fontSize='small' />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
+
                             {/* Gear Icon Button */}
                             <UiAccessGuard type='edit'>
                                 <IconButton
@@ -378,6 +402,7 @@ function MasterClientTable() {
                     onConfirm={handle}
                     isLoading={removeClientLKey}
                 /> */}
+                <AiKeysDialog open={Boolean(aiClient)} client={aiClient} onClose={() => setAiClient(null)} />
             </MainCard>
         </ContextMenuProvider>
     )
