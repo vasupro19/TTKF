@@ -57,9 +57,10 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['confirmedBooking']
         }),
 
+        // ? every booking (the dashboard's figures)
         getAllConfirmedPackages: build.query({
-            query: () => ({
-                url: '/package',
+            query: (query = '') => ({
+                url: `/package${typeof query === 'string' ? query : ''}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['confirmedBooking']
@@ -88,6 +89,20 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 }
             },
             invalidatesTags: ['ServiceList', 'confirmedBooking']
+        }),
+
+        // ? one page of the bookings list: `{ page, pageSize, stage, q }` → rows, how many match, and the chip counts
+        getBookingsPage: build.query({
+            query: ({ page = 0, pageSize = 25, stage = 'all', q = '' } = {}) => {
+                const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+                if (stage && stage !== 'all') params.set('stage', stage)
+                if (q) params.set('q', q)
+                return {
+                    url: `/package?${params.toString()}`,
+                    responseHandler: async result => customResponseHandler({ result })
+                }
+            },
+            providesTags: ['confirmedBooking']
         }),
 
         // === SEND SUPPLIER EMAIL ===
@@ -210,6 +225,7 @@ export const {
     useDownloadConfirmedVoucherPdfMutation,
     useGetGuestPaymentHistoryQuery,
     useGetPackageByLeadIdQuery,
+    useGetBookingsPageQuery,
     endpoints: {
         getConfirmedBooking,
         convertPackage,

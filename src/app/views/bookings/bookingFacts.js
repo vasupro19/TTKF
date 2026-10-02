@@ -122,30 +122,3 @@ export const dateRange = (start, end) => {
     if (from && to && from !== to) return `${from} – ${to}`
     return from || to
 }
-
-/**
- * @description the list's rows: searched, filtered by stage, the soonest trip first (bookings without a date last)
- */
-export const visibleBookings = (rows, { stage = 'all', search = '' } = {}) => {
-    const words = search.trim().toLowerCase()
-    return rows
-        .map(row => {
-            const progress = progressOf({ booking: row })
-            return { row, progress, stage: stageOf(progress) }
-        })
-        .filter(item => stage === 'all' || item.stage === stage)
-        .filter(
-            item =>
-                !words ||
-                [item.row.guestName, item.row.phone, item.row.email, item.row.selectedPackage]
-                    .filter(Boolean)
-                    .some(value => String(value).toLowerCase().includes(words))
-        )
-        .sort((a, b) => {
-            const left = toDate(a.row.travelDate)?.getTime() ?? Infinity
-            const right = toDate(b.row.travelDate)?.getTime() ?? Infinity
-            // ? two undated bookings keep the server's order (newest first)
-            if (left === right) return 0
-            return left < right ? -1 : 1
-        })
-}

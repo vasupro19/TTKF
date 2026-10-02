@@ -8,6 +8,9 @@ const api = vi.hoisted(() => {
     const call = () => vi.fn(() => ({ unwrap: () => Promise.resolve({ success: true }) }))
     return {
         list: [],
+        count: 0,
+        summary: null,
+        pageArgs: [],
         booking: null,
         hotels: [],
         taxis: [],
@@ -41,7 +44,10 @@ vi.mock('react-redux', () => ({
 }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
-    useGetAllConfirmedPackagesQuery: () => query({ data: api.list }),
+    useGetBookingsPageQuery: args => {
+        api.pageArgs.push(args)
+        return query({ data: api.list, count: api.count, summary: api.summary })
+    },
     useGetPackageByLeadIdQuery: () => query({ data: api.booking }),
     useGetServicesByPackageQuery: ({ type }) => query({ data: type === 'Hotel' ? api.hotels : api.taxis }),
     useGetGuestPaymentHistoryQuery: () => query({ data: api.payments }),
@@ -116,6 +122,9 @@ beforeEach(() => {
         listRow({ bookingNo: 'TTK-B-261002-003' }),
         listRow({ id: 2, leadId: 12, guestName: 'Rohan Das', hotelAssigned: false, guestPaidAmount: 0 })
     ]
+    api.count = 2
+    api.summary = { total: 2, toCollect: 135000, stages: { action: 1, progress: 1, ready: 0 } }
+    api.pageArgs = []
     api.booking = {
         id: 1,
         bookingNo: 'TTK-B-261002-003',
@@ -164,12 +173,16 @@ beforeEach(() => {
 })
 
 describe('Bookings list', () => {
-    test('each booking shows its money and its next step; filters and search narrow the list', () => {
+    const renderList = () =>
         render(
             <MemoryRouter>
                 <BookingsPage />
             </MemoryRouter>
         )
+    const lastArgs = () => api.pageArgs[api.pageArgs.length - 1]
+
+    test('each booking shows its number, money and next step, with every booking’s counts', () => {
+        renderList()
         expect(
             screen.getByText('2 bookings · ₹1,35,000 still to collect from guests · 1 not started')
         ).toBeInTheDocument()
@@ -177,15 +190,37 @@ describe('Bookings list', () => {
         const asha = screen.getByRole('button', { name: 'Open the booking for Asha Verma' })
         expect(within(asha).getByText('Next: Add transport')).toBeInTheDocument()
         expect(within(asha).getByText(/12 Dec 2026 – 17 Dec 2026 · Deluxe · Quote 1/)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /Not started\s*1/ })).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: /Not started/ }))
-        expect(screen.queryByRole('button', { name: 'Open the booking for Asha Verma' })).not.toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Open the booking for Rohan Das' })).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole('button', { name: /^All/ }))
-        fireEvent.change(screen.getByLabelText('Search bookings'), { target: { value: 'rohan' } })
         fireEvent.click(screen.getByRole('button', { name: 'Open the booking for Rohan Das' }))
         expect(navigate).toHaveBeenCalledWith('/process/packages/12')
+    })
+
+    test('the server is asked for one page: the stage chosen, then the search typed, from the first page', async () => {
+        renderList()
+        expect(lastArgs()).toEqual({ page: 0, pageSize: 25, stage: 'all', q: '' })
+
+        fireEvent.click(screen.getByRole('button', { name: /Not started/ }))
+        expect(lastArgs()).toMatchObject({ page: 0, stage: 'action' })
+
+        fireEvent.change(screen.getByLabelText('Search bookings'), { target: { value: ' rohan ' } })
+        await waitFor(() => expect(lastArgs()).toMatchObject({ page: 0, stage: 'action', q: 'rohan' }))
+    })
+
+    test('more than a page: which ones are shown, and the next page on request', () => {
+        api.count = 60
+        api.summary = { ...api.summary, total: 60 }
+        renderList()
+        expect(screen.getByText('1–25 of 60')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }))
+        expect(lastArgs()).toMatchObject({ page: 1 })
+    })
+
+    test('a search that matches nothing says so', () => {
+        api.list = []
+        api.count = 0
+        renderList()
+        expect(screen.getByText('No bookings match.')).toBeInTheDocument()
     })
 })
 
