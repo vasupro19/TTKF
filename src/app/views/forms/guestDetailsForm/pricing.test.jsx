@@ -4,7 +4,9 @@ import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
 import { groupPrice, headCount } from './quote/pricing'
 
-const api = vi.hoisted(() => ({ price: null, savePrices: vi.fn(), convert: vi.fn() }))
+const api = vi.hoisted(() => ({ price: null, savePrices: vi.fn(), convert: vi.fn(), navigate: vi.fn() }))
+
+vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => api.navigate }))
 
 vi.mock('react-redux', () => ({ useDispatch: () => vi.fn() }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
@@ -108,6 +110,8 @@ describe('booking a quote', () => {
                 })
             )
         )
+        // ? then on to the booking: hotels, transport, payments
+        await waitFor(() => expect(api.navigate).toHaveBeenCalledWith('/process/packages/7'))
     })
 
     test('a total price is booked as it is', async () => {

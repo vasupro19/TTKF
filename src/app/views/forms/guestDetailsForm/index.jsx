@@ -230,8 +230,9 @@ function GuestForm() {
     const [assistAi] = useAssistAiMutation()
     const { data: confirmedPackage } = useGetPackageByLeadIdQuery(leadId)
     const [shareLeadDetails, { isLoading }] = useShareLeadDetailsMutation()
-    const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery()
-    const { data: leadData } = useGetLeadByIdQuery(leadId)
+    // ? the list is paged at 25 by default, which hid older packages from the picker
+    const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery('?length=200')
+    const { data: leadData, refetch: refetchLead } = useGetLeadByIdQuery(leadId)
 
     const [quoteDays, setQuoteDays] = useState([])
     const [loadingDays, setLoadingDays] = useState(false)
@@ -289,7 +290,7 @@ function GuestForm() {
 
     // --- A quote's campaign: a guest can ask for Himachal as Quote 1 and Uttarakhand as Quote 2 ---
 
-    const { data: campaignsData } = useGetCampaignsQuery()
+    const { data: campaignsData } = useGetCampaignsQuery('?length=200')
     const campaigns = (campaignsData?.data || []).map(item => ({ id: Number(item.id), title: item.title }))
     const leadCampaignId = Number(leadData?.data?.campaignId) || null
     // ? the trip the agent picked wins (the server uses it too — Helpers/quoteCampaign.helper.js). A quote with
@@ -885,7 +886,14 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         setDestinationSearch(typeof selected === 'string' ? selected : selected?.name || '')
     }
 
-    const keyword = formData.destinationName || itenaries?.data?.find(i => i.id === formData.itenaryId)?.title || ''
+    // ? photos for the place once the agent stops typing — every keystroke used to search, and use up the limit
+    const typedKeyword =
+        formData.destinationName || itenaries?.data?.find(i => i.id === formData.itenaryId)?.title || ''
+    const [keyword, setKeyword] = useState('')
+    useEffect(() => {
+        const timer = setTimeout(() => setKeyword(typedKeyword), 600)
+        return () => clearTimeout(timer)
+    }, [typedKeyword])
     const { data: imageData, isLoading: loadingImages } = useGetTravelImagesQuery(keyword, {
         skip: !keyword || !openItenaryModal
     })
@@ -921,15 +929,16 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
             }).unwrap()
 
             setPreviewOpen(false)
-            notify(`Quote ${currentQuoteNo} emailed to the guest`)
+            // ? sending is queued: the quote section shows when it has gone, or why it has not
+            notify(`Quote ${currentQuoteNo} is on its way to ${leadData?.data?.senderEmail || 'the guest'}`)
+            setTimeout(() => refetchLead(), 8000)
         } catch (err) {
             notify(err.data?.message || 'Failed to send mail.', 'error')
         }
     }
 
+    // ? a PDF needs no phone number — only WhatsApp does; Gmail and Facebook leads often have none
     const handleDownloadPdf = async () => {
-        if (!leadData?.data?.phone) return
-
         try {
             notify('Generating the PDF…', 'info')
 
@@ -1041,6 +1050,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
 
                 {activeTab === 0 && !loadingTrip ? (
                     <TripDetailsStep
+                        enquiry={leadData?.data?.message || ''}
                         initialValues={tripValues}
                         isNew={!guestId}
                         onSave={saveTripDetails}
@@ -1089,6 +1099,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                         confirmedPackage={confirmedPackage?.data || null}
                         lastSharedQuoteNo={leadData?.data?.lastSharedQuoteNo || null}
                         lastSharedAt={leadData?.data?.lastSharedAt || null}
+                        lastShareStatus={leadData?.data?.lastShareStatus || null}
+                        lastShareError={leadData?.data?.lastShareError || null}
                         onPreview={handlePreview}
                         onDownloadPdf={handleDownloadPdf}
                         onWhatsApp={handleShareQuotation}
@@ -1224,9 +1236,13 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                             variant='contained'
                             startIcon={isLoading ? <CircularProgress size={16} color='inherit' /> : <Send />}
                             onClick={handleShare}
-                            disabled={isLoading || loadingPreview}
+                            disabled={isLoading || loadingPreview || !leadData?.data?.senderEmail}
                         >
-                            {isLoading ? 'Sending…' : `Send to ${leadData?.data?.senderEmail || 'the guest'}`}
+                            {isLoading && 'Sending…'}
+                            {!isLoading && leadData?.data?.senderEmail ? `Send to ${leadData.data.senderEmail}` : ''}
+                            {!isLoading && !leadData?.data?.senderEmail
+                                ? 'No email on this lead — add one to send'
+                                : ''}
                         </Button>
                     </Box>
                 </Box>

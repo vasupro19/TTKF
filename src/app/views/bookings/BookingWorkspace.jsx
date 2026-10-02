@@ -98,7 +98,14 @@ function BookingWorkspace() {
     const [downloadPdf] = useDownloadConfirmedVoucherPdfMutation()
 
     const [serviceForm, setServiceForm] = useState({ open: false, type: 'Hotel', row: null })
-    const [guestPaymentOpen, setGuestPaymentOpen] = useState(false)
+    const [guestPaymentOpen, setGuestPaymentState] = useState(false)
+    // ? one key for every try of one payment: the API records it once even if the reply is slow and it is sent again
+    const [paymentKey, setPaymentKey] = useState('')
+    const setGuestPaymentOpen = open => {
+        if (open)
+            setPaymentKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        setGuestPaymentState(open)
+    }
     const [supplierPayment, setSupplierPayment] = useState(null)
     const [busy, setBusy] = useState('')
     // ? the email being checked before it is sent: the guest's voucher, or a booking request to a supplier
@@ -208,7 +215,7 @@ function BookingWorkspace() {
     const saveGuestPayment = async formData => {
         const ok = await run(
             'guest-payment',
-            () => addGuestPayment({ packageId, ...formData }).unwrap(),
+            () => addGuestPayment({ packageId, ...formData, idempotencyKey: paymentKey }).unwrap(),
             'Payment recorded — a receipt is emailed to the guest',
             'Couldn’t record the payment.'
         )

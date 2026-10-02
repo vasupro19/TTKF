@@ -38,7 +38,8 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['confirmedBooking']
+            // ? the lead page's booking note reads 'ConfirmedPackage'; it stayed stale after booking
+            invalidatesTags: ['confirmedBooking', 'ConfirmedPackage']
         }),
 
         // === UPDATE BOOKING DETAILS ===
@@ -102,20 +103,23 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             }
         }),
         addGuestPayment: build.mutation({
-            query: payload => ({
+            // ? the same key for every try of one payment, so a retry after a slow reply is not recorded twice
+            query: ({ idempotencyKey, ...payload }) => ({
                 url: '/package/guest-payment',
                 method: 'POST',
-                body: payload // packageId, amount, paymentMethod, transactionId, remarks
+                body: payload, // packageId, amount, paymentMethod, transactionId, remarks
+                ...(idempotencyKey ? { headers: { 'x-idempotency-key': idempotencyKey } } : {})
             }),
             // This invalidates the Package list so the 'guestPaidAmount' and 'status' refresh automatically
-            invalidatesTags: ['ConfirmedPackage', 'PaymentHistory']
+            invalidatesTags: ['ConfirmedPackage', 'PaymentHistory', 'GuestPayment', 'confirmedBooking']
         }),
         sendVoucherEmail: build.mutation({
             query: packageId => ({
                 url: `/package/send-email/${packageId}`,
                 method: 'POST'
-            })
-            // No need to invalidate tags unless the status changes to "Voucher Sent"
+            }),
+            // ? the booking becomes "Voucher Sent"
+            invalidatesTags: ['confirmedBooking', 'ConfirmedPackage']
         }),
         sendGuestHotelConfirmationEmail: build.mutation({
             query: packageId => {

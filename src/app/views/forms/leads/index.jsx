@@ -28,8 +28,9 @@ function LeadsForm() {
     const navigate = useNavigate()
     const dispatch = useDispatch()
 
-    const { data: users = [] } = useGetUsersQuery()
-    const { data: campaignsData = [] } = useGetCampaignsQuery()
+    // ? lists are paged at 25 by default: the 26th user or campaign could not be chosen
+    const { data: users = [] } = useGetUsersQuery('?length=200')
+    const { data: campaignsData = [] } = useGetCampaignsQuery('?length=200')
     const [editData, setEditData] = useState({})
     const { createLeadLKey, updateLeadLKey } = useSelector(state => state.loading)
     const { user } = useSelector(state => state.auth)
