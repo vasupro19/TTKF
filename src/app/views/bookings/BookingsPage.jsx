@@ -36,7 +36,8 @@ const rowShape = PropTypes.shape({
     selectedPackage: PropTypes.string,
     quotationNo: PropTypes.number,
     travelDate: PropTypes.string,
-    travelEnd: PropTypes.string
+    travelEnd: PropTypes.string,
+    bookingNo: PropTypes.string
 })
 
 function StagePill({ label, count, selected, onClick }) {
@@ -95,7 +96,13 @@ function BookingRow({ row, progress, onOpen }) {
                             {row.guestName || 'Guest'}
                         </Typography>
                         <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
-                            {[dates, row.selectedPackage, row.quotationNo ? `Quote ${row.quotationNo}` : '', row.phone]
+                            {[
+                                row.bookingNo,
+                                dates,
+                                row.selectedPackage,
+                                row.quotationNo ? `Quote ${row.quotationNo}` : '',
+                                row.phone
+                            ]
                                 .filter(value => value && value !== 'N/A')
                                 .join(' · ')}
                         </Typography>

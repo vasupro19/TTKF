@@ -1006,7 +1006,9 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         <MainCard
             sx={{ py: 2 }}
             contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}
-            title={guestName ? `Quotation · ${guestName}` : 'Quotation'}
+            title={
+                guestName ? ['Quotation', guestName, leadData?.data?.leadNo].filter(Boolean).join(' · ') : 'Quotation'
+            }
         >
             <Box
                 sx={{

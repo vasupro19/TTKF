@@ -164,7 +164,10 @@ function BookingWorkspace() {
             ? {
                   quantity: guest.rooms ? String(guest.rooms) : '',
                   roomType: guest.packageType || '',
-                  details: { mealPlan: guest.foodPlan || '' }
+                  details: {
+                      mealPlan: guest.foodPlan || '',
+                      extraBeds: Number(guest.extraBedding) > 0 ? String(guest.extraBedding) : ''
+                  }
               }
             : {
                   quantity: '1',
@@ -400,7 +403,7 @@ function BookingWorkspace() {
                     color='text.secondary'
                     sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600 }}
                 >
-                    BOOKING
+                    BOOKING{booking?.bookingNo ? ` · ${booking.bookingNo}` : ''}
                 </Typography>
                 <Typography component='h1' sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 600, mt: 0.5 }}>
                     {guestName}

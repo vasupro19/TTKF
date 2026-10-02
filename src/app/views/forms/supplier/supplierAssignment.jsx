@@ -31,7 +31,7 @@ const TAXI_DETAILS = {
     driverName: '',
     driverPhone: ''
 }
-const HOTEL_DETAILS = { mealPlan: '' }
+const HOTEL_DETAILS = { mealPlan: '', extraBeds: '', inclusions: '' }
 
 const dateOnly = value => (value ? new Date(value).toISOString().split('T')[0] : '')
 
@@ -193,6 +193,26 @@ function SupplierAssignmentForm({ type, onDataChange, row = null }) {
                                     </MenuItem>
                                 ))}
                             </TextField>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label='Extra beds / mattresses'
+                                type='number'
+                                value={formState.details.extraBeds}
+                                inputProps={{ min: 0, max: 99 }}
+                                onChange={e => updateDetail('extraBeds', e.target.value.replace(/[^0-9]/g, ''))}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label='Other inclusions'
+                                placeholder='e.g. Bonfire, welcome drink'
+                                value={formState.details.inclusions}
+                                inputProps={{ maxLength: 200 }}
+                                onChange={e => updateDetail('inclusions', e.target.value)}
+                            />
                         </Grid>
                     </>
                 ) : (
