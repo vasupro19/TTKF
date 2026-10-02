@@ -113,11 +113,12 @@ const listRow = over => ({
 beforeEach(() => {
     vi.clearAllMocks()
     api.list = [
-        listRow(),
+        listRow({ bookingNo: 'TTK-B-261002-003' }),
         listRow({ id: 2, leadId: 12, guestName: 'Rohan Das', hotelAssigned: false, guestPaidAmount: 0 })
     ]
     api.booking = {
         id: 1,
+        bookingNo: 'TTK-B-261002-003',
         leadId: 11,
         sellingPrice: '90000.00',
         guestPaidAmount: '45000.00',
@@ -172,6 +173,7 @@ describe('Bookings list', () => {
         expect(
             screen.getByText('2 bookings · ₹1,35,000 still to collect from guests · 1 not started')
         ).toBeInTheDocument()
+        expect(screen.getByText(/^TTK-B-261002-003 · /)).toBeInTheDocument()
         const asha = screen.getByRole('button', { name: 'Open the booking for Asha Verma' })
         expect(within(asha).getByText('Next: Add transport')).toBeInTheDocument()
         expect(within(asha).getByText(/12 Dec 2026 – 17 Dec 2026 · Deluxe · Quote 1/)).toBeInTheDocument()
@@ -200,6 +202,7 @@ describe('One booking', () => {
     test('progress, the next step, money, hotels and payments on one page', () => {
         renderBooking()
         expect(screen.getByRole('heading', { name: 'Asha Verma' })).toBeInTheDocument()
+        expect(screen.getByText('BOOKING · TTK-B-261002-003')).toBeInTheDocument()
         expect(screen.getByText(/12 Dec 2026 – 17 Dec 2026 · 2 adults, 1 child · Deluxe · Quote 1/)).toBeInTheDocument()
         expect(screen.getByText('1 of 5 done')).toBeInTheDocument()
         expect(screen.getByText('Next: Add transport')).toBeInTheDocument()

@@ -81,6 +81,11 @@ describe('hotel', () => {
         expect(screen.queryByLabelText('Vehicle type')).not.toBeInTheDocument()
 
         fireEvent.change(screen.getByLabelText('Room type'), { target: { value: 'Swiss tent' } })
-        expect(last()).toMatchObject({ roomType: 'Swiss tent', details: { mealPlan: 'MAP' } })
+        fireEvent.change(screen.getByLabelText('Extra beds / mattresses'), { target: { value: '2' } })
+        fireEvent.change(screen.getByLabelText('Other inclusions'), { target: { value: 'Bonfire' } })
+        expect(last()).toMatchObject({
+            roomType: 'Swiss tent',
+            details: { mealPlan: 'MAP', extraBeds: '2', inclusions: 'Bonfire' }
+        })
     })
 })

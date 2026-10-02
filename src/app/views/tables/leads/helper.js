@@ -13,6 +13,17 @@ export const headers = [
         align: 'center'
     },
     {
+        // ? e.g. TTK-L-261002-014: the agency's initials, the day the lead came in, its place that day
+        id: 20,
+        label: 'Lead no.',
+        search: false,
+        sort: false,
+        key: 'leadNo',
+        visible: true,
+        minWidth: 9,
+        maxWidth: 10
+    },
+    {
         id: 1,
         label: 'Name',
         search: true,
