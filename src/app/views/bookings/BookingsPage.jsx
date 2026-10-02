@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -8,6 +8,7 @@ import {
     CircularProgress,
     InputAdornment,
     LinearProgress,
+    Pagination,
     Stack,
     TextField,
     Typography
@@ -15,18 +16,8 @@ import {
 import { alpha } from '@mui/material/styles'
 import { CheckCircle, RadioButtonUnchecked, Search } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
-import { useGetAllConfirmedPackagesQuery } from '@/app/store/slices/api/packageConvert'
-import {
-    STAGES,
-    STEPS,
-    dateRange,
-    doneCount,
-    guestMoney,
-    nextStep,
-    rupees,
-    urgency,
-    visibleBookings
-} from './bookingFacts'
+import { useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
+import { STAGES, STEPS, dateRange, doneCount, guestMoney, nextStep, progressOf, rupees, urgency } from './bookingFacts'
 
 const rowShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
@@ -173,25 +164,46 @@ BookingRow.propTypes = {
     onOpen: PropTypes.func.isRequired
 }
 
+const PAGE_SIZE = 25
+
 /**
- * Confirmed bookings: where each one stands and what to do next, the soonest trip first. Everything about a
- * booking — hotels, transport, payments, voucher — is one click away on its own page.
+ * Confirmed bookings: where each one stands and what to do next, upcoming trips first. A page at a time — the server
+ * works out stage, search and order, and the chip counts — and everything about a booking (hotels, transport,
+ * payments, voucher) is one click away on its own page.
  */
 function BookingsPage() {
     const navigate = useNavigate()
-    const { data, isLoading, isFetching, isError, refetch } = useGetAllConfirmedPackagesQuery(undefined, {
-        refetchOnMountOrArgChange: true
-    })
     const [stage, setStage] = useState('all')
     const [search, setSearch] = useState('')
+    const [query, setQuery] = useState('')
+    const [page, setPage] = useState(0)
 
-    const rows = useMemo(() => (Array.isArray(data?.data) ? data.data : []), [data])
-    const everyBooking = useMemo(() => visibleBookings(rows), [rows])
-    const shown = useMemo(() => visibleBookings(rows, { stage, search }), [rows, stage, search])
-    const counts = Object.fromEntries(
-        STAGES.map(item => [item.key, everyBooking.filter(b => b.stage === item.key).length])
+    // ? search once the agent stops typing, from the first page
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setQuery(search.trim())
+            setPage(0)
+        }, 350)
+        return () => clearTimeout(timer)
+    }, [search])
+
+    const { data, isLoading, isFetching, isError, refetch } = useGetBookingsPageQuery(
+        { page, pageSize: PAGE_SIZE, stage, q: query },
+        { refetchOnMountOrArgChange: true }
     )
-    const toCollect = rows.reduce((sum, row) => sum + guestMoney(row).balance, 0)
+
+    const rows = Array.isArray(data?.data) ? data.data : []
+    const count = Number(data?.count) || 0
+    const summary = data?.summary || { total: 0, toCollect: 0, stages: {} }
+    const total = Number(summary.total) || 0
+    const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
+    const from = count ? page * PAGE_SIZE + 1 : 0
+    const to = Math.min(count, (page + 1) * PAGE_SIZE)
+
+    const chooseStage = key => {
+        setStage(key)
+        setPage(0)
+    }
 
     return (
         <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
@@ -212,8 +224,8 @@ function BookingsPage() {
                     Confirmed bookings
                 </Typography>
                 <Typography color='text.secondary' sx={{ fontSize: '1rem', mt: 0.5, mb: 3 }}>
-                    {rows.length
-                        ? `${rows.length} booking${rows.length === 1 ? '' : 's'} · ${rupees(toCollect)} still to collect from guests · ${counts.action} not started`
+                    {total
+                        ? `${total} booking${total === 1 ? '' : 's'} · ${rupees(summary.toCollect)} still to collect from guests · ${Number(summary.stages?.action) || 0} not started`
                         : 'A booking appears here when a quotation is converted.'}
                 </Typography>
 
@@ -233,26 +245,26 @@ function BookingsPage() {
                     >
                         <StagePill
                             label='All'
-                            count={rows.length}
+                            count={total}
                             selected={stage === 'all'}
-                            onClick={() => setStage('all')}
+                            onClick={() => chooseStage('all')}
                         />
                         {STAGES.map(item => (
                             <StagePill
                                 key={item.key}
                                 label={item.label}
-                                count={counts[item.key]}
+                                count={Number(summary.stages?.[item.key]) || 0}
                                 selected={stage === item.key}
-                                onClick={() => setStage(item.key)}
+                                onClick={() => chooseStage(item.key)}
                             />
                         ))}
                     </Stack>
                     <TextField
                         size='small'
-                        placeholder='Search guest, phone or email'
+                        placeholder='Search guest, phone, email or booking no.'
                         value={search}
                         onChange={event => setSearch(event.target.value)}
-                        sx={{ width: { xs: '100%', md: 300 } }}
+                        sx={{ width: { xs: '100%', md: 320 } }}
                         InputProps={{
                             inputProps: { 'aria-label': 'Search bookings' },
                             startAdornment: (
@@ -279,22 +291,45 @@ function BookingsPage() {
 
                 {!isLoading && !isError ? (
                     <>
-                        {shown.length ? (
+                        {rows.length ? (
                             <Box component='ul' sx={{ m: 0, p: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-                                {shown.map(item => (
+                                {rows.map(row => (
                                     <BookingRow
-                                        key={item.row.id}
-                                        row={item.row}
-                                        progress={item.progress}
-                                        onOpen={() => navigate(`/process/packages/${item.row.leadId}`)}
+                                        key={row.id}
+                                        row={row}
+                                        progress={progressOf({ booking: row })}
+                                        onOpen={() => navigate(`/process/packages/${row.leadId}`)}
                                     />
                                 ))}
                             </Box>
                         ) : (
                             <Typography color='text.secondary' sx={{ py: 4 }}>
-                                {rows.length ? 'No bookings match.' : 'No confirmed bookings yet.'}
+                                {total ? 'No bookings match.' : 'No confirmed bookings yet.'}
                             </Typography>
                         )}
+
+                        {count > PAGE_SIZE ? (
+                            <Stack
+                                direction={{ xs: 'column', sm: 'row' }}
+                                spacing={1.5}
+                                justifyContent='space-between'
+                                alignItems={{ sm: 'center' }}
+                                sx={{ mt: 2 }}
+                            >
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} role='status'>
+                                    {from}–{to} of {count}
+                                </Typography>
+                                <Pagination
+                                    count={pages}
+                                    page={page + 1}
+                                    onChange={(event, value) => setPage(value - 1)}
+                                    shape='rounded'
+                                    size='small'
+                                    aria-label='Pages of bookings'
+                                />
+                            </Stack>
+                        ) : null}
+
                         {isFetching ? (
                             <Typography color='text.secondary' sx={{ fontSize: '0.8125rem', mt: 1 }} role='status'>
                                 Updating…

@@ -1,14 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-    guestMoney,
-    nextStep,
-    progressOf,
-    rupees,
-    stageOf,
-    supplierMoney,
-    urgency,
-    visibleBookings
-} from './bookingFacts'
+import { guestMoney, nextStep, progressOf, rupees, stageOf, supplierMoney, urgency } from './bookingFacts'
 
 const row = over => ({
     id: 1,
@@ -76,18 +67,6 @@ describe('booking facts', () => {
             due: 30000
         })
         expect(rupees('125000.5')).toBe('₹1,25,000.5')
-    })
-
-    test('the list: filter by stage, search, the soonest trip first', () => {
-        const rows = [
-            row({ id: 1, guestName: 'Later', travelDate: '2026-12-20' }),
-            row({ id: 2, guestName: 'Undated' }),
-            row({ id: 3, guestName: 'Soon', travelDate: '2026-11-02', hotelAssigned: false })
-        ]
-        expect(visibleBookings(rows).map(item => item.row.guestName)).toEqual(['Soon', 'Later', 'Undated'])
-        expect(visibleBookings(rows, { stage: 'action' }).map(item => item.row.guestName)).toEqual(['Soon'])
-        expect(visibleBookings(rows, { search: '98765' })).toHaveLength(3)
-        expect(visibleBookings(rows, { search: 'undat' }).map(item => item.row.guestName)).toEqual(['Undated'])
     })
 
     test('a booking that is not ready and leaves within two weeks is flagged', () => {
