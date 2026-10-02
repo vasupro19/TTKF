@@ -36,7 +36,7 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
             open={open}
             onClose={onClose}
             fullWidth
-            maxWidth='xs'
+            maxWidth='sm'
             PaperProps={{ sx: { borderRadius: '12px', p: 1 } }}
         >
             <DialogTitle>

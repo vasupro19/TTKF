@@ -112,10 +112,15 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
     const paid = amount(service.paidAmount)
     const due = Math.max(0, cost - paid)
     const name = service.supplier?.businessname || 'Supplier'
+    const details = service.details || {}
+    const isHotel = service.type === 'Hotel'
     const facts = [
         dateRange(service.startDate, service.endDate),
-        service.type === 'Hotel' && service.quantity
-            ? `${service.quantity} room${service.quantity === 1 ? '' : 's'}`
+        isHotel && service.quantity ? `${service.quantity} room${service.quantity === 1 ? '' : 's'}` : '',
+        isHotel ? service.roomType : details.vehicleType,
+        isHotel ? details.mealPlan : [details.pickupPoint, details.dropPoint].filter(Boolean).join(' → '),
+        !isHotel && details.driverName
+            ? `Driver ${details.driverName}${details.driverPhone ? ` (${details.driverPhone})` : ''}`
             : '',
         service.supplier?.phone || ''
     ].filter(Boolean)
