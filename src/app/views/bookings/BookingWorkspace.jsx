@@ -158,8 +158,31 @@ function BookingWorkspace() {
         }
     }
 
+    // ? a new hotel or transport starts from the guest's trip details
+    const serviceDefaults = type =>
+        type === 'Hotel'
+            ? {
+                  quantity: guest.rooms ? String(guest.rooms) : '',
+                  roomType: guest.packageType || '',
+                  details: { mealPlan: guest.foodPlan || '' }
+              }
+            : {
+                  quantity: '1',
+                  startDate: guest.pickupDate ? new Date(guest.pickupDate).toISOString().split('T')[0] : '',
+                  endDate: guest.dropDate ? new Date(guest.dropDate).toISOString().split('T')[0] : '',
+                  details: {
+                      vehicleType: guest.taxiType && guest.taxiType !== 'None' ? guest.taxiType : '',
+                      pickupPoint: guest.pickupLocation || '',
+                      dropPoint: guest.dropLocation || ''
+                  }
+              }
+
     const openServiceForm = (type, row = null) =>
-        setServiceForm({ open: true, type, row: row ? { ...row, guestName } : { guestName } })
+        setServiceForm({
+            open: true,
+            type,
+            row: row ? { ...row, guestName } : { guestName, defaults: serviceDefaults(type) }
+        })
 
     const saveService = async formData => {
         const ok = await run(
