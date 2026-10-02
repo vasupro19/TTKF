@@ -122,7 +122,7 @@ const filled = value => value !== null && value !== undefined && String(value).t
  * Step 1 after a lead is verified: the trip in a few answers. Adults and the start date are the only
  * required ones — enough to quote — and the rest waits behind "More details" until the guest says it.
  */
-function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error = '' }) {
+function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error = '', enquiry = '' }) {
     const [showMore, setShowMore] = useState(() => hasMoreDetails(initialValues))
     // ? rooms follow the party size (two adults to a room) until the agent sets them
     const [roomsSetByAgent, setRoomsSetByAgent] = useState(() => filled(initialValues.rooms))
@@ -161,6 +161,31 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                 Only the number of adults and the start date are needed to build a quote. Add the rest whenever the
                 guest tells you.
             </Typography>
+
+            {String(enquiry || '').trim() ? (
+                // ? what the guest wrote (Facebook form answers, the email) — so it is read here, not typed again
+                <Box
+                    component='section'
+                    aria-label='The guest’s enquiry'
+                    sx={{
+                        mb: 4,
+                        p: 2,
+                        borderRadius: 2,
+                        bgcolor: 'grey.50',
+                        border: '1px solid',
+                        borderColor: 'divider'
+                    }}
+                >
+                    <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'text.secondary', mb: 0.5 }}>
+                        The guest’s enquiry
+                    </Typography>
+                    <Typography
+                        sx={{ fontSize: '0.9375rem', whiteSpace: 'pre-line', maxHeight: 180, overflowY: 'auto' }}
+                    >
+                        {String(enquiry).trim()}
+                    </Typography>
+                </Box>
+            ) : null}
 
             <Stack spacing={4}>
                 <Box>
@@ -288,7 +313,8 @@ TripDetailsStep.propTypes = {
     isNew: PropTypes.bool.isRequired,
     onSave: PropTypes.func.isRequired,
     saving: PropTypes.bool,
-    error: PropTypes.string
+    error: PropTypes.string,
+    enquiry: PropTypes.string
 }
 
 export default TripDetailsStep

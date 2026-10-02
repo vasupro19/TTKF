@@ -269,8 +269,11 @@ function BookingNote({ confirmed = null, currentQuoteNo }) {
 
 BookingNote.propTypes = { confirmed: confirmedShape, currentQuoteNo: PropTypes.number.isRequired }
 
-function sharedNote(lastSharedQuoteNo, lastSharedAt, currentQuoteNo) {
+function sharedNote(lastSharedQuoteNo, lastSharedAt, currentQuoteNo, status = null, error = null) {
     if (!lastSharedQuoteNo) return 'Not sent to the guest yet.'
+    if (status === 'Failed') {
+        return `The last email of Quote ${lastSharedQuoteNo} did not go${error ? ` (${error})` : ''}. Check the guest’s email and send again.`
+    }
     if (lastSharedQuoteNo !== currentQuoteNo) {
         return `The guest last got Quote ${lastSharedQuoteNo}. Sending this one sends a different version.`
     }
@@ -315,6 +318,8 @@ export default function ItinerarySection({
     confirmedPackage = null,
     lastSharedQuoteNo = null,
     lastSharedAt = null,
+    lastShareStatus = null,
+    lastShareError = null,
     onPreview,
     onDownloadPdf,
     onWhatsApp,
@@ -498,7 +503,13 @@ export default function ItinerarySection({
                             </Button>
                         </Stack>
                         <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: 1.5 }}>
-                            {sharedNote(lastSharedQuoteNo, lastSharedAt, currentQuoteNo)}
+                            {sharedNote(
+                                lastSharedQuoteNo,
+                                lastSharedAt,
+                                currentQuoteNo,
+                                lastShareStatus,
+                                lastShareError
+                            )}
                         </Typography>
                     </Box>
 
@@ -620,6 +631,8 @@ ItinerarySection.propTypes = {
     priceData: priceShape,
     confirmedPackage: confirmedShape,
     lastSharedQuoteNo: PropTypes.number,
+    lastShareStatus: PropTypes.string,
+    lastShareError: PropTypes.string,
     lastSharedAt: PropTypes.string,
     onPreview: PropTypes.func.isRequired,
     onDownloadPdf: PropTypes.func.isRequired,

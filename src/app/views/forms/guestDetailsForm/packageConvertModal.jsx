@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Button, Grid, TextField, Autocomplete, Typography, CircularProgress } from '@mui/material'
+import { useNavigate } from 'react-router-dom'
 import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert'
 
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
@@ -20,6 +21,7 @@ const CATEGORY_LABELS = {
  * pays; a total price is used as it is. The agent can still change the final amount.
  */
 function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData = null, people = 0 }) {
+    const navigate = useNavigate()
     const [convertPackage, { isLoading }] = useConvertPackageMutation()
     const [formData, setFormData] = useState({
         leadId,
@@ -68,9 +70,9 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
             const response = await convertPackage(formData).unwrap()
 
             if (response) {
-                // customResponseHandler usually handles the Toast/Alert
-                // but you can close the modal here
                 setIsOpen(false)
+                // ? the next steps — hotels, transport, payments, voucher — are on the booking's page
+                navigate(`/process/packages/${leadId}`)
             }
         } catch (error) {
             // ? the API's message is shown by customResponseHandler; the dialog stays open to retry
