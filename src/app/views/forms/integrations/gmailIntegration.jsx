@@ -76,8 +76,8 @@ function GmailIntegrationForm() {
         clientId: z.string().min(5, 'Client ID required'),
         clientSecret: z.string().min(5, 'Client Secret required'),
         redirectUri: z.string().url('Invalid Redirect URI'),
-        pubsubTopic: z.string().optional(),
-        pushEndpoint: z.string().optional()
+        pubsubTopic: z.string().min(1, 'Pub/Sub topic required'),
+        pushEndpoint: z.string().min(1, 'Push endpoint required')
     })
 
     const validate = values => {
@@ -105,11 +105,10 @@ function GmailIntegrationForm() {
         validate,
         onSubmit: async values => {
             try {
-                // Ensure campaignId is an integer before sending
-                const payload = {
-                    ...values,
-                    campaignId: parseInt(values.campaignId, 10)
-                }
+                // ? the server reads Google's client id as googleClientId: a `clientId` field is dropped by the
+                // ? API, which used it to pick the workspace
+                const { clientId, ...rest } = values
+                const payload = { ...rest, googleClientId: clientId }
 
                 let response
                 if (formId) {
