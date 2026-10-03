@@ -122,7 +122,8 @@ function SetupUserTable() {
                 newItem.status = (
                     <StatusBadge type={item.active ? 'success' : 'error'} label={item.active ? 'Active' : 'Inactive'} />
                 )
-                newItem.role = newItem.role.name
+                // ? a user whose role was removed still shows (it used to empty the whole list)
+                newItem.role = newItem.role?.name || 'No role'
                 return newItem
             }) || []
         )
