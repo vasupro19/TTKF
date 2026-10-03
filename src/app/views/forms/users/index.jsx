@@ -382,7 +382,9 @@ export default function SetupUserForm() {
                         // Note: Your response uses 'phoneNumber', not 'contact_no'
                         phone: `+91${userData?.phoneNumber}` || '',
                         email: userData?.email || '',
-                        emailPassword: userData?.emailPassword || '',
+                        // ? the saved app password stays on the server; the form only knows whether there is one
+                        emailPassword: '',
+                        hasEmailPassword: Boolean(userData?.hasEmailPassword),
                         // password: userData?.password || '',
                         // confirmPassword: userData?.password || '',
                         // The label is directly available in userData.role.name
@@ -643,7 +645,12 @@ export default function SetupUserForm() {
                                         placeholder='e.g. abcd efgh ijkl mnop'
                                         fullWidth
                                         error={touched.emailPassword && !!errors.emailPassword}
-                                        helperText={touched.emailPassword && errors.emailPassword}
+                                        helperText={
+                                            (touched.emailPassword && errors.emailPassword) ||
+                                            (values.hasEmailPassword
+                                                ? 'An app password is saved. Leave this blank to keep it.'
+                                                : '')
+                                        }
                                         autocomplete='off'
                                     />
                                 </Grid>
