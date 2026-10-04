@@ -2,7 +2,7 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Button, CircularProgress, IconButton, Modal, Stack, Typography } from '@mui/material'
 import { CheckCircle, Close, RadioButtonUnchecked, Send } from '@mui/icons-material'
-import { STEPS, amount, dateRange, rupees, shortDate } from './bookingFacts'
+import { STEPS, amount, dateRange, emailOutcome, rupees, shortDate } from './bookingFacts'
 import { paymentShape, serviceShape } from './bookingShapes'
 
 // ? read by screen readers, not shown
@@ -113,6 +113,7 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
     const due = Math.max(0, cost - paid)
     const name = service.supplier?.businessname || 'Supplier'
     const details = service.details || {}
+    const request = emailOutcome(service.lastEmail, 'Booking request')
     const isHotel = service.type === 'Hotel'
     const facts = [
         dateRange(service.startDate, service.endDate),
@@ -151,6 +152,15 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
                     {service.remarks ? (
                         <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }}>
                             {service.remarks}
+                        </Typography>
+                    ) : null}
+                    {request ? (
+                        <Typography
+                            role='status'
+                            color={request.failed ? 'error.main' : 'success.main'}
+                            sx={{ fontSize: '0.8125rem', mt: 0.25 }}
+                        >
+                            {request.text}
                         </Typography>
                     ) : null}
                 </Box>
@@ -342,4 +352,23 @@ EmailPreview.propTypes = {
     canSend: PropTypes.bool,
     onClose: PropTypes.func.isRequired,
     onSend: PropTypes.func.isRequired
+}
+
+/** @description how a guest email last went, under its button */
+export function EmailNote({ email = null }) {
+    const outcome = emailOutcome(email)
+    if (!outcome) return null
+    return (
+        <Typography
+            role='status'
+            color={outcome.failed ? 'error.main' : 'text.secondary'}
+            sx={{ fontSize: '0.8125rem', maxWidth: 320 }}
+        >
+            {outcome.text}
+        </Typography>
+    )
+}
+
+EmailNote.propTypes = {
+    email: PropTypes.shape({ status: PropTypes.string, sentAt: PropTypes.string, notes: PropTypes.string })
 }

@@ -23,6 +23,7 @@ const { api, dispatch, thunk, mutation, idle } = vi.hoisted(() => {
             createItenary: vi.fn(),
             createSingleTour: vi.fn(),
             savedQuotes: [],
+            leadMessage: '',
             setQuoteCampaign: vi.fn(),
             refetchQuotes: vi.fn()
         },
@@ -56,7 +57,9 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
 }))
 vi.mock('@/app/store/slices/api/leadSlice', () => ({
     useShareLeadDetailsMutation: idle,
-    useGetLeadByIdQuery: () => ({ data: { data: { fullName: 'Asha Verma', phone: '9999999999', campaignId: 1 } } }),
+    useGetLeadByIdQuery: () => ({
+        data: { data: { fullName: 'Asha Verma', phone: '9999999999', campaignId: 1, message: api.leadMessage } }
+    }),
     getLeadPreview: { initiate: () => thunk(() => ({ data: { data: { html: '' } } })) }
 }))
 vi.mock('@/app/store/slices/api/aiSlice', () => ({
@@ -172,10 +175,21 @@ beforeEach(() => {
     api.createItenary.mockImplementation(payload => ({ success: true, data: { id: 555, ...payload } }))
     api.createSingleTour.mockImplementation(() => ({ success: true }))
     api.savedQuotes = []
+    api.leadMessage = ''
     api.setQuoteCampaign.mockImplementation(payload => ({ success: true, data: payload }))
 })
 
 describe('Quotation for a verified lead', () => {
+    test('a new lead’s trip details start from what the guest’s enquiry says', async () => {
+        api.leadMessage = 'Destination: Manali\nTravelers: 4 adults\nTravel dates: 30 Oct 2030'
+        renderPage()
+
+        expect(await screen.findByText(/Travelers: 4 adults/)).toBeInTheDocument()
+        expect(screen.getByText(/Filled in from the enquiry: adults, start date\./)).toBeInTheDocument()
+        expect(screen.getByLabelText(/Adults/)).toHaveValue(4)
+        expect(screen.getByLabelText(/Start date/)).toHaveValue('2030-10-30')
+    })
+
     test('only adults and the start date are needed; saving goes straight on to the itinerary', async () => {
         renderPage()
 

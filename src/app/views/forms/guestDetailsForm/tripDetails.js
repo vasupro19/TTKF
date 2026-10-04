@@ -186,3 +186,81 @@ export const tripSummary = values => {
     const meals = MEAL_PLANS.find(plan => plan.value === values.foodPlan)?.label || ''
     return [people, dates, values.packageType, meals].filter(Boolean).join(' · ')
 }
+
+// ---------------------------------------------------------------- from the guest's enquiry
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+const MONTH_WORD = '(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?'
+
+const isoDate = (year, month, day) => {
+    const date = new Date(Date.UTC(year, month, day))
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day) return ''
+    return date.toISOString().slice(0, 10)
+}
+
+// ? a date without a year is the next one to come
+const nextOccurrence = (month, day, today) => {
+    const year = today.getUTCFullYear()
+    const thisYear = isoDate(year, month, day)
+    return thisYear && thisYear >= today.toISOString().slice(0, 10) ? thisYear : isoDate(year + 1, month, day)
+}
+
+/**
+ * @description the first travel date an enquiry states: 2026-10-30, 30/10/2026 (day first), 30 Oct 2026,
+ *              30th October, Oct 30, 2026; '' when none, or when it has already passed
+ */
+export const enquiryDate = (text, today = new Date()) => {
+    const source = String(text || '')
+    const now = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+    const notPast = date => (date && date >= now.toISOString().slice(0, 10) ? date : '')
+    const fullYear = value => (String(value).length === 2 ? 2000 + Number(value) : Number(value))
+
+    let match = source.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/)
+    if (match) return notPast(isoDate(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+
+    match = source.match(/\b(\d{1,2})[/.-](\d{1,2})[/.-](20\d{2}|\d{2})\b/)
+    if (match) return notPast(isoDate(fullYear(match[3]), Number(match[2]) - 1, Number(match[1])))
+
+    match = source.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH_WORD},?\\s*(20\\d{2})?`, 'i'))
+    if (match) {
+        const month = MONTHS.indexOf(match[2].slice(0, 3).toLowerCase())
+        const day = Number(match[1])
+        return match[3] ? notPast(isoDate(Number(match[3]), month, day)) : nextOccurrence(month, day, now)
+    }
+
+    match = source.match(new RegExp(`\\b${MONTH_WORD}\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(20\\d{2})?`, 'i'))
+    if (match) {
+        const month = MONTHS.indexOf(match[1].slice(0, 3).toLowerCase())
+        const day = Number(match[2])
+        return match[3] ? notPast(isoDate(Number(match[3]), month, day)) : nextOccurrence(month, day, now)
+    }
+    return ''
+}
+
+/**
+ * @description what an enquiry says the trip details are — adults, children, start date — when it says so clearly
+ * @returns {{ adults?: string, children?: string, pickupDate?: string }}
+ */
+export const enquiryFacts = (text, today = new Date()) => {
+    const source = String(text || '')
+    const facts = {}
+    const adults =
+        source.match(/\b(\d{1,3})\s*(?:adults?|people|persons?|pax|members|travell?ers)\b/i) ||
+        source.match(/\btravell?ers?\s*:\s*(\d{1,3})\b/i)
+    if (adults && Number(adults[1]) > 0) facts.adults = String(Number(adults[1]))
+    const children = source.match(/\b(\d{1,2})\s*(?:child|children|kids?)\b/i)
+    if (children) facts.children = String(Number(children[1]))
+    const pickupDate = enquiryDate(source, today)
+    if (pickupDate) facts.pickupDate = pickupDate
+    return facts
+}
+
+/**
+ * @description a new trip's details, with the empty ones the enquiry answers filled in
+ * @returns {{ values: object, used: string[] }} `used`: the fields filled from the enquiry
+ */
+export const withEnquiry = (values, text, today = new Date()) => {
+    const facts = enquiryFacts(text, today)
+    const used = Object.keys(facts).filter(field => !filled(values[field]))
+    return { values: { ...values, ...Object.fromEntries(used.map(field => [field, facts[field]])) }, used }
+}

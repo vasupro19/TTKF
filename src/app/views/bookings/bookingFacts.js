@@ -122,3 +122,35 @@ export const dateRange = (start, end) => {
     if (from && to && from !== to) return `${from} – ${to}`
     return from || to
 }
+
+// ? a booking keeps the price key it was booked from ("deluxePrice"); people read the category
+const CATEGORY_LABELS = {
+    deluxePrice: 'Deluxe',
+    superDeluxePrice: 'Super Deluxe',
+    luxuryPrice: 'Luxury',
+    premiumPrice: 'Premium'
+}
+
+export const categoryLabel = value => CATEGORY_LABELS[value] || value || ''
+
+/**
+ * @description how an email went, from its last log entry: sent and when, or that it did not go and why. Emails
+ *              are queued, so this is what says whether one actually left.
+ * @param {string} what what was sent ("Booking request"); left out, the line reads "Emailed …" / "Didn’t go …"
+ * @returns {{ text: string, failed: boolean } | null}
+ */
+export const emailOutcome = (email, what = '') => {
+    if (!email?.status) return null
+    if (email.status === 'Failed') {
+        const reason = email.notes ? `: ${email.notes}` : ''
+        return {
+            text: `${what ? `${what} didn’t go` : 'Didn’t go'}${reason}. Check the address and send again.`,
+            failed: true
+        }
+    }
+    const when = toDate(email.sentAt)
+    const stamp = when
+        ? when.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+        : ''
+    return { text: `${what ? `${what} emailed` : 'Emailed'}${stamp ? ` ${stamp}` : ''}`, failed: false }
+}

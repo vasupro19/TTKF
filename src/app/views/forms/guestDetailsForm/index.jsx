@@ -728,7 +728,14 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                 premium_hotel: prev.premium_hotel || nextPremiumHotel || prev.premium_hotel
             }))
         } catch (error) {
-            // Keep the modal usable even if AI parsing/network fails.
+            // ? keep the form usable; but say so when the AI limit is reached, rather than just stop filling
+            if (error?.status === 429) {
+                notify(
+                    error?.data?.message ||
+                        'The AI limit is reached for now. Fill this in by hand, or try in a minute.',
+                    'warning'
+                )
+            }
         } finally {
             setAiPrefillLoading(false)
         }
@@ -744,15 +751,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
             return
         }
 
-        const aiKey = [
-            formData.entryType,
-            formData.title?.trim(),
-            formData.destinationName?.trim(),
-            formData.delux_hotel?.trim(),
-            formData.super_delux_hotel?.trim(),
-            formData.luxury_hotel?.trim(),
-            formData.premium_hotel?.trim()
-        ].join('|')
+        // ? what the suggestion is about — not the hotel boxes: typing a hotel used to ask the AI again on each pause
+        const aiKey = [formData.entryType, formData.title?.trim(), formData.destinationName?.trim()].join('|')
 
         if (lastAiPrefillKeyRef.current === aiKey) {
             return
@@ -769,19 +769,10 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
 
         aiPrefillTimeoutRef.current = setTimeout(() => {
             requestAiQuotePrefill(formData)
-        }, 500)
+        }, 900)
         // ? keyed on the fields that change the suggestion; the timer reads the latest form
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        openItenaryModal,
-        formData.entryType,
-        formData.title,
-        formData.destinationName,
-        formData.delux_hotel,
-        formData.super_delux_hotel,
-        formData.luxury_hotel,
-        formData.premium_hotel
-    ])
+    }, [openItenaryModal, formData.entryType, formData.title, formData.destinationName])
 
     const handleItinerarySelect = selected => {
         if (typeof selected === 'string') {

@@ -30,8 +30,10 @@ import { openSnackbar } from '@app/store/slices/snackbar'
 import {
     STEPS,
     amount,
+    categoryLabel,
     dateRange,
     doneCount,
+    emailOutcome,
     guestMoney,
     nextStep,
     progressOf,
@@ -39,7 +41,7 @@ import {
     supplierMoney,
     urgency
 } from './bookingFacts'
-import { EmailPreview, MoneyCard, PaymentRow, Section, ServiceRow, StepsBar } from './bookingParts'
+import { EmailNote, EmailPreview, MoneyCard, PaymentRow, Section, ServiceRow, StepsBar } from './bookingParts'
 
 const listOf = response => (Array.isArray(response?.data) ? response.data : [])
 
@@ -156,6 +158,8 @@ function BookingWorkspace() {
             const response = await task()
             notify(response?.message || success)
             refresh()
+            // ? emails are queued: look again once they have had time to go
+            setTimeout(refresh, 8000)
             return true
         } catch (error) {
             notify(errorText(error, failure), 'error')
@@ -304,6 +308,13 @@ function BookingWorkspace() {
         if (ok) closeMail()
     }
 
+    // ? the voucher's state: sent (and when), or the reason its last email did not go
+    const voucherEmail = emailOutcome(booking?.emails?.voucher)
+    let voucherStatus = progress.voucher ? 'Sent' : 'Not sent yet'
+    if (voucherEmail) voucherStatus = voucherEmail.text
+    let voucherColor = progress.voucher ? 'success.main' : 'text.secondary'
+    if (voucherEmail?.failed) voucherColor = 'error.main'
+
     let mailSendLabel = 'Send'
     if (mail.to) mailSendLabel = `Send to ${mail.to}`
     else if (mail.kind === 'voucher') mailSendLabel = 'No guest email on this lead'
@@ -349,7 +360,7 @@ function BookingWorkspace() {
         ]
             .filter(Boolean)
             .join(', '),
-        booking.selectedPackage,
+        categoryLabel(booking.selectedPackage),
         booking.quotationNo ? `Quote ${booking.quotationNo}` : '',
         lead.phone,
         lead.senderEmail
@@ -592,10 +603,10 @@ function BookingWorkspace() {
                                     ml: 1,
                                     fontSize: '0.8125rem',
                                     fontWeight: 600,
-                                    color: progress.voucher ? 'success.main' : 'text.secondary'
+                                    color: voucherColor
                                 }}
                             >
-                                {progress.voucher ? 'Sent' : 'Not sent yet'}
+                                {voucherStatus}
                             </Typography>
                         </Typography>
                         <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 1 }}>
@@ -646,6 +657,7 @@ function BookingWorkspace() {
                             >
                                 {hotels.length ? 'Email to the guest' : 'Add a hotel first'}
                             </Button>
+                            <EmailNote email={booking?.emails?.hotel} />
                         </Box>
                         <Box>
                             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
@@ -666,6 +678,7 @@ function BookingWorkspace() {
                             >
                                 {taxis.length ? 'Email to the guest' : 'Add transport first'}
                             </Button>
+                            <EmailNote email={booking?.emails?.taxi} />
                         </Box>
                     </Stack>
                 </Section>

@@ -19,6 +19,8 @@ export const serviceShape = PropTypes.shape({
     roomType: PropTypes.string,
     // ? vehicle, pickup, drop, driver for transport; meal plan for a hotel
     details: PropTypes.objectOf(PropTypes.string),
+    // ? how the last booking request to this supplier went
+    lastEmail: PropTypes.shape({ status: PropTypes.string, sentAt: PropTypes.string, notes: PropTypes.string }),
     supplier: PropTypes.shape({ businessname: PropTypes.string, phone: PropTypes.string })
 })
 

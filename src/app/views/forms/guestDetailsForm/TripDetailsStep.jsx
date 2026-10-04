@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import { useFormik } from 'formik'
 import { Box, Button, Collapse, Grid, Stack, TextField, Typography } from '@mui/material'
@@ -14,8 +14,12 @@ import {
     VEHICLES,
     hasMoreDetails,
     suggestedRooms,
-    validateTripDetails
+    validateTripDetails,
+    withEnquiry
 } from './tripDetails'
+
+// ? the fields an enquiry can fill, as the note names them
+const FILLED_LABELS = { adults: 'adults', children: 'children', pickupDate: 'start date' }
 
 const formikShape = PropTypes.shape({
     values: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
@@ -123,12 +127,17 @@ const filled = value => value !== null && value !== undefined && String(value).t
  * required ones — enough to quote — and the rest waits behind "More details" until the guest says it.
  */
 function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error = '', enquiry = '' }) {
-    const [showMore, setShowMore] = useState(() => hasMoreDetails(initialValues))
+    // ? a new trip starts from what the guest's enquiry already says (adults, children, start date)
+    const prefilled = useMemo(
+        () => (isNew ? withEnquiry(initialValues, enquiry) : { values: initialValues, used: [] }),
+        [initialValues, isNew, enquiry]
+    )
+    const [showMore, setShowMore] = useState(() => hasMoreDetails(prefilled.values))
     // ? rooms follow the party size (two adults to a room) until the agent sets them
-    const [roomsSetByAgent, setRoomsSetByAgent] = useState(() => filled(initialValues.rooms))
+    const [roomsSetByAgent, setRoomsSetByAgent] = useState(() => filled(prefilled.values.rooms))
 
     const formik = useFormik({
-        initialValues,
+        initialValues: prefilled.values,
         enableReinitialize: true,
         validate: validateTripDetails,
         validateOnChange: false,
@@ -184,6 +193,12 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                     >
                         {String(enquiry).trim()}
                     </Typography>
+                    {prefilled.used.length ? (
+                        <Typography role='status' sx={{ fontSize: '0.8125rem', color: 'primary.main', mt: 1 }}>
+                            Filled in from the enquiry: {prefilled.used.map(field => FILLED_LABELS[field]).join(', ')}.
+                            Check them before saving.
+                        </Typography>
+                    ) : null}
                 </Box>
             ) : null}
 

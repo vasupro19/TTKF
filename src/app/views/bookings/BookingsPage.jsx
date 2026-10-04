@@ -17,7 +17,18 @@ import { alpha } from '@mui/material/styles'
 import { CheckCircle, RadioButtonUnchecked, Search } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
 import { useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
-import { STAGES, STEPS, dateRange, doneCount, guestMoney, nextStep, progressOf, rupees, urgency } from './bookingFacts'
+import {
+    STAGES,
+    STEPS,
+    categoryLabel,
+    dateRange,
+    doneCount,
+    guestMoney,
+    nextStep,
+    progressOf,
+    rupees,
+    urgency
+} from './bookingFacts'
 
 const rowShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
@@ -90,7 +101,7 @@ function BookingRow({ row, progress, onOpen }) {
                             {[
                                 row.bookingNo,
                                 dates,
-                                row.selectedPackage,
+                                categoryLabel(row.selectedPackage),
                                 row.quotationNo ? `Quote ${row.quotationNo}` : '',
                                 row.phone
                             ]

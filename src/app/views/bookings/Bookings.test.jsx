@@ -304,6 +304,32 @@ describe('One booking', () => {
         await waitFor(() => expect(api.sendSupplierEmail).toHaveBeenCalledWith(21))
     })
 
+    test('each email says how it went — sent and when, or why it did not go', () => {
+        api.hotels = [
+            {
+                ...api.hotels[0],
+                lastEmail: { status: 'Failed', sentAt: '2026-10-02T04:30:00.000Z', notes: 'Recipient address rejected' }
+            }
+        ]
+        api.booking = {
+            ...api.booking,
+            emails: {
+                voucher: { status: 'Failed', sentAt: '2026-10-02T04:30:00.000Z', notes: 'Mailbox full' },
+                hotel: { status: 'Sent', sentAt: '2026-10-02T04:30:00.000Z', notes: null },
+                taxi: null
+            }
+        }
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        expect(
+            within(hotels).getByText(
+                'Booking request didn’t go: Recipient address rejected. Check the address and send again.'
+            )
+        ).toBeInTheDocument()
+        expect(screen.getByText('Didn’t go: Mailbox full. Check the address and send again.')).toBeInTheDocument()
+        expect(screen.getByText(/^Emailed 2 Oct/)).toBeInTheDocument()
+    })
+
     test('a supplier without an email says so, and nothing opens or is sent', async () => {
         api.supplierPreview = {
             error: { data: { message: 'Hotel Willow Banks has no email address. Add one under Suppliers.' } }
