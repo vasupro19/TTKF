@@ -31,13 +31,9 @@ import {
 } from 'recharts'
 import { useSelector } from 'react-redux'
 
-import { useGetLeadsQuery } from '@/app/store/slices/api/leadSlice'
-import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
-import { useGetAllConfirmedPackagesQuery } from '@/app/store/slices/api/packageConvert'
+import { useGetDashboardQuery } from '@/app/store/slices/api/dashboardSlice'
+import { selectIsPlatformAdmin } from '@/app/store/slices/auth'
 
-const LEADS_QUERY = '?start=0&length=1000'
-const PACKAGES_QUERY = '?start=0&length=1000'
-const CAMPAIGNS_QUERY = '?start=0&length=500'
 const PACKAGE_COLORS = ['#64748b', '#1d4ed8', '#7c3aed', '#b45309', '#16a34a', '#ea580c']
 
 const STATUS_COLORS = {
@@ -61,13 +57,6 @@ const isValidDate = value => {
     return !Number.isNaN(date.getTime())
 }
 
-const startOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1)
-
-const getMonthLabel = date =>
-    date.toLocaleDateString('en-IN', {
-        month: 'short'
-    })
-
 const getRelativeDateLabel = value => {
     if (!isValidDate(value)) return 'Recently'
     const current = new Date()
@@ -85,37 +74,6 @@ const getRelativeDateLabel = value => {
         month: 'short'
     })
 }
-
-const getLeadStatus = lead => lead?.status || lead?.leadStatus || lead?.lead_status || 'Pending'
-
-const getLeadId = lead => lead?.id || lead?.leadId || lead?.lead?.id || null
-
-const getPackageLeadId = booking => booking?.leadId || booking?.lead?.id || booking?.lead_id || null
-
-const getLeadName = lead => lead?.fullName || lead?.name || lead?.lead?.fullName || 'Unknown Lead'
-
-const getCampaignName = (item, campaignMap) =>
-    item?.campaignName ||
-    item?.campaign?.title ||
-    item?.campaign?.name ||
-    campaignMap.get(item?.campaignId) ||
-    campaignMap.get(item?.campaign_id) ||
-    item?.destinationName ||
-    item?.destination?.name ||
-    'Unassigned'
-
-const getPackageCategory = booking =>
-    booking?.selectedPackage || booking?.packageType || booking?.packageName || 'Other'
-
-const getRevenueValue = booking =>
-    toNumber(
-        booking?.sellingPrice ||
-            booking?.totalAmount ||
-            booking?.finalAmount ||
-            booking?.amount ||
-            booking?.grandTotal ||
-            0
-    )
 
 const getProgressColor = index => {
     if (index === 0) return '#39B54A'
@@ -263,128 +221,56 @@ function CustomTooltip({ active, payload, label }) {
 function Home() {
     const navigate = useNavigate()
     const user = useSelector(state => state.auth?.user)
+    // ? the super admin has no agency of its own: its home is the client list, not an agency dashboard that can't load
+    const isPlatform = useSelector(selectIsPlatformAdmin)
+    useEffect(() => {
+        if (isPlatform) navigate('/master/client', { replace: true })
+    }, [isPlatform, navigate])
     const {
-        data: leadsResponse,
-        isFetching: leadsLoading,
-        isError: leadsError
-    } = useGetLeadsQuery(LEADS_QUERY, { refetchOnMountOrArgChange: true })
-    const {
-        data: packagesResponse,
-        isFetching: packagesLoading,
-        isError: packagesError
-    } = useGetAllConfirmedPackagesQuery(PACKAGES_QUERY, { refetchOnMountOrArgChange: true })
-    const {
-        data: campaignsResponse,
-        isFetching: campaignsLoading,
-        isError: campaignsError
-    } = useGetCampaignsQuery(CAMPAIGNS_QUERY, { refetchOnMountOrArgChange: true })
-
-    const isLoading = leadsLoading || packagesLoading || campaignsLoading
-    const hasError = leadsError || packagesError || campaignsError
+        data: dashboardResponse,
+        isFetching: isLoading,
+        isError: hasError
+    } = useGetDashboardQuery(undefined, {
+        skip: isPlatform,
+        refetchOnMountOrArgChange: true
+    })
 
     const dashboardData = useMemo(() => {
-        const leads = Array.isArray(leadsResponse?.data) ? leadsResponse.data : []
-        const bookings = Array.isArray(packagesResponse?.data) ? packagesResponse.data : []
-        const campaigns = Array.isArray(campaignsResponse?.data) ? campaignsResponse.data : []
+        const payload = dashboardResponse?.data || {}
+        const stats = payload.stats || {}
+        const monthlyLeads = Array.isArray(payload.monthlyLeads) ? payload.monthlyLeads : []
+        const totalLeads = toNumber(stats.totalLeads)
+        const confirmedBookings = toNumber(stats.confirmedBookings)
+        const totalRevenue = toNumber(stats.totalRevenue)
+        const totalCampaigns = toNumber(stats.totalCampaigns)
 
-        const campaignMap = new Map(
-            campaigns.map(campaign => [campaign?.id, campaign?.title || campaign?.name || `Campaign ${campaign?.id}`])
-        )
+        const recentLeads = (payload.recentLeads || []).slice(0, 5).map(lead => ({
+            name: lead.fullName || 'Unknown Lead',
+            campaign: lead.campaignName || 'No campaign',
+            status: lead.status || 'Pending',
+            date: getRelativeDateLabel(lead.createdAt),
+            amount: toNumber(lead.bookingValue)
+        }))
 
-        const totalLeads = toNumber(leadsResponse?.count || leads.length)
-        const confirmedBookings = toNumber(packagesResponse?.recordsTotal || bookings.length)
-        const totalRevenue = bookings.reduce((sum, booking) => sum + getRevenueValue(booking), 0)
-        const totalCampaigns = toNumber(campaignsResponse?.count || campaignsResponse?.recordsTotal || campaigns.length)
+        const campaignRows = payload.topCampaigns || []
+        const highestCampaignCount = Math.max(...campaignRows.map(row => toNumber(row.leads)), 0)
+        const topCampaigns = campaignRows.slice(0, 5).map(row => ({
+            name: row.name,
+            bookings: toNumber(row.leads),
+            pct: highestCampaignCount ? Math.round((toNumber(row.leads) / highestCampaignCount) * 100) : 0
+        }))
 
-        const packageCountByLeadId = new Map()
-        bookings.forEach(booking => {
-            const leadId = getPackageLeadId(booking)
-            if (leadId) {
-                packageCountByLeadId.set(leadId, booking)
-            }
-        })
-
-        const now = new Date()
-        const monthKeys = Array.from({ length: 6 }, (_, index) => {
-            const date = startOfMonth(new Date(now.getFullYear(), now.getMonth() - (5 - index), 1))
-            const key = `${date.getFullYear()}-${date.getMonth()}`
-            return {
-                key,
-                month: getMonthLabel(date),
-                leads: 0,
-                confirmed: 0,
-                revenue: 0
-            }
-        })
-        const monthMap = new Map(monthKeys.map(item => [item.key, item]))
-
-        leads.forEach(lead => {
-            const value = lead?.createdAt || lead?.created_at
-            if (!isValidDate(value)) return
-            const date = new Date(value)
-            const key = `${date.getFullYear()}-${date.getMonth()}`
-            if (monthMap.has(key)) {
-                monthMap.get(key).leads += 1
-            }
-        })
-
-        bookings.forEach(booking => {
-            const value = booking?.createdAt || booking?.created_at
-            if (!isValidDate(value)) return
-            const date = new Date(value)
-            const key = `${date.getFullYear()}-${date.getMonth()}`
-            if (monthMap.has(key)) {
-                monthMap.get(key).confirmed += 1
-                monthMap.get(key).revenue += getRevenueValue(booking)
-            }
-        })
-
-        const recentLeads = [...leads]
-            .sort((left, right) => new Date(right?.createdAt || 0) - new Date(left?.createdAt || 0))
-            .slice(0, 5)
-            .map(lead => {
-                const booking = packageCountByLeadId.get(getLeadId(lead))
-                return {
-                    name: getLeadName(lead),
-                    campaign: getCampaignName(lead, campaignMap),
-                    status: getLeadStatus(lead),
-                    date: getRelativeDateLabel(lead?.createdAt || lead?.created_at),
-                    amount: getRevenueValue(booking)
-                }
-            })
-
-        const campaignCounts = leads.reduce((accumulator, lead) => {
-            const name = getCampaignName(lead, campaignMap)
-            accumulator[name] = (accumulator[name] || 0) + 1
-            return accumulator
-        }, {})
-
-        const highestCampaignCount = Math.max(...Object.values(campaignCounts), 0)
-        const topCampaigns = Object.entries(campaignCounts)
-            .map(([name, bookingsCount]) => ({
-                name,
-                bookings: bookingsCount,
-                pct: highestCampaignCount ? Math.round((bookingsCount / highestCampaignCount) * 100) : 0
-            }))
-            .sort((left, right) => right.bookings - left.bookings)
-            .slice(0, 5)
-
-        const packageBreakdownCounts = bookings.reduce((accumulator, booking) => {
-            const category = getPackageCategory(booking)
-            accumulator[category] = (accumulator[category] || 0) + 1
-            return accumulator
-        }, {})
-
-        const packageBreakdown = Object.entries(packageBreakdownCounts)
-            .map(([name, count], index) => ({
-                name,
-                value: confirmedBookings ? Math.round((count / confirmedBookings) * 100) : 0,
+        const packageBreakdown = (payload.packageBreakdown || [])
+            .map((row, index) => ({
+                name: row.category,
+                value: confirmedBookings ? Math.round((toNumber(row.count) / confirmedBookings) * 100) : 0,
                 color: PACKAGE_COLORS[index % PACKAGE_COLORS.length]
             }))
             .sort((left, right) => right.value - left.value)
 
-        const previousMonth = monthKeys[4] || { leads: 0, confirmed: 0, revenue: 0 }
-        const currentMonth = monthKeys[5] || { leads: 0, confirmed: 0, revenue: 0 }
+        const empty = { leads: 0, confirmed: 0, revenue: 0 }
+        const currentMonth = monthlyLeads[monthlyLeads.length - 1] || empty
+        const previousMonth = monthlyLeads[monthlyLeads.length - 2] || empty
         const campaignsTrendBase = totalCampaigns > 1 ? totalCampaigns - 1 : totalCampaigns
 
         const getTrend = (currentValue, previousValue) => {
@@ -408,7 +294,7 @@ function Home() {
                     icon: <People />,
                     label: 'Total Leads',
                     value: totalLeads,
-                    ...getTrend(currentMonth.leads, previousMonth.leads),
+                    ...getTrend(toNumber(currentMonth.leads), toNumber(previousMonth.leads)),
                     color: '#1d4ed8',
                     bg: '#eff6ff',
                     delay: 0,
@@ -418,7 +304,7 @@ function Home() {
                     icon: <ConfirmationNumber />,
                     label: 'Confirmed Bookings',
                     value: confirmedBookings,
-                    ...getTrend(currentMonth.confirmed, previousMonth.confirmed),
+                    ...getTrend(toNumber(currentMonth.confirmed), toNumber(previousMonth.confirmed)),
                     color: '#16a34a',
                     bg: '#f0fdf4',
                     delay: 0.08,
@@ -429,7 +315,7 @@ function Home() {
                     label: 'Total Revenue',
                     value: totalRevenue,
                     prefix: '₹',
-                    ...getTrend(currentMonth.revenue, previousMonth.revenue),
+                    ...getTrend(toNumber(currentMonth.revenue), toNumber(previousMonth.revenue)),
                     color: '#b45309',
                     bg: '#fffbeb',
                     delay: 0.16,
@@ -446,12 +332,18 @@ function Home() {
                     onClick: () => navigate('/master/campaigns')
                 }
             ],
-            monthlyLeads: monthKeys,
+            monthlyLeads: monthlyLeads.map(row => ({
+                month: row.month,
+                leads: toNumber(row.leads),
+                confirmed: toNumber(row.confirmed),
+                revenue: toNumber(row.revenue)
+            })),
             recentLeads,
             topCampaigns,
             packageBreakdown
         }
-    }, [campaignsResponse, leadsResponse, packagesResponse])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dashboardResponse])
 
     const greeting = () => {
         const hour = new Date().getHours()
