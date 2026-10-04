@@ -31,11 +31,7 @@ import { useShareLeadDetailsMutation, useGetLeadByIdQuery, getLeadPreview } from
 import { useAssistAiMutation, useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
 
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
-import {
-    useCreateItenaryClientMutation,
-    useGetItenaryClientsQuery,
-    useUpdateItenaryClientMutation
-} from '@/app/store/slices/api/itenarySlice'
+import { useCreateItenaryClientMutation, useGetItenaryClientsQuery } from '@/app/store/slices/api/itenarySlice'
 import {
     useCreateDestinationClientMutation,
     useGetDestinationClientsQuery,
@@ -224,7 +220,6 @@ function GuestForm() {
     const [removeTour] = useRemoveGuestTourItenaryMutation()
     const [createSingleTour] = useCreateSingleGuestTourItenaryMutation()
     const [createItenaryClient] = useCreateItenaryClientMutation()
-    const [updateItenaryClient] = useUpdateItenaryClientMutation()
     const [createDestinationClient] = useCreateDestinationClientMutation()
     const [updateDestinationClient] = useUpdateDestinationClientMutation()
     const [assistAi] = useAssistAiMutation()
@@ -471,10 +466,6 @@ function GuestForm() {
             title: payload.title?.trim?.() || '',
             description: payload.description?.trim?.() || ''
         }
-        const matchedItenary =
-            itenaries?.data?.find(item => String(item.id) === String(nextPayload.itenaryId)) ||
-            editingData?.fullItem?.itenary ||
-            null
         const matchedDestination =
             destinations?.data?.find(item => String(item.id) === String(nextPayload.destinationId)) ||
             editingData?.fullItem?.destination ||
@@ -492,22 +483,9 @@ function GuestForm() {
             }).unwrap()
 
             nextPayload.itenaryId = createdItenary?.data?.id
-        } else if (nextPayload.itenaryId && matchedItenary) {
-            const nextItenaryTitle = nextPayload.title || matchedItenary.title || ''
-            const nextItenaryDescription = nextPayload.description || matchedItenary.description || ''
-
-            if (
-                nextItenaryTitle !== (matchedItenary.title || '') ||
-                nextItenaryDescription !== (matchedItenary.description || '')
-            ) {
-                await updateItenaryClient({
-                    id: matchedItenary.id,
-                    title: nextItenaryTitle,
-                    description: nextItenaryDescription,
-                    campaignId: matchedItenary.campaignId || Number(campaignId)
-                }).unwrap()
-            }
         }
+        // ? an edited title or text stays with this guest's day (saved with it); it used to overwrite the shared saved
+        // ? day, which changed every other guest's quote that uses it, booked ones included
 
         if (
             (nextPayload.entryType === 'Stay' || nextPayload.entryType === 'TransitStay') &&
