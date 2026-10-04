@@ -77,7 +77,7 @@ export default function UserMenuAccess() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'Failed to update access',
+                    message: error?.data?.message || 'Failed to update access',
                     variant: 'alert',
                     alert: { color: 'error' }
                 })
@@ -86,7 +86,8 @@ export default function UserMenuAccess() {
     }
     const submit = async () => {
         try {
-            await updateMenuAccess({ menuIds: permission, userId: params.email })
+            // ? unwrap: a refused save (403) used to show "Access granted successfully"
+            await updateMenuAccess({ menuIds: permission, userId: params.email }).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
@@ -102,7 +103,7 @@ export default function UserMenuAccess() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'Failed to update access',
+                    message: error?.data?.message || 'Failed to update access',
                     variant: 'alert',
                     alert: { color: 'error' }
                 })

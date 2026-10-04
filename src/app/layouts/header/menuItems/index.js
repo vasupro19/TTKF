@@ -205,7 +205,7 @@ export const menuItems = [
     {
         id: 'masters',
         label: 'Master',
-        description: 'Check the global sailing schedules to plan your shipments.',
+        description: 'Users, campaigns, suppliers and agents',
         icon: MasterIcon,
         type: 'collapse', // collapse || item
         children: [

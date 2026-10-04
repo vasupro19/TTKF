@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useSelector, useDispatch } from 'react-redux'
 import { getAuthUser } from '@app/store/slices/api/authApiSlice'
-import { setError, setUserDetails, setLocation } from '@app/store/slices/auth'
+import { setError, setUserDetails, setLocation, logout } from '@app/store/slices/auth'
+import { openSnackbar } from '@/app/store/slices/snackbar'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 
 // checks if the user is authenticated ( let the user go to the route ) or not ( redirects user to login page )
@@ -41,8 +42,21 @@ function AuthGuard({ children }) {
                 dispatch(setUserDetails({ user: response.data.user }))
             } catch (error) {
                 removeToken()
-                // 🚀 CHANGE: Redirect to Landing Page on error
-                navigate('/', { replace: true })
+                // ? signed out properly (it used to bounce between the dashboard and the landing page), and told why:
+                // ? e.g. "Your agency's account is switched off"
+                dispatch(logout())
+                if (error?.data?.message) {
+                    dispatch(
+                        openSnackbar({
+                            open: true,
+                            message: error.data.message,
+                            variant: 'alert',
+                            alert: { color: 'error' },
+                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                        })
+                    )
+                }
+                navigate('/login', { replace: true })
             }
         }
 

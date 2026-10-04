@@ -380,7 +380,8 @@ export default function SetupUserForm() {
                     const formData = {
                         firstName: userData?.name || '',
                         // Note: Your response uses 'phoneNumber', not 'contact_no'
-                        phone: `+91${userData?.phoneNumber}` || '',
+                        // ? the phone field's own format (91XXXXXXXXXX, no +); '+91…' used to save as 1XXXXXXXXXX
+                        phone: userData?.phoneNumber ? `91${userData.phoneNumber}` : '',
                         email: userData?.email || '',
                         // ? the saved app password stays on the server; the form only knows whether there is one
                         emailPassword: '',
@@ -416,7 +417,9 @@ export default function SetupUserForm() {
                         role_id: values.role?.id?.toString(),
                         email: values.email,
                         emailPassword: values.emailPassword,
-                        contact_no: values.phone.slice(2).replace(/-/g, ''),
+                        contact_no: String(values.phone || '')
+                            .replace(/\D/g, '')
+                            .slice(-10),
                         password: values.password,
                         client_id: user?.clientId
                     }
@@ -444,7 +447,18 @@ export default function SetupUserForm() {
                                 error?.response?.data?.message ||
                                 error?.data?.message ||
                                 error?.message ||
-                                'unable to create user!'
+                                'unable to update user!'
+                        } finally {
+                            // ? an edit said nothing, saved or refused (e.g. "Only the agency's admin can …")
+                            dispatch(
+                                openSnackbar({
+                                    open: true,
+                                    message,
+                                    variant: 'alert',
+                                    alert: { color: isError ? 'error' : 'success' },
+                                    anchorOrigin: { vertical: 'top', horizontal: 'center' }
+                                })
+                            )
                         }
                     } else {
                         try {

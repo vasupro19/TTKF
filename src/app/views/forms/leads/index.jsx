@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -179,7 +180,8 @@ function LeadsForm() {
             formatted[key] = row[key] ? row[key].toString() : ''
         })
         if (row?.upcomingCall?.scheduledFor) {
-            formatted.followupdate = new Date(row.upcomingCall.scheduledFor).toISOString().slice(0, 16)
+            // ? local time for the datetime field (toISOString gave UTC, 5:30 behind)
+            formatted.followupdate = dayjs(row.upcomingCall.scheduledFor).format('YYYY-MM-DDTHH:mm')
             formatted.followupremarks = row.upcomingCall.description || ''
         }
         formik.setValues({ ...formatted })

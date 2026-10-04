@@ -8,6 +8,7 @@ import Backdrop from '@mui/material/Backdrop'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { useLogoutMutation, useChangeClientAccountMutation, useGetMenuQuery } from '@app/store/slices/api/authApiSlice'
+import { apiSliceConfig } from '@app/store/slices/api/configSlice'
 
 // ** import assets & icons
 import cerebrumLogo from '@assets/images/auth/Cerebrum_logo_final_white.png'
@@ -149,12 +150,18 @@ function NavBar() {
     }, [])
 
     const handleLogout = async () => {
-        await logout().unwrap()
-        dispatch(logoutAction())
-        removeToken()
-        navigate('/login')
-
-        // removeToken()
+        // ? signs out here even when the server session has already ended (a 401 used to stop it half way), and
+        // ? forgets this user's cached lists so the next one to sign in on this browser doesn't see them
+        try {
+            await logout().unwrap()
+        } catch {
+            // the server session is already gone
+        } finally {
+            dispatch(logoutAction())
+            dispatch(apiSliceConfig.util.resetApiState())
+            removeToken()
+            navigate('/login')
+        }
     }
 
     // const handleSelectLocation = useCallback(async (data, userData) => {

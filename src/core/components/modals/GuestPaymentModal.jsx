@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 
 import { Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
+import dayjs from 'dayjs'
 import CustomButton from '../extended/CustomButton'
 
 function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
     // Set default date to today in YYYY-MM-DD format for the input
-    const today = new Date().toISOString().split('T')[0]
+    // ? today where the agent is: the UTC date was yesterday until 05:30 IST
+    const today = dayjs().format('YYYY-MM-DD')
 
     const [form, setForm] = useState({
         amount: '',

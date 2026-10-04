@@ -226,11 +226,9 @@ function ClientMasterForm() {
                     })
 
                     response = await createClient(formData).unwrap() // ✅ send FormData
-                    const newClientId = response.data.id
-                    setClientId(newClientId)
-                    formik.setFieldValue('tabId', tabLabels[1])
-                    enableTabsAfterValidation(1)
-                    setActiveTab(1)
+                    // ? the form has one step: back to the client list (moving to a second step crashed the page)
+                    formik.resetForm()
+                    navigate('/master/client')
                 } else if (clientId) {
                     const formData = new FormData()
                     Object.keys(values).forEach(key => {
@@ -254,7 +252,7 @@ function ClientMasterForm() {
                         navigate(-1)
                     }
                 }
-                if (response.success && response.status_code === 200) {
+                if (response?.success) {
                     dispatch(
                         openSnackbar({
                             open: true,
@@ -359,7 +357,7 @@ function ClientMasterForm() {
                 {
                     name: 'password',
                     label: 'Password',
-                    type: 'text',
+                    type: 'password',
                     required: true,
                     grid: { xs: 12, sm: 4, md: 4 },
                     size: 'small',
@@ -395,7 +393,7 @@ function ClientMasterForm() {
                 {
                     name: 'smtpPassword',
                     label: 'SMTP Password',
-                    type: 'text',
+                    type: 'password',
                     required: false,
                     grid: { xs: 12, sm: 4, md: 4 },
                     size: 'small',
@@ -492,7 +490,7 @@ function ClientMasterForm() {
     const identityCardData = [
         { label: 'Client Name', value: formik.values?.name || 'N/A' },
         { label: 'Email', value: formik.values?.email ?? 'N/A' },
-        { label: 'Phone No', value: formik.values?.phone_no || 'N/A' },
+        { label: 'Phone No', value: formik.values?.phoneNumber || 'N/A' },
         { label: 'Address', value: formik.values?.address || 'N/A' }
     ]
 

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
+import dayjs from 'dayjs'
 import CustomButton from '../extended/CustomButton'
 
 function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
-    const today = new Date().toISOString().split('T')[0]
+    // ? today where the agent is: the UTC date was yesterday until 05:30 IST
+    const today = dayjs().format('YYYY-MM-DD')
 
     const [form, setForm] = useState({
         amount: '',

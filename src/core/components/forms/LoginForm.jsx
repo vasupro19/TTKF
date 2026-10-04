@@ -64,7 +64,8 @@ export default function Login() {
                 const res = await login(values).unwrap()
                 const userData = res.data.user
                 dispatch(setUserDetails({ user: userData }))
-                await setToken(res.data.accessToken)
+                // ? only that someone is signed in: the session itself is in httpOnly cookies, out of reach of page scripts
+                await setToken('signed-in')
                 const menus = await triggerMenu(userData.id).unwrap()
                 dispatch(setMenuItems(menus.data))
                 navigate('/dashboard', { replace: true })

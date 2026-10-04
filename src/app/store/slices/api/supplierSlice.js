@@ -8,7 +8,7 @@ export const supplierSlice = apiSliceConfig.injectEndpoints({
                 const KEY = 'getSuppliersMasterLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/suppliers?${query || ''}`,
+                    url: `/suppliers${query || ''}`, // ? the query already starts with '?'
                     keepUnusedDataFor: 10,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY, removeLoader })
                 }

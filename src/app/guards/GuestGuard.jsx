@@ -8,7 +8,6 @@ function GuestGuard({ children }) {
     const { isLoggedIn } = useSelector(state => state.auth)
     const [currentToken] = useLocalStorage(LOCAL_STORAGE_KEYS.token, null)
     const [route] = useLocalStorage(LOCAL_STORAGE_KEYS.previousRoute, null)
-    console.log(currentToken, isLoggedIn)
 
     useEffect(() => {
         if (isLoggedIn || currentToken) {
