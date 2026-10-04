@@ -23,7 +23,6 @@ export const dispatchLoaderEvent = (key, value = true) => {
  * @returns {Object} - The processed response object (typically parsed JSON or custom formatted response).
  */
 export const customResponseHandler = async ({ result, requestKey = '', removeLoader = true }) => {
-    console.log(result, 'res')
     if (result.status === 403) store.dispatch(setPermissionExpired()) // ? to fetch new permissions
     if (result.status === 401) store.dispatch(logout()) // ? to logout user manually if user logged out from server
     if (result.status >= 500)
@@ -37,8 +36,10 @@ export const customResponseHandler = async ({ result, requestKey = '', removeLoa
             })
         )
     if (requestKey && removeLoader) dispatchLoaderEvent(requestKey, false) // ? remove loader
-    const contentType = result.headers.get('Content-Type')
-    if (contentType && contentType.includes('application/json')) {
+    // ? a reply with no body (e.g. 204) has no Content-Type: it used to throw here
+    const contentType = result.headers.get('Content-Type') || ''
+    if (!contentType) return null
+    if (contentType.includes('application/json')) {
         return result.json() // Return JSON success response as-is
     }
 
@@ -57,7 +58,9 @@ export const customResponseHandler = async ({ result, requestKey = '', removeLoa
     }
 
     const filename =
-        result.headers.get('x-filename') || result.headers.get('X-Filename') || `Cerebrum: file ${new Date()}`
+        result.headers.get('x-filename') ||
+        result.headers.get('X-Filename') ||
+        `Travelytics file ${new Date().toISOString().slice(0, 10)}`
     const message =
         result.headers.get('x-message') || result.headers.get('X-Message') || 'please open the file to see errors'
 
