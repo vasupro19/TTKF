@@ -3,7 +3,7 @@ import { Card, CardContent, Avatar, Typography, Button, Grid, Box, Container } f
 import { getAuthUser, useLogoutMutation } from '@app/store/slices/api/authApiSlice'
 import { useDispatch } from 'react-redux'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
-import { logout as logoutAction, setLocation } from '@app/store/slices/auth'
+import { signOut } from '@app/store/session'
 import { Logout } from '@mui/icons-material'
 import { openSnackbar } from '@/app/store/slices/snackbar'
 
@@ -51,13 +51,8 @@ function UserProfilePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [getAuthUser])
 
-    const handleLogout = async () => {
-        await logout()
-        removeClientLocation()
-        dispatch(setLocation(null))
-        dispatch(logoutAction())
-        removeToken()
-    }
+    // ? clears everything this session loaded and reloads, even when the server's logout call fails
+    const handleLogout = () => signOut(() => logout().unwrap())
 
     useEffect(() => {
         dispatch(

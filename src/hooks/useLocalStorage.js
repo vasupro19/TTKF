@@ -6,7 +6,9 @@ export const LOCAL_STORAGE_KEYS = Object.freeze({
     previousRoute: 'previousRoute',
     clientLocation: 'clientLocation',
     grnConfig: 'grnConfig',
-    tableId: 'tableId'
+    tableId: 'tableId',
+    // ? who is signed in on this browser, so other tabs can tell when it changes (store/session.js)
+    sessionUser: 'sessionUser'
 })
 
 export function useLocalStorage(key, initialValue = null, isJson = false) {

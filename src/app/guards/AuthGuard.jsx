@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { getAuthUser } from '@app/store/slices/api/authApiSlice'
 import { setError, setUserDetails, setLocation } from '@app/store/slices/auth'
+import { markSignedIn, signOut } from '@app/store/session'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 
 // checks if the user is authenticated ( let the user go to the route ) or not ( redirects user to login page )
@@ -39,10 +40,10 @@ function AuthGuard({ children }) {
                 const response = await dispatch(getAuthUser.initiate('', { forceRefetch: true })).unwrap()
                 if (!response?.data?.user) throw new Error('User not found')
                 dispatch(setUserDetails({ user: response.data.user }))
+                markSignedIn(response.data.user)
             } catch (error) {
-                removeToken()
-                // 🚀 CHANGE: Redirect to Landing Page on error
-                navigate('/', { replace: true })
+                // ? the session is gone: clear everything it left, then the landing page
+                signOut(null, '/')
             }
         }
 

@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { PersistGate } from 'redux-persist/integration/react'
 
@@ -14,8 +14,12 @@ import ThemeCustomization from '@core/theme'
 import Localization from '@app/context/LocalizationContext'
 import Routes from './routes'
 import MenuInitializer from './MenuConfig'
+import { followOtherTabs } from './store/session'
 
 function App() {
+    // ? another tab signing in as someone else, or signing out, reloads this one instead of leaving the old data up
+    useEffect(() => followOtherTabs(), [])
+
     return (
         <Provider store={store}>
             <PersistGate loading={null} persistor={persistor}>

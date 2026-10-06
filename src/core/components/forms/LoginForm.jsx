@@ -22,6 +22,7 @@ import { motion } from 'framer-motion'
 import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
+import { beginSignIn, markSignedIn } from '@app/store/session'
 import { ensureCsrfToken } from '@app/store/slices/api/configSlice'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
@@ -61,6 +62,8 @@ export default function Login() {
         validate,
         onSubmit: async (values, { setSubmitting }) => {
             try {
+                // ? nothing from an earlier session may show in this one
+                beginSignIn()
                 const res = await login(values).unwrap()
                 const userData = res.data.user
 
@@ -76,6 +79,7 @@ export default function Login() {
                 await ensureCsrfToken()
 
                 dispatch(setUserDetails({ user: userData }))
+                markSignedIn(userData)
 
                 const menus = await triggerMenu().unwrap()
                 dispatch(setMenuItems(menus.data))

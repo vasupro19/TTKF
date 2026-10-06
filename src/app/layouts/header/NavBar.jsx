@@ -24,7 +24,8 @@ import FloatingTab from '@/core/components/navbar/FloatingTab'
 
 import MenuIcon from '@mui/icons-material/Menu'
 // ** import from redux
-import { logout as logoutAction, setLocation, setMenuItems } from '@app/store/slices/auth'
+import { setLocation, setMenuItems } from '@app/store/slices/auth'
+import { signOut } from '@app/store/session'
 import { toggleNavBar } from '@app/store/slices/navBarSlice'
 import { useSelector, useDispatch } from 'react-redux'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
@@ -147,14 +148,8 @@ function NavBar() {
         setOpenMenu(null)
     }, [])
 
-    const handleLogout = async () => {
-        await logout().unwrap()
-        dispatch(logoutAction())
-        removeToken()
-        navigate('/login')
-
-        // removeToken()
-    }
+    // ? clears everything this session loaded and reloads, even when the server's logout call fails
+    const handleLogout = () => signOut(() => logout().unwrap())
 
     // const handleSelectLocation = useCallback(async (data, userData) => {
     //     let isError = false
