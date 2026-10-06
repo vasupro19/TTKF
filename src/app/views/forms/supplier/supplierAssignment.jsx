@@ -2,18 +2,10 @@ import React, { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Box, TextField, Autocomplete, Grid, MenuItem, Typography } from '@mui/material'
 import { useGetSuppliersQuery } from '@/app/store/slices/api/supplierSlice'
+import { VEHICLE_NAMES } from '../guestDetailsForm/tripDetails'
 
-// ? the vehicles agencies book most; any other can be typed
-const VEHICLE_TYPES = [
-    'Sedan (Dzire / Etios)',
-    'SUV (Innova Crysta)',
-    'Ertiga',
-    'Tempo Traveller 12 seater',
-    'Tempo Traveller 17 seater',
-    'Tempo Traveller 26 seater',
-    'Mini bus',
-    'Bus'
-]
+// ? the agency's vehicles — the same list as the guest's trip details; any other can be typed
+const VEHICLE_TYPES = VEHICLE_NAMES
 
 const MEAL_PLANS = [
     { value: '', label: 'Not set' },
