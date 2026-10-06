@@ -8,7 +8,9 @@ export const supplierSlice = apiSliceConfig.injectEndpoints({
                 const KEY = 'getSuppliersMasterLKey'
                 dispatchLoaderEvent(KEY)
                 return {
-                    url: `/suppliers?${query || ''}`,
+                    // ? callers pass '?type=Hotel&…' (the suppliers table) or 'type=Hotel' (the hotel and transport
+                    // ? form): either way the address gets exactly one '?' — it read /suppliers??… or /supplierstype=…
+                    url: `/suppliers${query ? `?${String(query).replace(/^\?+/, '')}` : ''}`,
                     keepUnusedDataFor: 10,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY, removeLoader })
                 }
