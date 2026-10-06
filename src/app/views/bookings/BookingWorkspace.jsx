@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { Box, Button, Checkbox, CircularProgress, FormControlLabel, Stack, Typography } from '@mui/material'
 import { Add, ArrowBack } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
 import AssignmentModal from '@/core/components/modals/AssignmentModal'
@@ -9,6 +9,8 @@ import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal'
 import SupplierPaymentModal from '@/core/components/modals/SupplierPaymentModal'
 import {
     getConfirmedVoucherPreview,
+    getGuestReceiptPreview,
+    getGuestServicePreview,
     getSupplierEmailPreview,
     useAddGuestPaymentMutation,
     useAddServiceToPackageMutation,
@@ -18,6 +20,7 @@ import {
     useGetPackageByLeadIdQuery,
     useGetServicesByPackageQuery,
     useSendGuestHotelConfirmationEmailMutation,
+    useSendGuestReceiptMutation,
     useSendGuestTaxiConfirmationEmailMutation,
     useSendSupplierEmailMutation,
     useSendVoucherEmailMutation
@@ -38,6 +41,7 @@ import {
     nextStep,
     progressOf,
     rupees,
+    supplierHasBooking,
     supplierMoney,
     urgency
 } from './bookingFacts'
@@ -57,6 +61,9 @@ const downloadBlob = (blob, filename) => {
 }
 
 const errorText = (error, fallback) => error?.data?.message || error?.message || fallback
+
+// ? the dialog's title for an email to a supplier, by the kind the server settled on
+const SUPPLIER_TITLE = { request: 'Booking request to', amendment: 'Amendment to', cancellation: 'Cancellation to' }
 
 /**
  * One confirmed booking, everything in one place and in the order it gets done: hotels, transport, the
@@ -92,6 +99,7 @@ function BookingWorkspace() {
     const [addService, { isLoading: savingService }] = useAddServiceToPackageMutation()
     const [deleteService] = useDeleteServiceMutation()
     const [sendSupplierEmail] = useSendSupplierEmailMutation()
+    const [sendGuestReceipt] = useSendGuestReceiptMutation()
     const [addGuestPayment, { isLoading: savingGuestPayment }] = useAddGuestPaymentMutation()
     const [paySupplier, { isLoading: savingSupplierPayment }] = usePaySupplierMutation()
     const [sendVoucherEmail] = useSendVoucherEmailMutation()
@@ -110,20 +118,31 @@ function BookingWorkspace() {
     }
     const [supplierPayment, setSupplierPayment] = useState(null)
     const [busy, setBusy] = useState('')
-    // ? the email being checked before it is sent: the guest's voucher, or a booking request to a supplier
+    /**
+     * The email being checked before it is sent. Nothing on this page emails anyone without the agent seeing it
+     * first. `send` says what it is:
+     *   { kind: 'voucher' }
+     *   { kind: 'supplier', id, emailKind: 'request' | 'amendment' | 'cancellation', previous, name, paid }
+     *   { kind: 'receipt', paymentId }
+     *   { kind: 'guestService', type: 'Hotel' | 'Taxi' }
+     * `next` is the email to show once this one is sent or skipped (after a supplier change: the cancellation to the
+     * supplier who still holds the booking).
+     */
     const closedMail = {
         open: false,
         loading: false,
-        kind: '',
-        service: null,
+        send: null,
+        next: null,
         title: '',
         to: '',
         subject: '',
-        html: ''
+        html: '',
+        note: '',
+        from: '',
+        fromNote: '',
+        remove: false
     }
     const [mail, setMail] = useState(closedMail)
-    const closeMail = () => setMail(current => ({ ...current, open: false }))
-
     const lead = leadData?.data || {}
     const guest = guestData?.data || {}
     const guestName = lead.fullName || 'Guest'
@@ -198,7 +217,133 @@ function BookingWorkspace() {
             row: row ? { ...row, guestName } : { guestName, defaults: serviceDefaults(type) }
         })
 
+    const PREVIEWS = {
+        voucher: () => getConfirmedVoucherPreview.initiate(packageId, { forceRefetch: true }),
+        supplier: send =>
+            getSupplierEmailPreview.initiate(
+                { id: send.id, kind: send.emailKind, previous: send.previous },
+                { forceRefetch: true }
+            ),
+        receipt: send => getGuestReceiptPreview.initiate(send.paymentId, { forceRefetch: true }),
+        guestService: send =>
+            getGuestServicePreview.initiate(
+                { packageId, kind: send.type === 'Hotel' ? 'hotel' : 'taxi' },
+                { forceRefetch: true }
+            )
+    }
+
+    const titleOf = (send, kind = send.emailKind, name = send.name) =>
+        ({
+            voucher: 'Booking voucher',
+            supplier: `${SUPPLIER_TITLE[kind] || SUPPLIER_TITLE.request} ${name || 'the supplier'}`,
+            receipt: 'Payment receipt',
+            guestService: send.type === 'Hotel' ? 'Hotel details for the guest' : 'Transport details for the guest'
+        })[send.kind]
+
+    // ? loads the preview of `send` and shows it; `next` follows once it is sent or skipped
+    const openMail = async (send, next = null) => {
+        setMail({
+            ...closedMail,
+            open: true,
+            loading: true,
+            send,
+            next,
+            title: titleOf(send),
+            to: send.kind === 'voucher' ? lead.senderEmail || '' : '',
+            remove: Boolean(send.remove)
+        })
+        const { data, error } = await dispatch(PREVIEWS[send.kind](send))
+        if (error) {
+            setMail(closedMail)
+            notify(errorText(error, 'Couldn’t prepare the email.'), 'error')
+            if (next) openMail(next)
+            return
+        }
+        const email = data?.data || {}
+        let settled = send
+        let followUp = next
+        let note = ''
+        if (send.kind === 'supplier') {
+            // ? the server settles the kind: an "amendment" to a supplier who never had the booking is a request
+            settled = { ...send, emailKind: email.kind || send.emailKind, name: email.name || send.name }
+            const nothingChanged =
+                settled.emailKind === 'amendment' && Array.isArray(email.changes) && !email.changes.length
+            if (nothingChanged) {
+                setMail(closedMail)
+                notify(`Nothing ${settled.name || 'the supplier'} was told has changed, so no amendment is needed.`)
+                if (next) openMail(next)
+                return
+            }
+            if (settled.emailKind === 'amendment' && email.changes?.length)
+                note = `Changed: ${email.changes.map(change => change.label).join(', ')}.`
+            if (email.switchedFrom) {
+                note = `You changed the supplier. ${email.switchedFrom.name} still has this booking — you can send them a cancellation next.`
+                followUp = {
+                    kind: 'supplier',
+                    id: send.id,
+                    emailKind: 'cancellation',
+                    previous: true,
+                    name: email.switchedFrom.name
+                }
+            }
+        }
+        setMail(current => ({
+            ...current,
+            loading: false,
+            send: settled,
+            next: followUp,
+            title: titleOf(settled),
+            note,
+            to: email.to || current.to || '',
+            subject: email.subject || '',
+            html: email.html || '',
+            // ? who it goes from — the user's own mailbox for a guest, the supplier mailbox for a supplier
+            from: email.from || '',
+            fromNote: email.fromNote || ''
+        }))
+    }
+
+    const openPreview = () => openMail({ kind: 'voucher' })
+
+    // ? a booking request, an amendment or a cancellation to the supplier of one hotel or transport line
+    const openSupplierEmail = (service, emailKind = 'request', options = {}) =>
+        openMail({
+            kind: 'supplier',
+            id: service.id,
+            emailKind,
+            name: service.supplier?.businessname || 'the supplier',
+            paid: amount(service.paidAmount),
+            ...options
+        })
+
+    // ? done with this email (sent or skipped): show the next one, if there is one
+    const closeMail = () => {
+        const { next } = mail
+        setMail(current => ({ ...current, open: false }))
+        if (next) openMail(next)
+    }
+
+    const sendMail = async () => {
+        const { send } = mail
+        const tasks = {
+            voucher: () => sendVoucherEmail(packageId).unwrap(),
+            supplier: () =>
+                sendSupplierEmail({
+                    id: send.id,
+                    kind: send.emailKind,
+                    previous: Boolean(send.previous),
+                    remove: send.emailKind === 'cancellation' && !send.previous && mail.remove
+                }).unwrap(),
+            receipt: () => sendGuestReceipt(send.paymentId).unwrap(),
+            guestService: () => (send.type === 'Hotel' ? sendHotelEmail : sendTaxiEmail)(packageId).unwrap()
+        }
+        const ok = await run('mail', tasks[send.kind], 'Email sent', 'Couldn’t send the email.')
+        if (ok) closeMail()
+    }
+
     const saveService = async formData => {
+        // ? the line as it was: if its supplier has the booking, they hear about the change (previewed first)
+        const edited = formData.id ? services.find(service => service.id === formData.id) || serviceForm.row : null
         const ok = await run(
             'service',
             () =>
@@ -213,17 +358,34 @@ function BookingWorkspace() {
             formData.id ? 'Booking updated' : `${serviceForm.type === 'Hotel' ? 'Hotel' : 'Transport'} added`,
             'Couldn’t save it.'
         )
-        if (ok) setServiceForm(current => ({ ...current, open: false }))
+        if (!ok) return
+        setServiceForm(current => ({ ...current, open: false }))
+        if (edited && supplierHasBooking(edited)) openSupplierEmail(edited, 'amendment')
     }
 
+    // ? the receipt is not sent by itself: once the payment is saved, the agent sees it and sends it
     const saveGuestPayment = async formData => {
-        const ok = await run(
-            'guest-payment',
-            () => addGuestPayment({ packageId, ...formData, idempotencyKey: paymentKey }).unwrap(),
-            'Payment recorded — a receipt is emailed to the guest',
-            'Couldn’t record the payment.'
-        )
-        if (ok) setGuestPaymentOpen(false)
+        setBusy('guest-payment')
+        try {
+            const response = await addGuestPayment({ packageId, ...formData, idempotencyKey: paymentKey }).unwrap()
+            setGuestPaymentOpen(false)
+            refresh()
+            const { paymentId, guestEmail } = response?.data || {}
+            if (paymentId && guestEmail) {
+                notify('Payment recorded. Check the receipt, then send it to the guest.')
+                openMail({ kind: 'receipt', paymentId })
+            } else {
+                notify(
+                    paymentId
+                        ? 'Payment recorded. The guest has no email address, so no receipt can be sent.'
+                        : response?.message || 'Payment recorded'
+                )
+            }
+        } catch (error) {
+            notify(errorText(error, 'Couldn’t record the payment.'), 'error')
+        } finally {
+            setBusy('')
+        }
     }
 
     const saveSupplierPayment = async formData => {
@@ -245,69 +407,6 @@ function BookingWorkspace() {
         if (ok) setSupplierPayment(null)
     }
 
-    const openPreview = async () => {
-        setMail({
-            ...closedMail,
-            open: true,
-            loading: true,
-            kind: 'voucher',
-            title: 'Booking voucher',
-            to: lead.senderEmail
-        })
-        const { data, error } = await dispatch(getConfirmedVoucherPreview.initiate(packageId, { forceRefetch: true }))
-        if (error) {
-            setMail(closedMail)
-            notify(errorText(error, 'Couldn’t load the voucher.'), 'error')
-            return
-        }
-        setMail(current => ({ ...current, loading: false, html: data?.data?.html || '' }))
-    }
-
-    const openSupplierEmail = async service => {
-        const name = service.supplier?.businessname || 'the supplier'
-        setMail({
-            ...closedMail,
-            open: true,
-            loading: true,
-            kind: 'supplier',
-            service,
-            title: `Booking request to ${name}`
-        })
-        const { data, error } = await dispatch(getSupplierEmailPreview.initiate(service.id, { forceRefetch: true }))
-        if (error) {
-            setMail(closedMail)
-            notify(errorText(error, 'Couldn’t prepare the email.'), 'error')
-            return
-        }
-        const email = data?.data || {}
-        setMail(current => ({
-            ...current,
-            loading: false,
-            to: email.to || '',
-            subject: email.subject || '',
-            html: email.html || ''
-        }))
-    }
-
-    const sendMail = async () => {
-        const { kind, service } = mail
-        const ok =
-            kind === 'voucher'
-                ? await run(
-                      'voucher',
-                      () => sendVoucherEmail(packageId).unwrap(),
-                      `Voucher emailed to ${guestName}`,
-                      'Couldn’t send the voucher.'
-                  )
-                : await run(
-                      `email-${service.id}`,
-                      () => sendSupplierEmail(service.id).unwrap(),
-                      `Booking request emailed to ${service.supplier?.businessname || 'the supplier'}`,
-                      'Couldn’t email the supplier.'
-                  )
-        if (ok) closeMail()
-    }
-
     // ? the voucher's state: sent (and when), or the reason its last email did not go
     const voucherEmail = emailOutcome(booking?.emails?.voucher)
     let voucherStatus = progress.voucher ? 'Sent' : 'Not sent yet'
@@ -317,7 +416,29 @@ function BookingWorkspace() {
 
     let mailSendLabel = 'Send'
     if (mail.to) mailSendLabel = `Send to ${mail.to}`
-    else if (mail.kind === 'voucher') mailSendLabel = 'No guest email on this lead'
+    else if (mail.send && mail.send.kind !== 'supplier') mailSendLabel = 'No guest email on this lead'
+
+    // ? a cancellation can also take the line off the booking — not while payments to the supplier are recorded
+    const cancelling = mail.send?.kind === 'supplier' && mail.send.emailKind === 'cancellation' && !mail.send.previous
+    const removeOption = cancelling ? (
+        <Box>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={mail.remove && !mail.send.paid}
+                        disabled={Boolean(mail.send.paid)}
+                        onChange={event => setMail(current => ({ ...current, remove: event.target.checked }))}
+                    />
+                }
+                label={`Also remove ${mail.send.name} from this booking`}
+            />
+            {mail.send.paid ? (
+                <Typography color='text.secondary' sx={{ fontSize: '0.8125rem', mt: -0.5 }}>
+                    Payments to {mail.send.name} are recorded, so it stays on the booking.
+                </Typography>
+            ) : null}
+        </Box>
+    ) : null
 
     const doNext = () => {
         if (!step) return
@@ -384,9 +505,10 @@ function BookingWorkspace() {
                             <ServiceRow
                                 key={service.id}
                                 service={service}
-                                emailing={busy === `email-${service.id}`}
+                                emailing={busy === 'mail' && mail.send?.id === service.id}
                                 onPay={setSupplierPayment}
-                                onEmail={openSupplierEmail}
+                                onEmail={item => openSupplierEmail(item)}
+                                onCancel={(item, remove) => openSupplierEmail(item, 'cancellation', { remove })}
                                 onEdit={item => openServiceForm(type, item)}
                                 onRemove={item =>
                                     run(
@@ -580,7 +702,12 @@ function BookingWorkspace() {
                     {payments.length ? (
                         <Box component='ul' sx={{ m: 0, p: 0 }}>
                             {payments.map(payment => (
-                                <PaymentRow key={payment.id} payment={payment} />
+                                <PaymentRow
+                                    key={payment.id}
+                                    payment={payment}
+                                    canEmail={Boolean(lead.senderEmail)}
+                                    onReceipt={item => openMail({ kind: 'receipt', paymentId: item.id })}
+                                />
                             ))}
                         </Box>
                     ) : (
@@ -645,17 +772,10 @@ function BookingWorkspace() {
                             <Button
                                 size='small'
                                 sx={{ ml: -0.75 }}
-                                disabled={!hotels.length || busy === 'hotel-mail'}
-                                onClick={() =>
-                                    run(
-                                        'hotel-mail',
-                                        () => sendHotelEmail(packageId).unwrap(),
-                                        `Hotel details emailed to ${guestName}`,
-                                        'Couldn’t send it.'
-                                    )
-                                }
+                                disabled={!hotels.length}
+                                onClick={() => openMail({ kind: 'guestService', type: 'Hotel' })}
                             >
-                                {hotels.length ? 'Email to the guest' : 'Add a hotel first'}
+                                {hotels.length ? 'Preview and email' : 'Add a hotel first'}
                             </Button>
                             <EmailNote email={booking?.emails?.hotel} />
                         </Box>
@@ -666,17 +786,10 @@ function BookingWorkspace() {
                             <Button
                                 size='small'
                                 sx={{ ml: -0.75 }}
-                                disabled={!taxis.length || busy === 'taxi-mail'}
-                                onClick={() =>
-                                    run(
-                                        'taxi-mail',
-                                        () => sendTaxiEmail(packageId).unwrap(),
-                                        `Transport details emailed to ${guestName}`,
-                                        'Couldn’t send it.'
-                                    )
-                                }
+                                disabled={!taxis.length}
+                                onClick={() => openMail({ kind: 'guestService', type: 'Taxi' })}
                             >
-                                {taxis.length ? 'Email to the guest' : 'Add transport first'}
+                                {taxis.length ? 'Preview and email' : 'Add transport first'}
                             </Button>
                             <EmailNote email={booking?.emails?.taxi} />
                         </Box>
@@ -722,9 +835,14 @@ function BookingWorkspace() {
                 subject={mail.subject}
                 html={mail.html}
                 loading={mail.loading}
-                sending={busy === 'voucher' || (mail.service ? busy === `email-${mail.service.id}` : false)}
+                sending={busy === 'mail'}
                 canSend={Boolean(mail.to)}
                 sendLabel={mailSendLabel}
+                closeLabel={mail.send && mail.send.kind !== 'voucher' ? 'Don’t send' : 'Cancel'}
+                from={mail.from}
+                fromNote={mail.fromNote}
+                note={mail.note}
+                extra={removeOption}
                 onClose={closeMail}
                 onSend={sendMail}
             />

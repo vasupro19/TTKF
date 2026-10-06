@@ -19,8 +19,13 @@ export const serviceShape = PropTypes.shape({
     roomType: PropTypes.string,
     // ? vehicle, pickup, drop, driver for transport; meal plan for a hotel
     details: PropTypes.objectOf(PropTypes.string),
-    // ? how the last booking request to this supplier went
-    lastEmail: PropTypes.shape({ status: PropTypes.string, sentAt: PropTypes.string, notes: PropTypes.string }),
+    // ? how the last email to this supplier went, and which it was: 'request', 'amendment' or 'cancellation'
+    lastEmail: PropTypes.shape({
+        status: PropTypes.string,
+        sentAt: PropTypes.string,
+        notes: PropTypes.string,
+        kind: PropTypes.string
+    }),
     supplier: PropTypes.shape({ businessname: PropTypes.string, phone: PropTypes.string })
 })
 
@@ -30,5 +35,7 @@ export const paymentShape = PropTypes.shape({
     paymentDate: PropTypes.string,
     paymentMethod: PropTypes.string,
     transactionId: PropTypes.string,
-    remarks: PropTypes.string
+    remarks: PropTypes.string,
+    // ? how this payment's receipt last went; null when none was sent
+    receipt: PropTypes.shape({ status: PropTypes.string, sentAt: PropTypes.string, notes: PropTypes.string })
 })

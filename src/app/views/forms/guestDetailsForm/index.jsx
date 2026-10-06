@@ -888,6 +888,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
     const [previewOpen, setPreviewOpen] = useState(false)
     const [previewHtml, setPreviewHtml] = useState('')
     const [previewSubject, setPreviewSubject] = useState('')
+    // ? who the quotation goes from: the signed-in user's mailbox, and why when it is another
+    const [previewFrom, setPreviewFrom] = useState({ from: '', fromNote: '' })
     const [loadingPreview, setLoadingPreview] = useState(false)
 
     const handleShare = async () => {
@@ -963,6 +965,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
             const { data } = await dispatch(getLeadPreview.initiate({ leadId, quoteNo: currentQuoteNo }))
             setPreviewHtml(data?.data?.html || '')
             setPreviewSubject(data?.data?.subject || '')
+            setPreviewFrom({ from: data?.data?.from || '', fromNote: data?.data?.fromNote || '' })
         } catch (err) {
             notify('Failed to load preview', 'error')
             setPreviewOpen(false)
@@ -1151,6 +1154,16 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                     {leadData?.data?.senderEmail ? `To ${leadData.data.senderEmail}` : ''}
                                     {leadData?.data?.senderEmail && previewSubject ? ' · ' : ''}
                                     {previewSubject}
+                                </Typography>
+                            ) : null}
+                            {!loadingPreview && previewFrom.from ? (
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
+                                    From {previewFrom.from}
+                                </Typography>
+                            ) : null}
+                            {!loadingPreview && previewFrom.fromNote ? (
+                                <Typography color='warning.dark' sx={{ fontSize: '0.8125rem' }}>
+                                    {previewFrom.fromNote}
                                 </Typography>
                             ) : null}
                         </Box>

@@ -36,8 +36,10 @@ import useUiAccess from '@/hooks/useUiAccess'
 // import { SettingsGearAnimIcon } from '@/assets/icons/SettingsGearAnimIcon'
 import SettingsIcon from '@mui/icons-material/Settings'
 import KeyIcon from '@mui/icons-material/Key'
+import MailOutlineIcon from '@mui/icons-material/MailOutline'
 import { headers } from './helper'
 import AiKeysDialog from './AiKeysDialog'
+import MailSettingsDialog from './MailSettingsDialog'
 
 // const slimTextFieldStyle = {
 //     '& .MuiInputBase-input': {
@@ -62,6 +64,8 @@ function MasterClientTable() {
     const [isActive, setIsActive] = useState(true)
     // ? the client whose AI keys are open
     const [aiClient, setAiClient] = useState(null)
+    // ? the client whose email settings are open
+    const [mailClient, setMailClient] = useState(null)
 
     const [excelHandler, setExcelHandler] = useState(false)
     const [search, setSearch] = useState({
@@ -350,6 +354,20 @@ function MasterClientTable() {
                                 </IconButton>
                             </UiAccessGuard>
 
+                            {/* the client's mail server and mailboxes */}
+                            <UiAccessGuard type='edit'>
+                                <IconButton
+                                    sx={{ color: 'primary.main' }}
+                                    size='small'
+                                    aria-label={`Email settings for ${row.name || 'this client'}`}
+                                    onClick={() => setMailClient({ id: Number(row.id), name: row.name })}
+                                >
+                                    <Tooltip title='Email settings'>
+                                        <MailOutlineIcon fontSize='small' />
+                                    </Tooltip>
+                                </IconButton>
+                            </UiAccessGuard>
+
                             {/* Gear Icon Button */}
                             <UiAccessGuard type='edit'>
                                 <IconButton
@@ -402,6 +420,11 @@ function MasterClientTable() {
                     isLoading={removeClientLKey}
                 /> */}
                 <AiKeysDialog open={Boolean(aiClient)} client={aiClient} onClose={() => setAiClient(null)} />
+                <MailSettingsDialog
+                    open={Boolean(mailClient)}
+                    client={mailClient}
+                    onClose={() => setMailClient(null)}
+                />
             </MainCard>
         </ContextMenuProvider>
     )

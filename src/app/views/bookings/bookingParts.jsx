@@ -2,7 +2,16 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { Box, Button, CircularProgress, IconButton, Modal, Stack, Typography } from '@mui/material'
 import { CheckCircle, Close, RadioButtonUnchecked, Send } from '@mui/icons-material'
-import { STEPS, amount, dateRange, emailOutcome, rupees, shortDate } from './bookingFacts'
+import {
+    STEPS,
+    SUPPLIER_EMAIL_WORDS,
+    amount,
+    dateRange,
+    emailOutcome,
+    rupees,
+    shortDate,
+    supplierHasBooking
+} from './bookingFacts'
 import { paymentShape, serviceShape } from './bookingShapes'
 
 // ? read by screen readers, not shown
@@ -106,14 +115,19 @@ MoneyCard.propTypes = {
 const STATUS_COLOR = { 'Fully Paid': 'success.dark', 'Partially Paid': '#b45309' }
 const STATUS_TEXT = { 'Fully Paid': 'Paid', 'Partially Paid': 'Part paid' }
 
-export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing = false }) {
+export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove, emailing = false }) {
     const [confirmRemove, setConfirmRemove] = useState(false)
     const cost = amount(service.cost)
     const paid = amount(service.paidAmount)
     const due = Math.max(0, cost - paid)
     const name = service.supplier?.businessname || 'Supplier'
     const details = service.details || {}
-    const request = emailOutcome(service.lastEmail, 'Booking request')
+    const request = emailOutcome(
+        service.lastEmail,
+        SUPPLIER_EMAIL_WORDS[service.lastEmail?.kind] || SUPPLIER_EMAIL_WORDS.request
+    )
+    // ? the supplier has this booking: removing the line should tell them
+    const booked = supplierHasBooking(service)
     const isHotel = service.type === 'Hotel'
     const facts = [
         dateRange(service.startDate, service.endDate),
@@ -172,7 +186,30 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
                 </Box>
             </Stack>
             <Stack direction='row' spacing={0.5} flexWrap='wrap' useFlexGap sx={{ mt: 1, ml: -0.75 }}>
-                {confirmRemove ? (
+                {confirmRemove && booked ? (
+                    <>
+                        <Typography sx={{ fontSize: '0.875rem', px: 0.75, alignSelf: 'center' }}>
+                            {name} has this booking. Send them a cancellation?
+                        </Typography>
+                        <Button
+                            size='small'
+                            color='error'
+                            onClick={() => {
+                                setConfirmRemove(false)
+                                onCancel(service, true)
+                            }}
+                        >
+                            Send cancellation
+                        </Button>
+                        <Button size='small' sx={{ color: 'text.secondary' }} onClick={() => onRemove(service)}>
+                            Remove without email
+                        </Button>
+                        <Button size='small' onClick={() => setConfirmRemove(false)}>
+                            Keep
+                        </Button>
+                    </>
+                ) : null}
+                {confirmRemove && !booked ? (
                     <>
                         <Typography sx={{ fontSize: '0.875rem', px: 0.75, alignSelf: 'center' }}>
                             Remove {name} from this booking?
@@ -184,7 +221,8 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
                             Keep
                         </Button>
                     </>
-                ) : (
+                ) : null}
+                {confirmRemove ? null : (
                     <>
                         {due ? (
                             <Button size='small' onClick={() => onPay(service)}>
@@ -202,6 +240,11 @@ export function ServiceRow({ service, onPay, onEmail, onEdit, onRemove, emailing
                         <Button size='small' onClick={() => onEdit(service)}>
                             Edit
                         </Button>
+                        {booked ? (
+                            <Button size='small' color='error' onClick={() => onCancel(service, false)}>
+                                Cancel booking
+                            </Button>
+                        ) : null}
                         <Button size='small' sx={{ color: 'text.secondary' }} onClick={() => setConfirmRemove(true)}>
                             Remove
                         </Button>
@@ -216,12 +259,14 @@ ServiceRow.propTypes = {
     service: serviceShape.isRequired,
     onPay: PropTypes.func.isRequired,
     onEmail: PropTypes.func.isRequired,
+    onCancel: PropTypes.func.isRequired,
     onEdit: PropTypes.func.isRequired,
     onRemove: PropTypes.func.isRequired,
     emailing: PropTypes.bool
 }
 
-export function PaymentRow({ payment }) {
+export function PaymentRow({ payment, onReceipt, canEmail = true }) {
+    const receipt = emailOutcome(payment.receipt, 'Receipt')
     return (
         <Box component='li' sx={{ listStyle: 'none', borderTop: '1px solid', borderColor: 'divider', py: 1.5 }}>
             <Stack direction='row' justifyContent='space-between' spacing={2}>
@@ -241,15 +286,35 @@ export function PaymentRow({ payment }) {
                     {rupees(payment.amount)}
                 </Typography>
             </Stack>
+            <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap sx={{ ml: -0.75 }}>
+                <Button size='small' disabled={!canEmail} onClick={() => onReceipt(payment)}>
+                    {canEmail ? 'Email receipt' : 'No guest email for a receipt'}
+                </Button>
+                {receipt ? (
+                    <Typography
+                        role='status'
+                        color={receipt.failed ? 'error.main' : 'text.secondary'}
+                        sx={{ fontSize: '0.8125rem' }}
+                    >
+                        {receipt.text}
+                    </Typography>
+                ) : null}
+            </Stack>
         </Box>
     )
 }
 
-PaymentRow.propTypes = { payment: paymentShape.isRequired }
+PaymentRow.propTypes = {
+    payment: paymentShape.isRequired,
+    onReceipt: PropTypes.func.isRequired,
+    canEmail: PropTypes.bool
+}
 
 /**
- * An email exactly as it will be sent — the voucher to the guest, or a booking request to a hotel or transporter —
- * with the recipient and subject, and a button to send it.
+ * An email exactly as it will be sent — to the guest (voucher, receipt, hotel and transport details) or to a hotel
+ * or transporter (booking request, amendment, cancellation) — with the recipient and subject, and a button to send
+ * it. `note` says something the agent should know first; `extra` sits above the buttons (a cancellation's "also
+ * remove from the booking").
  */
 export function EmailPreview({
     open,
@@ -261,6 +326,11 @@ export function EmailPreview({
     sending = false,
     sendLabel,
     canSend = true,
+    closeLabel = 'Cancel',
+    from = '',
+    fromNote = '',
+    note = '',
+    extra = null,
     onClose,
     onSend
 }) {
@@ -295,6 +365,11 @@ export function EmailPreview({
                 >
                     <Box sx={{ minWidth: 0 }}>
                         <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>{title}</Typography>
+                        {from ? (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
+                                From {from}
+                            </Typography>
+                        ) : null}
                         {to ? (
                             <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} noWrap>
                                 To {to}
@@ -310,6 +385,37 @@ export function EmailPreview({
                         <Close />
                     </IconButton>
                 </Stack>
+                {fromNote ? (
+                    <Typography
+                        role='note'
+                        aria-label='Sender'
+                        sx={{
+                            px: 3,
+                            py: 1.25,
+                            fontSize: '0.875rem',
+                            color: 'warning.dark',
+                            borderBottom: '1px solid',
+                            borderColor: 'divider'
+                        }}
+                    >
+                        {fromNote}
+                    </Typography>
+                ) : null}
+                {note ? (
+                    <Typography
+                        role='note'
+                        sx={{
+                            px: 3,
+                            py: 1.25,
+                            fontSize: '0.875rem',
+                            bgcolor: 'action.hover',
+                            borderBottom: '1px solid',
+                            borderColor: 'divider'
+                        }}
+                    >
+                        {note}
+                    </Typography>
+                ) : null}
                 <Box sx={{ flex: 1, overflow: 'hidden', bgcolor: 'grey.50' }}>
                     {loading ? (
                         <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -320,12 +426,14 @@ export function EmailPreview({
                     )}
                 </Box>
                 <Stack
-                    direction='row'
+                    direction={{ xs: 'column', sm: 'row' }}
                     justifyContent='flex-end'
+                    alignItems={{ xs: 'stretch', sm: 'center' }}
                     spacing={2}
                     sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}
                 >
-                    <Button onClick={onClose}>Cancel</Button>
+                    {extra ? <Box sx={{ flex: 1, minWidth: 0 }}>{extra}</Box> : null}
+                    <Button onClick={onClose}>{closeLabel}</Button>
                     <Button
                         variant='contained'
                         startIcon={sending ? <CircularProgress size={16} color='inherit' /> : <Send />}
@@ -350,6 +458,11 @@ EmailPreview.propTypes = {
     sending: PropTypes.bool,
     sendLabel: PropTypes.string.isRequired,
     canSend: PropTypes.bool,
+    closeLabel: PropTypes.string,
+    from: PropTypes.string,
+    fromNote: PropTypes.string,
+    note: PropTypes.string,
+    extra: PropTypes.node,
     onClose: PropTypes.func.isRequired,
     onSend: PropTypes.func.isRequired
 }

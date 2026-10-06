@@ -139,6 +139,19 @@ export const categoryLabel = value => CATEGORY_LABELS[value] || value || ''
  * @param {string} what what was sent ("Booking request"); left out, the line reads "Emailed …" / "Didn’t go …"
  * @returns {{ text: string, failed: boolean } | null}
  */
+/**
+ * @description whether the supplier of a hotel or transport line has been sent this booking and not told it is
+ *              cancelled — so a change to the line needs an amendment, and calling it off a cancellation
+ */
+export const supplierHasBooking = service => {
+    const last = service?.lastEmail
+    if (!last?.status) return false
+    return !(last.kind === 'cancellation' && last.status === 'Sent')
+}
+
+// ? what the last email to a supplier was, in the words its note uses
+export const SUPPLIER_EMAIL_WORDS = { request: 'Booking request', amendment: 'Amendment', cancellation: 'Cancellation' }
+
 export const emailOutcome = (email, what = '') => {
     if (!email?.status) return null
     if (email.status === 'Failed') {
