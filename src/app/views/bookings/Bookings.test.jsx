@@ -18,12 +18,14 @@ const api = vi.hoisted(() => {
         addService: call(),
         deleteService: call(),
         sendSupplierEmail: call(),
+        sendReceipt: call(),
         addGuestPayment: call(),
         paySupplier: call(),
         sendVoucher: call(),
         sendHotel: call(),
         sendTaxi: call(),
         downloadPdf: call(),
+        formChanges: {},
         supplierPreview: null,
         snackbars: []
     }
@@ -36,7 +38,18 @@ vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal(
 vi.mock('react-redux', () => ({
     useDispatch: () => action => {
         if (action?.type === 'preview') return Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } })
-        if (action?.type === 'supplierPreview') return Promise.resolve(api.supplierPreview)
+        if (action?.type === 'supplierPreview')
+            return Promise.resolve(
+                typeof api.supplierPreview === 'function' ? api.supplierPreview(action.arg) : api.supplierPreview
+            )
+        if (action?.type === 'receiptPreview')
+            return Promise.resolve({
+                data: { data: { to: 'asha@example.com', subject: 'Payment received', html: '<p>receipt</p>' } }
+            })
+        if (action?.type === 'guestServicePreview')
+            return Promise.resolve({
+                data: { data: { to: 'asha@example.com', subject: 'Hotel Confirmation', html: '<p>hotel</p>' } }
+            })
         if (action?.type === 'snackbar') api.snackbars.push(action.payload.message)
         return action
     },
@@ -54,13 +67,36 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useAddServiceToPackageMutation: () => [api.addService, { isLoading: false }],
     useDeleteServiceMutation: () => [api.deleteService],
     useSendSupplierEmailMutation: () => [api.sendSupplierEmail],
+    useSendGuestReceiptMutation: () => [api.sendReceipt],
     useAddGuestPaymentMutation: () => [api.addGuestPayment, { isLoading: false }],
     useSendVoucherEmailMutation: () => [api.sendVoucher],
     useSendGuestHotelConfirmationEmailMutation: () => [api.sendHotel],
     useSendGuestTaxiConfirmationEmailMutation: () => [api.sendTaxi],
     useDownloadConfirmedVoucherPdfMutation: () => [api.downloadPdf],
     getConfirmedVoucherPreview: { initiate: () => ({ type: 'preview' }) },
-    getSupplierEmailPreview: { initiate: id => ({ type: 'supplierPreview', id }) }
+    getSupplierEmailPreview: { initiate: arg => ({ type: 'supplierPreview', arg }) },
+    getGuestReceiptPreview: { initiate: arg => ({ type: 'receiptPreview', arg }) },
+    getGuestServicePreview: { initiate: arg => ({ type: 'guestServicePreview', arg }) }
+}))
+vi.mock('@/core/components/modals/GuestPaymentModal', () => ({
+    default: ({ open, onSave }) =>
+        open ? (
+            <button type='button' onClick={() => onSave({ amount: '20000', paymentMethod: 'UPI' })}>
+                Save the payment
+            </button>
+        ) : null
+}))
+// ? the hotel/transport form: saving it sends back the line as it was opened (with the changes the test gives)
+vi.mock('@/core/components/modals/AssignmentModal', () => ({
+    default: ({ open, type, row, onSave }) =>
+        open ? (
+            <div>
+                <h4>{row?.id ? 'Edit' : `Add ${type === 'Hotel' ? 'hotel' : 'transport'}`}</h4>
+                <button type='button' onClick={() => onSave({ ...row, ...api.formChanges })}>
+                    Save the form
+                </button>
+            </div>
+        ) : null
 }))
 vi.mock('@/app/store/slices/api/confirmedService', () => ({
     usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
@@ -152,6 +188,7 @@ beforeEach(() => {
     ]
     api.taxis = []
     api.snackbars = []
+    api.formChanges = {}
     api.supplierPreview = {
         data: {
             data: {
@@ -283,7 +320,7 @@ describe('One booking', () => {
 
     test('the voucher is previewed before it is sent', async () => {
         renderBooking()
-        fireEvent.click(screen.getByRole('button', { name: 'Preview and email' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Preview and email' })[0])
         const send = await screen.findByRole('button', { name: 'Send to asha@example.com' })
         expect(api.sendVoucher).not.toHaveBeenCalled()
         fireEvent.click(send)
@@ -301,7 +338,14 @@ describe('One booking', () => {
         expect(api.sendSupplierEmail).not.toHaveBeenCalled()
 
         fireEvent.click(within(dialog).getByRole('button', { name: 'Send to rooms@willowbanks.example' }))
-        await waitFor(() => expect(api.sendSupplierEmail).toHaveBeenCalledWith(21))
+        await waitFor(() =>
+            expect(api.sendSupplierEmail).toHaveBeenCalledWith({
+                id: 21,
+                kind: 'request',
+                previous: false,
+                remove: false
+            })
+        )
     })
 
     test('a supplier without an email says so, and nothing opens or is sent', async () => {
@@ -315,5 +359,210 @@ describe('One booking', () => {
         )
         expect(screen.queryByRole('dialog', { name: 'Booking request to Hotel Willow Banks' })).not.toBeInTheDocument()
         expect(api.sendSupplierEmail).not.toHaveBeenCalled()
+    })
+})
+
+describe('Emails about the booking are always previewed first', () => {
+    // ? Hotel Willow Banks has been sent this booking
+    const booked = () => {
+        api.hotels = [
+            { ...api.hotels[0], lastEmail: { status: 'Sent', sentAt: '2026-10-02T04:30:00.000Z', kind: 'request' } }
+        ]
+    }
+    const preview = (data, arg) => ({
+        data: {
+            data: {
+                kind: arg?.kind || 'request',
+                name: 'Hotel Willow Banks',
+                to: 'rooms@willowbanks.example',
+                subject: 'Subject',
+                html: '<p>email</p>',
+                changes: null,
+                switchedFrom: null,
+                ...data
+            }
+        }
+    })
+
+    test('an edited hotel whose supplier has the booking: the amendment is shown, then sent on click', async () => {
+        booked()
+        api.supplierPreview = arg => preview({ changes: [{ label: 'Rooms', was: '2 rooms', now: '3 rooms' }] }, arg)
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        fireEvent.click(within(hotels).getByRole('button', { name: 'Edit' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+
+        const dialog = await screen.findByRole('dialog', { name: 'Amendment to Hotel Willow Banks' })
+        expect(within(dialog).getByText('Changed: Rooms.')).toBeInTheDocument()
+        expect(api.sendSupplierEmail).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to rooms@willowbanks.example' }))
+        await waitFor(() =>
+            expect(api.sendSupplierEmail).toHaveBeenCalledWith({
+                id: 21,
+                kind: 'amendment',
+                previous: false,
+                remove: false
+            })
+        )
+    })
+
+    test('an edit that changes nothing the supplier was told: no amendment', async () => {
+        booked()
+        api.supplierPreview = arg => preview({ changes: [] }, arg)
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+        await waitFor(() =>
+            expect(api.snackbars).toContain(
+                'Nothing Hotel Willow Banks was told has changed, so no amendment is needed.'
+            )
+        )
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    test('a hotel nobody was emailed about: editing it sends nothing', async () => {
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+        await waitFor(() => expect(api.addService).toHaveBeenCalled())
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    test('a changed hotel: a request to the new one, then a cancellation to the one that had the booking', async () => {
+        booked()
+        api.supplierPreview = arg =>
+            arg.previous
+                ? preview({ kind: 'cancellation', name: 'Hotel Snow Crest', to: 'rooms@snowcrest.example' }, arg)
+                : preview(
+                      {
+                          kind: 'request',
+                          name: 'Hotel Eden',
+                          to: 'eden@example.com',
+                          switchedFrom: { name: 'Hotel Snow Crest', email: 'rooms@snowcrest.example' }
+                      },
+                      arg
+                  )
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+
+        const request = await screen.findByRole('dialog', { name: 'Booking request to Hotel Eden' })
+        expect(within(request).getByRole('note')).toHaveTextContent('Hotel Snow Crest still has this booking')
+        fireEvent.click(within(request).getByRole('button', { name: 'Send to eden@example.com' }))
+        await waitFor(() =>
+            expect(api.sendSupplierEmail).toHaveBeenCalledWith({
+                id: 21,
+                kind: 'request',
+                previous: false,
+                remove: false
+            })
+        )
+
+        const cancel = await screen.findByRole('dialog', { name: 'Cancellation to Hotel Snow Crest' })
+        // ? the old hotel's cancellation never takes the line off the booking
+        expect(within(cancel).queryByRole('checkbox')).not.toBeInTheDocument()
+        fireEvent.click(within(cancel).getByRole('button', { name: 'Send to rooms@snowcrest.example' }))
+        await waitFor(() =>
+            expect(api.sendSupplierEmail).toHaveBeenLastCalledWith({
+                id: 21,
+                kind: 'cancellation',
+                previous: true,
+                remove: false
+            })
+        )
+    })
+
+    test('cancelling a booked hotel: previewed, and it can also come off the booking', async () => {
+        booked()
+        api.hotels = [{ ...api.hotels[0], paidAmount: '0', paymentStatus: 'Unpaid' }]
+        api.supplierPreview = arg => preview({ kind: 'cancellation' }, arg)
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel booking' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Cancellation to Hotel Willow Banks' })
+        const remove = within(dialog).getByRole('checkbox', {
+            name: 'Also remove Hotel Willow Banks from this booking'
+        })
+        expect(remove).not.toBeChecked()
+        fireEvent.click(remove)
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to rooms@willowbanks.example' }))
+        await waitFor(() =>
+            expect(api.sendSupplierEmail).toHaveBeenCalledWith({
+                id: 21,
+                kind: 'cancellation',
+                previous: false,
+                remove: true
+            })
+        )
+    })
+
+    test('removing a hotel that has the booking offers the cancellation; one with payments stays on the booking', async () => {
+        booked()
+        api.supplierPreview = arg => preview({ kind: 'cancellation' }, arg)
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        fireEvent.click(within(hotels).getByRole('button', { name: 'Remove' }))
+        expect(
+            within(hotels).getByText('Hotel Willow Banks has this booking. Send them a cancellation?')
+        ).toBeInTheDocument()
+        fireEvent.click(within(hotels).getByRole('button', { name: 'Send cancellation' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Cancellation to Hotel Willow Banks' })
+        // ? ₹5,000 has been paid to this hotel
+        expect(within(dialog).getByRole('checkbox')).toBeDisabled()
+        expect(
+            within(dialog).getByText('Payments to Hotel Willow Banks are recorded, so it stays on the booking.')
+        ).toBeInTheDocument()
+        expect(api.deleteService).not.toHaveBeenCalled()
+    })
+
+    test('recording a guest payment shows the receipt; it goes only when Send is clicked', async () => {
+        api.addGuestPayment.mockReturnValueOnce({
+            unwrap: () => Promise.resolve({ data: { paymentId: 41, guestEmail: 'asha@example.com' } })
+        })
+        renderBooking()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Record a payment' })[0])
+        fireEvent.click(screen.getByRole('button', { name: 'Save the payment' }))
+        await waitFor(() => expect(api.addGuestPayment).toHaveBeenCalled())
+
+        const dialog = await screen.findByRole('dialog', { name: 'Payment receipt' })
+        expect(api.sendReceipt).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to asha@example.com' }))
+        await waitFor(() => expect(api.sendReceipt).toHaveBeenCalledWith(41))
+    })
+
+    test('the preview says who the email comes from, and why when it is not the user’s own mailbox', async () => {
+        booked()
+        api.supplierPreview = arg =>
+            preview(
+                {
+                    from: 'TravelKart <hello@travelkart.in>',
+                    fromNote: 'No supplier mailbox is set up, so this goes from the agency mailbox.'
+                },
+                arg
+            )
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Email hotel' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Booking request to Hotel Willow Banks' })
+        expect(within(dialog).getByText('From TravelKart <hello@travelkart.in>')).toBeInTheDocument()
+        expect(within(dialog).getByRole('note', { name: 'Sender' })).toHaveTextContent(
+            'No supplier mailbox is set up, so this goes from the agency mailbox.'
+        )
+    })
+
+    test('a receipt can be emailed for any payment, after a preview', async () => {
+        renderBooking()
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        fireEvent.click(within(payments).getByRole('button', { name: 'Email receipt' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Payment receipt' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to asha@example.com' }))
+        await waitFor(() => expect(api.sendReceipt).toHaveBeenCalledWith(1))
+    })
+
+    test('the guest’s hotel details are previewed before they are sent', async () => {
+        renderBooking()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Preview and email' })[1])
+        const dialog = await screen.findByRole('dialog', { name: 'Hotel details for the guest' })
+        expect(api.sendHotel).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to asha@example.com' }))
+        await waitFor(() => expect(api.sendHotel).toHaveBeenCalledWith(1))
     })
 })

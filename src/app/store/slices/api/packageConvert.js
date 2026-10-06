@@ -106,12 +106,29 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
         }),
 
         // === SEND SUPPLIER EMAIL ===
+        // ? `{ id, kind: 'request' | 'amendment' | 'cancellation', previous, remove }` — or just the line's id for a request
         sendSupplierEmail: build.mutation({
-            query: id => {
+            query: arg => {
+                const { id, ...body } = typeof arg === 'object' ? arg : { id: arg }
                 const KEY = 'sendSupplierEmailKey'
                 dispatchLoaderEvent(KEY)
                 return {
                     url: `/package/supplier/email/${id}`,
+                    method: 'POST',
+                    body,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            // ? a cancellation can take the line off the booking
+            invalidatesTags: ['ServiceList', 'confirmedBooking']
+        }),
+        // ? the guest's receipt for one payment, once the agent has seen it
+        sendGuestReceipt: build.mutation({
+            query: paymentId => {
+                const KEY = 'sendGuestReceiptKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/package/guest-payment/${paymentId}/receipt`,
                     method: 'POST',
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
@@ -158,10 +175,34 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 }
             }
         }),
-        // ? the booking request to a hotel or transporter, exactly as it will be emailed
+        // ? the booking request, amendment or cancellation to a hotel or transporter, exactly as it will be emailed:
+        // ? `{ id, kind, previous }` (previous: to the supplier the line had before) — or just the line's id
         getSupplierEmailPreview: build.query({
-            query: serviceId => ({
-                url: `/package/supplier/email/${serviceId}/preview`,
+            query: arg => {
+                const { id, kind, previous } = typeof arg === 'object' ? arg : { id: arg }
+                const params = new URLSearchParams()
+                if (kind) params.set('kind', kind)
+                if (previous) params.set('previous', '1')
+                const search = params.toString()
+                return {
+                    url: `/package/supplier/email/${id}/preview${search ? `?${search}` : ''}`,
+                    method: 'GET',
+                    responseHandler: async result => customResponseHandler({ result })
+                }
+            }
+        }),
+        // ? the receipt for one guest payment, exactly as it will be emailed
+        getGuestReceiptPreview: build.query({
+            query: paymentId => ({
+                url: `/package/guest-payment/${paymentId}/receipt/preview`,
+                method: 'GET',
+                responseHandler: async result => customResponseHandler({ result })
+            })
+        }),
+        // ? the guest's hotel ('hotel') or transport ('taxi') details, exactly as they will be emailed
+        getGuestServicePreview: build.query({
+            query: ({ packageId, kind }) => ({
+                url: `/package/preview/${packageId}/${kind}`,
                 method: 'GET',
                 responseHandler: async result => customResponseHandler({ result })
             })
@@ -218,6 +259,7 @@ export const {
     useGetServicesByPackageQuery,
     useDeleteServiceMutation,
     useSendSupplierEmailMutation,
+    useSendGuestReceiptMutation,
     useAddGuestPaymentMutation,
     useSendVoucherEmailMutation,
     useSendGuestHotelConfirmationEmailMutation,
@@ -231,6 +273,8 @@ export const {
         convertPackage,
         getAllConfirmedPackages,
         getConfirmedVoucherPreview,
-        getSupplierEmailPreview
+        getSupplierEmailPreview,
+        getGuestReceiptPreview,
+        getGuestServicePreview
     }
 } = bookingSlice
