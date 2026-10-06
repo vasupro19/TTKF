@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
 import { z } from 'zod'
+import { leadPhoneToSave, phoneProblem } from '@/utilities/phone'
 import { useFormik } from 'formik'
 
 // router
@@ -74,7 +76,11 @@ function LeadsForm() {
     const validationSchema = [
         z.object({
             fullName: z.string().nonempty('Full name is required').min(3, 'Must be at least 3 characters'),
-            phone: z.string().min(10, 'Must be 10 digits'),
+            // ? one rule for every phone in the app (utilities/phone.js): 10 digits for India, or a foreign number
+            phone: z.string().superRefine((val, ctx) => {
+                const problem = phoneProblem(val)
+                if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+            }),
             senderEmail: z.string().email('Invalid email').optional()
         }),
         z.object({
@@ -92,6 +98,9 @@ function LeadsForm() {
             error.errors.forEach(err => {
                 formikErrors[err.path[0]] = err.message
             })
+            // ? an older lead's number, left as it was, doesn't stop the rest of the lead being saved
+            if (formikErrors.phone && editData?.phone && values.phone === String(editData.phone))
+                delete formikErrors.phone
             return formikErrors
         }
     }
@@ -108,14 +117,24 @@ function LeadsForm() {
             try {
                 let response
                 if (!formId) {
-                    response = await createLead({ ...values, updatedBy: clientUserId }).unwrap()
+                    response = await createLead({
+                        ...values,
+                        phone: leadPhoneToSave(values.phone),
+                        updatedBy: clientUserId
+                    }).unwrap()
                     setLeadId(response.data.id)
                     navigate(-1)
 
                     setActiveTab(0)
                     enableTabsAfterValidation(1)
                 } else {
-                    response = await updateLead({ id: leadId, ...values, updatedBy: clientUserId }).unwrap()
+                    // ? saved as "+919876543210" however it was typed: one format for search and WhatsApp links
+                    response = await updateLead({
+                        id: leadId,
+                        ...values,
+                        phone: leadPhoneToSave(values.phone),
+                        updatedBy: clientUserId
+                    }).unwrap()
                     formik.resetForm()
                     setActiveTab(0)
                     setTabsEnabled([true, false])
@@ -179,7 +198,8 @@ function LeadsForm() {
             formatted[key] = row[key] ? row[key].toString() : ''
         })
         if (row?.upcomingCall?.scheduledFor) {
-            formatted.followupdate = new Date(row.upcomingCall.scheduledFor).toISOString().slice(0, 16)
+            // ? local time for the datetime field (toISOString gave UTC, 5:30 behind)
+            formatted.followupdate = dayjs(row.upcomingCall.scheduledFor).format('YYYY-MM-DDTHH:mm')
             formatted.followupremarks = row.upcomingCall.description || ''
         }
         formik.setValues({ ...formatted })
@@ -225,7 +245,7 @@ function LeadsForm() {
                     name: 'phone',
                     label: 'Phone Number',
                     type: 'text',
-                    placeholder: 'Enter phone number',
+                    placeholder: 'e.g. 98765 43210 or +44 7911 123456',
                     grid: { xs: 12, sm: 4 },
                     size: 'small',
                     customSx

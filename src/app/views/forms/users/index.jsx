@@ -17,6 +17,7 @@ import {
 import { Formik, Form, Field } from 'formik'
 import { Badge, Build, Verified, Visibility, VisibilityOff } from '@mui/icons-material'
 import { z } from 'zod'
+import { fieldPhoneProblem, phoneForField, userPhoneToSave } from '@/utilities/phone'
 import CustomAutocomplete from '@core/components/extended/CustomAutocomplete'
 import CustomSwitch from '@core/components/extended/CustomSwitch'
 import CustomButton from '@core/components/extended/CustomButton'
@@ -140,26 +141,10 @@ export default function SetupUserForm() {
     const validationSchema = z.object({
         firstName: z.string().min(1, 'First Name is required'),
 
+        // ? one rule for every phone in the app (utilities/phone.js): 10 digits for India, or a foreign number
         phone: z.string().superRefine((val, ctx) => {
-            // ✅ Strip country code (+91 or 91) and hyphens before validating
-            const cleaned = val
-                .replace(/^\+91/, '') // remove +91
-                .replace(/^91/, '') // remove 91 without +
-                .replace(/-/g, '') // remove hyphens
-                .trim()
-
-            if (!cleaned) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: 'Phone number is required'
-                })
-            } else if (!/^\d{10}$/.test(cleaned)) {
-                // ✅ exactly 10 digits after stripping
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: 'Must be a valid 10 digit phone number'
-                })
-            }
+            const problem = fieldPhoneProblem(val)
+            if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
         }),
         email: z.union([z.string().min(1, 'Email is required'), z.string().email('Invalid email format')]),
         emailPassword: z.string().optional(),
@@ -379,10 +364,13 @@ export default function SetupUserForm() {
                 if (formikRef.current && userData) {
                     const formData = {
                         firstName: userData?.name || '',
-                        // Note: Your response uses 'phoneNumber', not 'contact_no'
-                        phone: `+91${userData?.phoneNumber}` || '',
+                        // ? the phone field's own format (country code and number, no +) whichever way the number was
+                        // ? saved — a saved "+91…" or "91…" used to load as "9191…" and the form then refused it
+                        phone: phoneForField(userData?.phoneNumber),
                         email: userData?.email || '',
-                        emailPassword: userData?.emailPassword || '',
+                        // ? the saved app password stays on the server; the form only knows whether there is one
+                        emailPassword: '',
+                        hasEmailPassword: Boolean(userData?.hasEmailPassword),
                         // password: userData?.password || '',
                         // confirmPassword: userData?.password || '',
                         // The label is directly available in userData.role.name
@@ -414,7 +402,8 @@ export default function SetupUserForm() {
                         role_id: values.role?.id?.toString(),
                         email: values.email,
                         emailPassword: values.emailPassword,
-                        contact_no: values.phone.slice(2).replace(/-/g, ''),
+                        // ? 10 digits for India; a foreign number keeps its country code (it was cut to 10 digits)
+                        contact_no: userPhoneToSave(values.phone),
                         password: values.password,
                         client_id: user?.clientId
                     }
@@ -442,7 +431,18 @@ export default function SetupUserForm() {
                                 error?.response?.data?.message ||
                                 error?.data?.message ||
                                 error?.message ||
-                                'unable to create user!'
+                                'unable to update user!'
+                        } finally {
+                            // ? an edit said nothing, saved or refused (e.g. "Only the agency's admin can …")
+                            dispatch(
+                                openSnackbar({
+                                    open: true,
+                                    message,
+                                    variant: 'alert',
+                                    alert: { color: isError ? 'error' : 'success' },
+                                    anchorOrigin: { vertical: 'top', horizontal: 'center' }
+                                })
+                            )
                         }
                     } else {
                         try {
@@ -643,7 +643,12 @@ export default function SetupUserForm() {
                                         placeholder='e.g. abcd efgh ijkl mnop'
                                         fullWidth
                                         error={touched.emailPassword && !!errors.emailPassword}
-                                        helperText={touched.emailPassword && errors.emailPassword}
+                                        helperText={
+                                            (touched.emailPassword && errors.emailPassword) ||
+                                            (values.hasEmailPassword
+                                                ? 'An app password is saved. Leave this blank to keep it.'
+                                                : '')
+                                        }
                                         autocomplete='off'
                                     />
                                 </Grid>
