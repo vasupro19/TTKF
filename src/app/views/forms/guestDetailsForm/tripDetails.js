@@ -27,11 +27,28 @@ export const TRIP_TYPES = [
     { value: 'Solo', label: 'Solo' }
 ]
 
+// ? the agency's vehicles, in the order it books them; 'None' when the guest needs no vehicle
+export const VEHICLE_NAMES = [
+    'Alto',
+    'Sedan',
+    'SUV (6 seater)',
+    'SUV (7 seater)',
+    'Innova Crysta',
+    'Ertiga',
+    'Tempo Traveller',
+    'Tempo Traveller 12 seater',
+    'Tempo Traveller 17 seater',
+    'Tempo Traveller 22 seater',
+    'Tempo Traveller 26 seater',
+    'Tempo Traveller 32 seater',
+    'Volvo',
+    'Volvo + Alto',
+    'Volvo + SUV',
+    'Volvo + Sedan'
+]
+
 export const VEHICLES = [
-    { value: 'Hatchback', label: 'Hatchback' },
-    { value: 'Sedan', label: 'Sedan' },
-    { value: 'SUV', label: 'SUV' },
-    { value: 'Tempo Traveller', label: 'Tempo Traveller' },
+    ...VEHICLE_NAMES.map(name => ({ value: name, label: name })),
     { value: 'None', label: 'No vehicle' }
 ]
 

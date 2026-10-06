@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import { useFormik } from 'formik'
-import { Box, Button, Collapse, Grid, Stack, TextField, Typography } from '@mui/material'
+import { Box, Button, Collapse, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { ExpandLess, ExpandMore } from '@mui/icons-material'
 import CustomButton from '@core/components/extended/CustomButton'
 import { ChoicePills } from '../packages/tripUi/Choice'
@@ -121,6 +121,38 @@ Choice.propTypes = {
 }
 
 const filled = value => value !== null && value !== undefined && String(value).trim() !== ''
+
+/**
+ * The guest's vehicle, from the agency's list. A vehicle saved before the list changed (e.g. "Hatchback") still
+ * shows, so opening an older trip doesn't blank it.
+ */
+function VehicleSelect({ formik }) {
+    const value = String(formik.values.taxiType ?? '')
+    const options =
+        value && !VEHICLES.some(option => option.value === value) ? [{ value, label: value }, ...VEHICLES] : VEHICLES
+    return (
+        <TextField
+            select
+            label='Vehicle'
+            name='taxiType'
+            value={value}
+            onChange={event => formik.setFieldValue('taxiType', event.target.value)}
+            sx={{ maxWidth: 320 }}
+            fullWidth
+        >
+            <MenuItem value=''>
+                <em>Not decided</em>
+            </MenuItem>
+            {options.map(option => (
+                <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                </MenuItem>
+            ))}
+        </TextField>
+    )
+}
+
+VehicleSelect.propTypes = { formik: formikShape.isRequired }
 
 /**
  * Step 1 after a lead is verified: the trip in a few answers. Adults and the start date are the only
@@ -292,7 +324,7 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                                 </Grid>
                             </Grid>
                             <Choice formik={formik} name='tourType' label='Trip type' options={TRIP_TYPES} />
-                            <Choice formik={formik} name='taxiType' label='Vehicle' options={VEHICLES} />
+                            <VehicleSelect formik={formik} />
                             <Box sx={{ maxWidth: 180 }}>
                                 <Field formik={formik} name='extraBedding' label='Extra beds' type='number' />
                             </Box>
