@@ -50,6 +50,8 @@ function SetupUserTable() {
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
 
+    // ? the signed-in user's agency, for links to its users' menus
+    const myClientId = useSelector(state => state.auth.clientId ?? state.auth.user?.clientId ?? null)
     const isOpen = useSelector(state => state.modal.open)
     const modalType = useSelector(state => state.modal.type)
     const { getUsersLKey, deactivateUserLKey } = useSelector(state => state.loading)
@@ -360,10 +362,15 @@ function SetupUserTable() {
                                         sx={{ color: 'primary.main' }}
                                         size='small'
                                         aria-label='settings row'
-                                        onClick={() => {
-                                            console.log(row)
-                                            navigate(`/master/client/permissions/user/${row.clientId}/${row.email}`)
-                                        }}
+                                        onClick={() =>
+                                            // ? the agency's id: a user row often has none of its own, and the link
+                                            // ? read /permissions/user/null/…
+                                            navigate(
+                                                `/master/client/permissions/user/${
+                                                    row.clientId ?? myClientId ?? 'own'
+                                                }/${encodeURIComponent(row.email)}`
+                                            )
+                                        }
                                     >
                                         <Tooltip title='Settings'>
                                             <SettingsIcon width={18} height={18} />

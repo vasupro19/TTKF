@@ -12,10 +12,11 @@ import {
     DialogActions,
     Button,
     CircularProgress,
+    Alert,
     styled
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { useParams } from 'react-router-dom'
 import { useMenuByConfigClientQuery, useUpdateMenuAccessClientMutation } from '@app/store/slices/api/menuSlice' // <-- make sure mutation is defined here
@@ -32,11 +33,22 @@ export default function UserMenuAccessClient() {
     const [menus, setMenus] = useState([])
     const [permission, setPermission] = useState([])
 
-    const query = new URLSearchParams({ clientId: params.id, email: params.email }).toString()
+    // ? the agency: from the link, else the signed-in user's own. An agency admin's own agency is used by the API
+    // ? anyway; the super admin's request needs it to pick the workspace (it read "null" and failed)
+    const myClientId = useSelector(state => state.auth.clientId ?? state.auth.user?.clientId ?? null)
+    const linkClientId = /^\d+$/.test(String(params.id || '')) ? params.id : null
+    const clientId = linkClientId || (myClientId ? String(myClientId) : null)
+    const email = params.email || ''
+    const query = new URLSearchParams({ ...(clientId ? { clientId } : {}), email }).toString()
 
     // ✅ Fetch menu access data using RTK Query
-    const { data, isFetching, refetch } = useMenuByConfigClientQuery(`?${query}`, {
-        skip: !params.id
+    const {
+        data,
+        isFetching,
+        error: loadError,
+        refetch
+    } = useMenuByConfigClientQuery(`?${query}`, {
+        skip: !email
     })
 
     // ✅ Mutation to update access
@@ -77,7 +89,7 @@ export default function UserMenuAccessClient() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'Failed to update access',
+                    message: error?.data?.message || 'Failed to update access',
                     variant: 'alert',
                     alert: { color: 'error' }
                 })
@@ -86,11 +98,16 @@ export default function UserMenuAccessClient() {
     }
     const submit = async () => {
         try {
-            await updateMenuAccessClient({ menuIds: permission, userId: params.email })
+            // ? unwrap: a refused save used to show "Access granted successfully"
+            const reply = await updateMenuAccessClient({
+                menuIds: permission,
+                userId: email,
+                ...(clientId ? { clientId: Number(clientId) } : {})
+            }).unwrap()
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: `Access granted successfully`,
+                    message: reply?.message || 'Access granted successfully',
                     variant: 'alert',
                     alert: { color: 'success' }
                 })
@@ -102,7 +119,7 @@ export default function UserMenuAccessClient() {
             dispatch(
                 openSnackbar({
                     open: true,
-                    message: 'Failed to update access',
+                    message: error?.data?.message || 'Failed to update access',
                     variant: 'alert',
                     alert: { color: 'error' }
                 })
@@ -116,11 +133,20 @@ export default function UserMenuAccessClient() {
             <Grid container spacing={2} alignItems='center'>
                 <Grid item xs={3}>
                     <Typography variant='h6'>User Menu Access</Typography>
+                    <Typography variant='body2' color='text.secondary'>
+                        {email}
+                    </Typography>
                     <IconButton onClick={() => setMenuDialogOpen(true)}>
                         <SettingsIcon />
                     </IconButton>
                 </Grid>
             </Grid>
+
+            {loadError ? (
+                <Alert severity='error' sx={{ mt: 2 }}>
+                    {loadError?.data?.message || 'Couldn’t load this user’s menus.'}
+                </Alert>
+            ) : null}
 
             {/* Menu Access Dialog */}
             <Dialog open={menuDialogOpen} onClose={() => setMenuDialogOpen(false)} maxWidth='sm' fullWidth>
