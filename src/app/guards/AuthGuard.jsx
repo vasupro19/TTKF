@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useSelector, useDispatch } from 'react-redux'
 import { getAuthUser } from '@app/store/slices/api/authApiSlice'
-import { setError, setUserDetails, setLocation, logout } from '@app/store/slices/auth'
-import { openSnackbar } from '@/app/store/slices/snackbar'
+import { setError, setUserDetails, setLocation } from '@app/store/slices/auth'
+import { markSignedIn, signOut } from '@app/store/session'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 
 // checks if the user is authenticated ( let the user go to the route ) or not ( redirects user to login page )
@@ -40,23 +40,12 @@ function AuthGuard({ children }) {
                 const response = await dispatch(getAuthUser.initiate('', { forceRefetch: true })).unwrap()
                 if (!response?.data?.user) throw new Error('User not found')
                 dispatch(setUserDetails({ user: response.data.user }))
+                markSignedIn(response.data.user)
             } catch (error) {
-                removeToken()
-                // ? signed out properly (it used to bounce between the dashboard and the landing page), and told why:
-                // ? e.g. "Your agency's account is switched off"
-                dispatch(logout())
-                if (error?.data?.message) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: error.data.message,
-                            variant: 'alert',
-                            alert: { color: 'error' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                }
-                navigate('/login', { replace: true })
+                // ? the session is gone, or refused (e.g. "Your agency's account is switched off"): clear everything it
+                // ? left, then sign-in — with the reason, which the sign-in page shows
+                const reason = error?.data?.message
+                signOut(null, reason ? `/login?reason=${encodeURIComponent(reason)}` : '/login')
             }
         }
 

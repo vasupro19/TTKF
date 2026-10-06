@@ -4,7 +4,7 @@ import { persistReducer } from 'redux-persist'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import storage from 'redux-persist/lib/storage'
 
-import AuthSlice from './slices/auth'
+import AuthSlice, { logout } from './slices/auth'
 import Snackbar from './slices/snackbar'
 import { Loading } from './slices/loading'
 import { apiSliceConfig } from './slices/api/configSlice'
@@ -28,7 +28,7 @@ const persistConfig = {
     storage
 }
 
-const rootReducer = combineReducers({
+const appReducer = combineReducers({
     auth: AuthSlice,
     snackbar: Snackbar,
     [apiSliceConfig.reducerPath]: apiSliceConfig.reducer,
@@ -48,5 +48,11 @@ const rootReducer = combineReducers({
     pickData: PickData,
     breadcrumbs: breadcrumbsSlice
 })
+
+/**
+ * Signing out resets EVERY slice, not just auth: lists, filters, forms and the API cache held the previous user's
+ * data, and the next user to sign in on the browser saw it (store/session.js).
+ */
+const rootReducer = (state, action) => appReducer(action.type === logout.type ? undefined : state, action)
 
 export default rootReducer

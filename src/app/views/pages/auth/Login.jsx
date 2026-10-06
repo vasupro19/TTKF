@@ -1,5 +1,5 @@
 /* eslint-disable no-underscore-dangle */
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useFormik } from 'formik'
 import { z } from 'zod'
 import { useDispatch } from 'react-redux'
@@ -23,6 +23,7 @@ import { motion } from 'framer-motion'
 import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
+import { beginSignIn, markSignedIn } from '@app/store/session'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 import JobApplicationForm from './JobApplicationForm'
@@ -47,6 +48,22 @@ export default function Login() {
     const [showJobForm, setShowJobForm] = useState(false)
     const [showJobStatus, setShowJobStatus] = useState(false)
 
+    // ? why the last session ended, when the app ended it (e.g. "Your agency's account is switched off")
+    useEffect(() => {
+        const reason = new URLSearchParams(window.location.search).get('reason')
+        if (!reason) return
+        dispatch(
+            openSnackbar({
+                open: true,
+                message: reason,
+                variant: 'alert',
+                alert: { color: 'error' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
+            })
+        )
+        window.history.replaceState(null, '', window.location.pathname)
+    }, [dispatch])
+
     const validate = values => {
         try {
             loginSchema.parse(values)
@@ -65,11 +82,14 @@ export default function Login() {
         validate,
         onSubmit: async (values, { setSubmitting }) => {
             try {
+                // ? nothing from an earlier session may show in this one
+                beginSignIn()
                 const res = await login(values).unwrap()
                 const userData = res.data.user
                 dispatch(setUserDetails({ user: userData }))
                 // ? only that someone is signed in: the session itself is in httpOnly cookies, out of reach of page scripts
                 await setToken('signed-in')
+                markSignedIn(userData)
                 const menus = await triggerMenu(userData.id).unwrap()
                 dispatch(setMenuItems(menus.data))
                 navigate('/dashboard', { replace: true })

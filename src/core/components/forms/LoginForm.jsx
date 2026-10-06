@@ -23,6 +23,7 @@ import { motion } from 'framer-motion'
 import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
+import { beginSignIn, markSignedIn } from '@app/store/session'
 import { useNavigate } from 'react-router-dom'
 import { useLocalStorage, LOCAL_STORAGE_KEYS } from '@/hooks/useLocalStorage'
 
@@ -61,11 +62,14 @@ export default function Login() {
         validate,
         onSubmit: async (values, { setSubmitting }) => {
             try {
+                // ? nothing from an earlier session may show in this one
+                beginSignIn()
                 const res = await login(values).unwrap()
                 const userData = res.data.user
                 dispatch(setUserDetails({ user: userData }))
                 // ? only that someone is signed in: the session itself is in httpOnly cookies, out of reach of page scripts
                 await setToken('signed-in')
+                markSignedIn(userData)
                 const menus = await triggerMenu(userData.id).unwrap()
                 dispatch(setMenuItems(menus.data))
                 navigate('/dashboard', { replace: true })
