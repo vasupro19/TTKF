@@ -84,8 +84,8 @@ const BookingWorkspace = lazy(() => import('@views/bookings/BookingWorkspace'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
 
 // ---- integrations & careers ----
-const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
-const FacebookIntegrationForm = lazy(() => import('@views/forms/integrations/facebookIntegration'))
+const EmailLeads = lazy(() => import('@views/integrations/EmailLeads'))
+const FacebookLeads = lazy(() => import('@views/integrations/FacebookLeads'))
 const JobCandidates = lazy(() => import('@views/masters/JobCandidates/JobCandidates'))
 
 /**
@@ -176,8 +176,8 @@ const protectedRoutes = {
         { path: '/process/transactions', element: page(ServiceLedgerTable) },
 
         // ---- integrations & careers ----
-        { path: '/integration/gmail', element: page(GmailIntegrationForm) },
-        { path: '/integration/facebook', element: page(FacebookIntegrationForm) },
+        { path: '/integration/gmail', element: page(EmailLeads) },
+        { path: '/integration/facebook', element: page(FacebookLeads) },
         { path: '/process/candidates', element: page(JobCandidates) }
     ]
 }

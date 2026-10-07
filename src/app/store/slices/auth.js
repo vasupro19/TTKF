@@ -34,7 +34,7 @@ import { SCOPES } from '@/constants/permissions'
 
 const FACEBOOK_INTEGRATION_MENU = {
     id: 'facebook_integration',
-    label: 'Facebook Integration',
+    label: 'Facebook Leads',
     icon: 'Memory',
     url: '/integration/facebook',
     group: 'integration',
