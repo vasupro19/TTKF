@@ -20,6 +20,7 @@ import { toggleNavBar } from '@app/store/slices/navBarSlice'
 
 // ** import custom components
 import { useNavigate } from 'react-router-dom'
+import { menuIconFor } from '@app/layouts/header/menuIcons'
 import DisabledWrapper from '../DisabledWrapper'
 
 function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
@@ -183,7 +184,7 @@ function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
                                         ...(activeItem === item.id && commonListItemStyles)
                                     }}
                                 >
-                                    <item.icon />
+                                    {React.createElement(menuIconFor(item), { fontSize: 'small' })}
                                     <ListItemText
                                         primary={item.label}
                                         // secondary={
@@ -237,7 +238,7 @@ function MenuListView({ title, isVisible, setIsVisible, mainListItems }) {
                                                     borderRadius: '6px'
                                                 }}
                                             >
-                                                <subItem.icon />
+                                                {React.createElement(menuIconFor(subItem), { fontSize: 'small' })}
                                                 <ListItemText
                                                     primary={subItem.label}
                                                     // secondary={
