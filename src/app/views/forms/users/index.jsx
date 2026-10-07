@@ -776,7 +776,8 @@ export default function SetupUserForm() {
                                         type='button'
                                         variant='outlined'
                                         onClick={() => {
-                                            navigate('/userManagement/user')
+                                            // ? the users list is /master/user; /userManagement/user is no page
+                                            navigate('/master/user')
                                         }}
                                     >
                                         Cancel

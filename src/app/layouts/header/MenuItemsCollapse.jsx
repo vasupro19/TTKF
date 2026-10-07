@@ -5,21 +5,20 @@ import { useNavigate } from 'react-router-dom'
 import { Typography, Box, ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
 
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 
 import { toggleNavBar, storeSelectedMenu } from '@app/store/slices/navBarSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { useDispatch, useSelector } from 'react-redux'
+import { menuIconFor } from './menuIcons'
 
 const MenuItemsCollapse = React.forwardRef(
     ({ item, level = 1, borderRadius, handleClick, isHighlighted = false }, ref) => {
-        console.log(item)
         const navigate = useNavigate()
         const dispatch = useDispatch()
         const { selectedMenu } = useSelector(state => state.navbar)
 
-        const iconSx = { ...(item.iconSx || {}) }
-        const menuIcon = item.icon ? <item.icon sx={iconSx} width={60} height={60} /> : <FiberManualRecordIcon />
+        const MenuIcon = menuIconFor(item)
+        const menuIcon = <MenuIcon sx={{ fontSize: 40, color: 'primary.main', ...(item.iconSx || {}) }} />
 
         return (
             <Box>
