@@ -119,8 +119,9 @@ const PackageCreationWizard = lazy(() => import('@views/forms/packages/PackageCr
 const PackageItenary = lazy(() => import('@views/forms/packageItenary'))
 const PackageItenaryView = lazy(() => import('@views/forms/packageItenary/actitvityPackage'))
 
-const GmailIntegrationForm = lazy(() => import('@views/forms/integrations/gmailIntegration'))
-const FacebookIntegrationForm = lazy(() => import('@views/forms/integrations/facebookIntegration'))
+// ---- lead channels: email inboxes and Facebook pages ----
+const EmailLeads = lazy(() => import('@views/integrations/EmailLeads'))
+const FacebookLeads = lazy(() => import('@views/integrations/FacebookLeads'))
 
 const SupplierForm = lazy(() => import('@/app/views/masters/supplier/create'))
 const MasterSupplierTable = lazy(() => import('@/app/views/masters/supplier'))
@@ -405,7 +406,7 @@ const protectedRoutes = {
             path: '/integration/gmail',
             element: (
                 <Suspense fallback={<Loader />}>
-                    <GmailIntegrationForm />
+                    <EmailLeads />
                 </Suspense>
             )
         },
@@ -413,7 +414,7 @@ const protectedRoutes = {
             path: '/integration/facebook',
             element: (
                 <Suspense fallback={<Loader />}>
-                    <FacebookIntegrationForm />
+                    <FacebookLeads />
                 </Suspense>
             )
         },
