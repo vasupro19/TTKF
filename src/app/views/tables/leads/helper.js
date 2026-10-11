@@ -1,128 +1,27 @@
-export const headers = [
-    {
-        id: 0,
-        label: 'Sr. No.',
-        search: false,
-        sort: false,
-        stick: true,
-        key: 's_no',
-        isFrontend: true,
-        visible: true,
-        minWidth: 3.1,
-        maxWidth: 3.1,
-        align: 'center'
-    },
-    {
-        // ? e.g. TTK-L-261002-014: the agency's initials, the day the lead came in, its place that day
-        id: 20,
-        label: 'Lead no.',
-        search: false,
-        sort: false,
-        key: 'leadNo',
-        visible: true,
-        minWidth: 9,
-        maxWidth: 10
-    },
-    {
-        id: 1,
-        label: 'Name',
-        search: true,
-        sort: false,
-        stick: true,
-        key: 'fullName',
-        visible: true,
-        minWidth: 10,
-        maxWidth: 15
-    },
-    {
-        id: 2,
-        label: 'Email',
-        search: true,
-        sort: false,
-        stick: true,
-        key: 'senderEmail',
-        visible: true,
-        minWidth: 6,
-        maxWidth: 8
-    },
-    {
-        id: 3,
-        label: 'Phone',
-        search: true,
-        sort: false,
-        stick: false,
-        key: 'phone',
-        visible: true,
-        minWidth: 12,
-        maxWidth: 20
-    },
-    {
-        id: 4,
-        label: 'Source',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'leadSource',
-        visible: true,
-        minWidth: 12,
-        maxWidth: 20
-    },
-    {
-        id: 5,
-        label: 'Campaign',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'campaignName',
-        visible: true,
-        minWidth: 12,
-        maxWidth: 20
-    },
-    {
-        id: 6,
-        label: 'Status',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'status',
-        visible: true,
-        minWidth: 8,
-        maxWidth: 12
-    },
-    {
-        id: 7,
-        label: 'Follow-up',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'followUpState',
-        visible: true,
-        minWidth: 8,
-        maxWidth: 12
-    },
-    {
-        id: 8,
-        label: 'Assigned To',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'assignedTo',
-        visible: true,
-        minWidth: 12,
-        maxWidth: 20
-    },
+// ? each cell is drawn by the leads screen (see displayRow in ./index.jsx); keys are its display fields, and none is
+// ? searchable per column — the search box above the table looks in name, phone and email
+const column = (id, label, key, minWidth, maxWidth, extra = {}) => ({
+    id,
+    label,
+    key,
+    search: false,
+    sort: false,
+    stick: false,
+    visible: true,
+    minWidth,
+    maxWidth,
+    align: 'left',
+    ...extra
+})
 
-    {
-        id: 9,
-        label: 'Created At',
-        search: false,
-        sort: false,
-        stick: false,
-        key: 'createdAt',
-        visible: true,
-        minWidth: 12,
-        maxWidth: 20
-    }
+export const headers = [
+    column(1, 'Lead', 'leadCell', 13, 18, { stick: true }),
+    column(2, 'Contact', 'contactCell', 12, 16),
+    column(3, 'Trip', 'tripCell', 9, 14),
+    column(4, 'Step', 'stepCell', 11, 14),
+    column(5, 'Follow-up', 'followUpCell', 7, 9),
+    column(6, 'Assigned to', 'assignedCell', 7, 10),
+    column(7, 'Received', 'receivedCell', 7, 9)
 ]
 
 export default headers

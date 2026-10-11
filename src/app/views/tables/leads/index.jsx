@@ -1,14 +1,23 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 
-import { Box, IconButton, Tooltip, Typography, Chip, Modal, CircularProgress } from '@mui/material'
+import {
+    Alert,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    InputAdornment,
+    MenuItem,
+    Modal,
+    TextField,
+    Tooltip,
+    Typography
+} from '@mui/material'
 import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff, Visibility } from '@mui/icons-material'
-import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined'
-import VerifiedIcon from '@mui/icons-material/Verified'
-import LocalHotelIcon from '@mui/icons-material/LocalHotel'
+import { Add, FilterAltOff, InfoOutlined, Search } from '@mui/icons-material'
 
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 // project imports
 import MainCard from '@core/components/extended/MainCard'
 import DataTable from '@core/components/extended/table/Table'
@@ -24,10 +33,6 @@ import {
     useUpdateLeadMutation
 } from '@/app/store/slices/api/leadSlice'
 
-import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
-
-// import { getObjectKeys, toCapitalizedWords } from '@/utilities'
-// import { Typography } from '@mui/material'
 import ToggleColumns from '@/core/components/ToggleColumns'
 
 import { TOGGLE_ALL, isExcelQuery } from '@/constants'
@@ -37,17 +42,114 @@ import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 import { headers } from './helper'
+import {
+    ALL,
+    FOLLOW_UPS,
+    FOLLOW_UP_HELP,
+    filtersFromSearch,
+    leadsCsv,
+    searchWithFilters,
+    withLeadFilters,
+    withPaging
+} from './leadStages'
+import {
+    FollowUpChip,
+    HowLeadsWork,
+    LeadEmptyState,
+    LeadProcessBar,
+    LeadRowActions,
+    ReceivedCell,
+    StageCell
+} from './leadParts'
 
-// const slimTextFieldStyle = {
-//     '& .MuiInputBase-input': {
-//         fontSize: 12,
-//         height: 8,
-//         padding: 1
-//     }
-// }
+const EMPTY_DATES = { created_at: { from: '', to: '' } }
+const EMPTY_SUMMARY = { stages: {}, total: 0 }
 
+const snack = (message, color) =>
+    openSnackbar({
+        open: true,
+        message,
+        variant: 'alert',
+        alert: { color },
+        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+    })
+
+const downloadCsv = (rows, name) => {
+    const blob = new Blob([`\uFEFF${leadsCsv(rows)}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const dash = <Typography sx={{ fontSize: '12px', color: 'text.disabled' }}>—</Typography>
+
+// ? the table draws whatever is in a row's field, so each lead gets its cells drawn here; the lead itself stays on
+// ? the row for the actions
+const displayRow = (lead, now) => ({
+    ...lead,
+    leadCell: (
+        <Box sx={{ textAlign: 'left', py: 0.5, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '13px', fontWeight: 700, color: 'text.primary' }} noWrap>
+                {lead.fullName || 'Unnamed guest'}
+            </Typography>
+            <Stack direction='row' spacing={0.75} alignItems='center' sx={{ mt: 0.25 }}>
+                {lead.leadNo && (
+                    <Typography sx={{ fontSize: '11px', color: 'text.secondary' }} noWrap>
+                        {lead.leadNo}
+                    </Typography>
+                )}
+                {lead.leadSource && (
+                    <Chip
+                        size='small'
+                        label={lead.leadSource}
+                        variant='outlined'
+                        sx={{ height: 18, fontSize: '10px', '& .MuiChip-label': { px: 0.75 } }}
+                    />
+                )}
+            </Stack>
+        </Box>
+    ),
+    contactCell: (
+        <Box sx={{ textAlign: 'left', py: 0.5, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 500 }} noWrap>
+                {lead.phone || '—'}
+            </Typography>
+            {lead.senderEmail && (
+                <Typography sx={{ fontSize: '11px', color: 'text.secondary' }} noWrap title={lead.senderEmail}>
+                    {lead.senderEmail}
+                </Typography>
+            )}
+        </Box>
+    ),
+    tripCell: lead.campaignName ? (
+        <Typography sx={{ fontSize: '12px', textAlign: 'left' }} noWrap title={lead.campaignName}>
+            {lead.campaignName}
+        </Typography>
+    ) : (
+        dash
+    ),
+    stepCell: <StageCell row={lead} now={now} />,
+    followUpCell: <FollowUpChip value={lead.followUpState} />,
+    assignedCell: lead.assignedTo ? (
+        <Typography sx={{ fontSize: '12px', textAlign: 'left' }} noWrap>
+            {lead.assignedTo}
+        </Typography>
+    ) : (
+        <Typography sx={{ fontSize: '12px', color: 'text.disabled', textAlign: 'left' }}>Unassigned</Typography>
+    ),
+    receivedCell: <ReceivedCell value={lead.createdAt} now={now} />
+})
+
+/**
+ * Every enquiry, from the first message to a confirmed booking: the five steps with their counts on top, the table
+ * of leads below, and on each row the one thing to do next.
+ */
 function MasterLeadsTable() {
-    const params = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
     const location = useLocation()
@@ -56,13 +158,14 @@ function MasterLeadsTable() {
     const { getLeadsMasterLKey, deleteLeadKey, updateLeadKey } = useSelector(state => state.loading)
 
     const [columns, setColumns] = useState([...headers])
-    const [users, setUsers] = useState([])
+    const [leads, setLeads] = useState([])
     const [recordsCount, setRecordsCount] = useState(0)
+    const [summary, setSummary] = useState(EMPTY_SUMMARY)
+    const [loaded, setLoaded] = useState(false)
     const [excelHandler, setExcelHandler] = useState(false)
     const [modalAction, setModalAction] = useState('')
-    const [selectedLeadId, setSelectedLeadId] = useState(null)
-    const [removeId, setRemoveId] = useState(null)
-    const [quickFilter, setQuickFilter] = useState({ status: 'All', followUpState: 'All' })
+    const [selectedLead, setSelectedLead] = useState(null)
+    const [justVerified, setJustVerified] = useState(null)
     const [timelineModal, setTimelineModal] = useState({
         open: false,
         loading: false,
@@ -70,100 +173,127 @@ function MasterLeadsTable() {
         events: []
     })
 
-    const [isShowClearButton, setIsShowClearButton] = useState(false)
-    const [clearAllFilters, setClearAllFilters] = useState(false)
     const [refetch, setRefetch] = useState(false)
     const [updateLeads] = useUpdateLeadMutation()
     const [deleteLead] = useDeleteLeadMutation()
     const { user } = useSelector(state => state.auth)
-    // const [getDestinationClient] = useGetDestinationClientsQuery()
 
-    const [search, setSearch] = useState({
-        // value: '',
-        // regex: false
-    })
-    const [filters, setFilters] = useState({
-        created_at: { from: '', to: '' },
-        campaignId: params.id
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/process/leads/edit/${id}`), [])
+    // ? the step and follow-up live in the address bar, so a link (or the dashboard) can open a filtered list
+    const { stage, followUpState } = useMemo(() => filtersFromSearch(location.search), [location.search])
+    const [searchText, setSearchText] = useState('')
+    const [search, setSearch] = useState({ value: '', regex: false })
+    const [filters, setFilters] = useState(EMPTY_DATES)
+    const [datesKey, setDatesKey] = useState(0)
+
+    // ? the latest filters for the table's query, and which request is the newest (an older reply is dropped)
+    const leadFilters = useRef({ stage, followUpState })
+    leadFilters.current = { stage, followUpState }
+    const requestNo = useRef(0)
+    const lastQuery = useRef('')
+
+    const triggerRefetch = useCallback(() => {
+        setRefetch(true)
+        setTimeout(() => setRefetch(false), 500)
+    }, [])
+
+    // ? search once the agent stops typing
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const value = searchText.trim()
+            setSearch(prev => (prev.value === value ? prev : { value, regex: false }))
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [searchText])
+
+    const setUrlFilters = next => {
+        const nextSearch = searchWithFilters(location.search, { stage, followUpState, ...next })
+        navigate({ pathname: location.pathname, search: nextSearch }, { replace: true })
+    }
+
+    const editHandler = useCallback(row => navigate(`/process/leads/edit/${row.id}`), [navigate])
 
     const handleExcelClick = () => {
         setExcelHandler(true)
         setTimeout(() => setExcelHandler(false), 1000)
     }
+
     const queryHandler = async queryString => {
-        const extraParams = new URLSearchParams()
-        if (quickFilter.status !== 'All') extraParams.set('quickStatus', quickFilter.status)
-        if (quickFilter.followUpState !== 'All') extraParams.set('followUpState', quickFilter.followUpState)
+        const finalQuery = withLeadFilters(queryString, leadFilters.current)
 
-        const enhancedQuery = `${queryString || ''}${queryString?.includes('?') ? '&' : '?'}${extraParams.toString()}`
-        const finalQuery = extraParams.toString() ? enhancedQuery : queryString
-
-        const { data: response } = await dispatch(getLeads.initiate(finalQuery, false))
-        if (isExcelQuery(queryString)) {
+        if (isExcelQuery(queryString || '')) {
+            const { data: response } = await dispatch(getLeads.initiate(finalQuery, false))
+            downloadCsv(response?.data || [], 'leads.csv')
             return true
         }
-        setUsers(response?.data || [])
+
+        requestNo.current += 1
+        const mine = requestNo.current
+        lastQuery.current = finalQuery
+        const { data: response } = await dispatch(getLeads.initiate(finalQuery, false))
+        if (mine !== requestNo.current) return true
+        setLeads(response?.data || [])
         setRecordsCount(response?.count || 0)
+        setSummary(response?.summary || EMPTY_SUMMARY)
+        setLoaded(true)
         return true
     }
 
+    const exportAll = async () => {
+        const count = Math.max(recordsCount, 1)
+        const { data: response } = await dispatch(getLeads.initiate(withPaging(lastQuery.current, 0, count), false))
+        downloadCsv(response?.data || [], 'leads-all.csv')
+    }
+
+    const hasFilters = Boolean(search.value || filters.created_at?.from || filters.created_at?.to || followUpState)
+
     const clearFilters = () => {
-        setSearch({
-            value: '',
-            regex: false
-        })
-        setFilters({ created_at: { from: '', to: '' } })
-        setQuickFilter({ status: 'All', followUpState: 'All' })
+        setSearchText('')
+        setSearch({ value: '', regex: false })
+        setFilters(EMPTY_DATES)
+        setDatesKey(key => key + 1) // ? the date boxes keep what was typed until they are drawn again
+        setUrlFilters({ followUpState: '' })
     }
 
     const openConfirmModal = useCallback(
-        (action, id) => {
+        (action, row) => {
             setModalAction(action)
-            setSelectedLeadId(id)
-            if (action === 'delete') {
-                setRemoveId(id)
-            }
-            dispatch(
-                openModal({
-                    type: 'confirm_modal'
-                })
-            )
+            setSelectedLead(row)
+            dispatch(openModal({ type: 'confirm_modal' }))
         },
         [dispatch]
     )
 
+    const resetModal = () => {
+        setModalAction('')
+        setSelectedLead(null)
+        dispatch(closeModal())
+    }
+
     const deleteActionHandler = async () => {
         try {
-            const response = await deleteLead(removeId).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: response?.message || 'Lead deleted successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
+            const response = await deleteLead(selectedLead.id).unwrap()
+            dispatch(snack(response?.message || 'Lead deleted', 'success'))
+            if (justVerified?.id === selectedLead.id) setJustVerified(null)
+            triggerRefetch()
         } catch (reqError) {
             dispatch(
-                openSnackbar({
-                    open: true,
-                    message: reqError?.data?.data?.message || 'Unable to delete lead!',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
+                snack(reqError?.data?.data?.message || reqError?.data?.message || 'Unable to delete lead', 'error')
             )
         } finally {
-            setModalAction('')
-            setSelectedLeadId(null)
-            setRemoveId(null)
-            dispatch(closeModal())
+            resetModal()
+        }
+    }
+
+    const verifyLead = async row => {
+        try {
+            await updateLeads({ id: row.id, leadStatus: 'verified', updatedBy: user?.id }).unwrap()
+            dispatch(snack(`${row.fullName || 'Lead'} verified`, 'success'))
+            setJustVerified({ id: row.id, name: row.fullName || 'This lead' })
+            triggerRefetch()
+        } catch (error) {
+            dispatch(snack(error?.data?.message || 'Unable to verify lead', 'error'))
+        } finally {
+            resetModal()
         }
     }
 
@@ -182,27 +312,8 @@ function MasterLeadsTable() {
         navigate('/process/leads/add')
     }
 
-    const menuOptions = useMemo(
-        () => [
-            {
-                label: 'Edit',
-                icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
-                onClick: row => editHandler(row.id, row),
-                condition: () => hasEditAccess
-            },
-            {
-                label: 'Delete',
-                icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
-                onClick: row => openConfirmModal('delete', row.id),
-                condition: () => hasEditAccess
-            }
-        ],
-        [editHandler, openConfirmModal, hasEditAccess]
-    )
-
     useEffect(() => {
-        setRefetch(true)
-        setTimeout(() => setRefetch(false), 500)
+        triggerRefetch()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.pathname])
 
@@ -212,36 +323,6 @@ function MasterLeadsTable() {
             handleAdd()
         }
     })
-
-    const verifyLead = async id => {
-        try {
-            await updateLeads({ id, leadStatus: 'verified', updatedBy: user?.id }).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Lead Verified!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-        } catch (error) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.message || 'Unable to verify lead',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        } finally {
-            setModalAction('')
-            setSelectedLeadId(null)
-            dispatch(closeModal())
-        }
-    }
 
     const handleOpenTimeline = async row => {
         setTimelineModal({
@@ -266,128 +347,30 @@ function MasterLeadsTable() {
                 leadName: '',
                 events: []
             })
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.message || 'Unable to load lead timeline',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
+            dispatch(snack(error?.data?.message || 'Unable to load lead timeline', 'error'))
         }
     }
 
-    const leadSummary = useMemo(() => {
-        const total = users.length
-        const confirmed = users.filter(item => item.status === 'Confirmed').length
-        const verified = users.filter(item => item.status === 'verified').length
-        const pending = total - confirmed - verified
+    const rows = useMemo(() => {
+        const now = new Date()
+        return leads.map(lead => displayRow(lead, now))
+    }, [leads])
 
-        return [
-            { label: 'Showing', value: `${total} leads`, color: '#1d4ed8', bg: '#eff6ff' },
-            { label: 'Verified', value: verified, color: '#16a34a', bg: '#f0fdf4' },
-            { label: 'Confirmed', value: confirmed, color: '#7c3aed', bg: '#f5f3ff' },
-            { label: 'Pending', value: pending, color: '#b45309', bg: '#fffbeb' }
-        ]
-    }, [users])
-
-    const getLeadStatusStyle = status => {
-        if (status === 'Confirmed') {
-            return { bg: '#f0fdf4', color: '#16a34a' }
-        }
-
-        if (status === 'verified') {
-            return { bg: '#eff6ff', color: '#2563eb' }
-        }
-
-        return { bg: '#fff7ed', color: '#b45309' }
+    const total = Number(summary?.total) || 0
+    let emptyKind = null
+    if (loaded && !getLeadsMasterLKey && !leads.length) {
+        if (hasFilters) emptyKind = 'filtered'
+        else if (stage !== ALL) emptyKind = 'stage'
+        else emptyKind = 'first'
     }
 
-    const getFollowUpStyle = status => {
-        if (status === 'Overdue') {
-            return { bg: '#fef2f2', color: '#dc2626' }
-        }
-
-        if (status === 'Due Today') {
-            return { bg: '#fffbeb', color: '#b45309' }
-        }
-
-        if (status === 'On Track') {
-            return { bg: '#f0fdf4', color: '#16a34a' }
-        }
-
-        return { bg: '#eff6ff', color: '#2563eb' }
-    }
-
-    const enhancedColumns = useMemo(
-        () =>
-            columns.map(column => {
-                if (column.key === 'status') {
-                    return {
-                        ...column,
-                        render: row => {
-                            const statusStyle = getLeadStatusStyle(row.status)
-
-                            return (
-                                <Chip
-                                    size='small'
-                                    label={row.status || 'Pending'}
-                                    sx={{
-                                        bgcolor: statusStyle.bg,
-                                        color: statusStyle.color,
-                                        fontWeight: 700
-                                    }}
-                                />
-                            )
-                        }
-                    }
-                }
-
-                if (column.key === 'followUpState') {
-                    return {
-                        ...column,
-                        render: row => {
-                            const followUpStyle = getFollowUpStyle(row.followUpState)
-
-                            return (
-                                <Chip
-                                    size='small'
-                                    label={row.followUpState || 'Needs Follow-up'}
-                                    sx={{
-                                        bgcolor: followUpStyle.bg,
-                                        color: followUpStyle.color,
-                                        fontWeight: 700
-                                    }}
-                                />
-                            )
-                        }
-                    }
-                }
-
-                return column
-            }),
-        [columns]
-    )
-
-    useEffect(() => {
-        const searchParams = new URLSearchParams(location.search)
-        const status = searchParams.get('status')
-        const followUpState = searchParams.get('followUpState')
-
-        if (status || followUpState) {
-            setQuickFilter({
-                status: status || 'All',
-                followUpState: followUpState || 'All'
-            })
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
-        }
-    }, [location.search])
+    // ? a new step, follow-up or search starts again from the first page
+    const tableKey = `${stage}|${followUpState}|${search.value}|${filters.created_at?.from}|${filters.created_at?.to}`
+    const verifiedRow = justVerified && leads.find(lead => lead.id === justVerified.id)
 
     return (
-        <ContextMenuProvider>
-            <MainCard content={false} sx={{ py: '2px' }}>
+        <MainCard content={false} sx={{ py: '2px' }}>
+            <Stack spacing={2} sx={{ py: 1.5 }}>
                 <Box
                     sx={{
                         display: 'flex',
@@ -397,90 +380,82 @@ function MasterLeadsTable() {
                         flexDirection: { xs: 'column', md: 'row' }
                     }}
                 >
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <Typography variant='h3'>All Leads</Typography>
-                        <Typography variant='body2' color='text.secondary'>
-                            Verify leads first, then move them into guest details and package conversion.
+                    <Box>
+                        <Typography variant='h3'>Leads</Typography>
+                        <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                            Every enquiry, from the first message to a confirmed booking.
                         </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            {leadSummary.map(item => (
-                                <Chip
-                                    key={item.label}
-                                    label={`${item.label}: ${item.value}`}
-                                    size='small'
-                                    sx={{
-                                        bgcolor: item.bg,
-                                        color: item.color,
-                                        fontWeight: 700,
-                                        borderRadius: '8px'
-                                    }}
-                                />
-                            ))}
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            {[
-                                { label: 'All', key: 'All' },
-                                { label: 'Pending', key: 'Pending' },
-                                { label: 'Verified', key: 'verified' },
-                                { label: 'Confirmed', key: 'Confirmed' }
-                            ].map(item => (
-                                <Chip
-                                    key={item.key}
-                                    label={item.label}
-                                    size='small'
-                                    variant={quickFilter.status === item.key ? 'filled' : 'outlined'}
-                                    color={quickFilter.status === item.key ? 'primary' : 'default'}
-                                    onClick={() => {
-                                        setQuickFilter(prev => ({ ...prev, status: item.key }))
-                                        setRefetch(true)
-                                        setTimeout(() => setRefetch(false), 500)
-                                    }}
-                                />
-                            ))}
-                            {[
-                                { label: 'All Follow-ups', key: 'All' },
-                                { label: 'Due Today', key: 'Due Today' },
-                                { label: 'Overdue', key: 'Overdue' },
-                                { label: 'On Track', key: 'On Track' }
-                            ].map(item => (
-                                <Chip
-                                    key={item.key}
-                                    label={item.label}
-                                    size='small'
-                                    variant={quickFilter.followUpState === item.key ? 'filled' : 'outlined'}
-                                    color={quickFilter.followUpState === item.key ? 'secondary' : 'default'}
-                                    onClick={() => {
-                                        setQuickFilter(prev => ({ ...prev, followUpState: item.key }))
-                                        setRefetch(true)
-                                        setTimeout(() => setRefetch(false), 500)
-                                    }}
-                                />
-                            ))}
-                        </Box>
                     </Box>
-                    <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
-                        {/* add your custom filters here */}
-                        {isShowClearButton && (
-                            <CustomButton
-                                variant='text'
-                                customStyles={{
-                                    color: 'error.main',
-                                    '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
-                                }}
-                                startIcon={<FilterAltOff />}
-                                onClick={() => {
-                                    setClearAllFilters(prev => !prev)
-                                }}
-                            >
-                                Clear All Filters
-                            </CustomButton>
-                        )}
-                        {/* <CustomSearchTextField
-                            search={search}
-                            setSearch={setSearch}
-                            placeholder='Search locations...'
-                        /> */}
-                        {/* // Example for "From" date */}
+                    <Stack direction='row' spacing={1.5} alignItems='center' flexWrap='wrap' useFlexGap>
+                        <ToggleColumns columns={columns} handler={handleCheckToggle} />
+                        <UiAccessGuard>
+                            <CSVExport handleExcelClick={handleExcelClick} exportAllFunc={exportAll} />
+                        </UiAccessGuard>
+                        <UiAccessGuard type='create'>
+                            <Tooltip title='Alt+A'>
+                                <span>
+                                    <CustomButton variant='clickable' onClick={handleAdd}>
+                                        Add lead <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
+                                    </CustomButton>
+                                </span>
+                            </Tooltip>
+                        </UiAccessGuard>
+                    </Stack>
+                </Box>
+
+                <LeadProcessBar
+                    stages={summary?.stages}
+                    total={total}
+                    selected={stage}
+                    onSelect={key => setUrlFilters({ stage: key })}
+                />
+
+                <HowLeadsWork />
+
+                {verifiedRow && (
+                    <Alert
+                        severity='success'
+                        onClose={() => setJustVerified(null)}
+                        action={
+                            verifiedRow.stage === 'verified' ? (
+                                <Button
+                                    color='inherit'
+                                    size='small'
+                                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                                    onClick={() => navigate(`/process/guest/add/${verifiedRow.id}`)}
+                                >
+                                    Build quote
+                                </Button>
+                            ) : null
+                        }
+                    >
+                        {justVerified.name} is verified. Next step: build their quotation.
+                    </Alert>
+                )}
+
+                <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={1.5}
+                    alignItems={{ md: 'center' }}
+                    useFlexGap
+                    flexWrap='wrap'
+                >
+                    <TextField
+                        size='small'
+                        placeholder='Search name, phone or email'
+                        value={searchText}
+                        onChange={event => setSearchText(event.target.value)}
+                        sx={{ width: { xs: '100%', md: 280 }, '& .MuiInputBase-root': { height: 34 } }}
+                        InputProps={{
+                            inputProps: { 'aria-label': 'Search leads' },
+                            startAdornment: (
+                                <InputAdornment position='start'>
+                                    <Search fontSize='small' />
+                                </InputAdornment>
+                            )
+                        }}
+                    />
+                    <Stack direction='row' spacing={1.5} key={datesKey}>
                         <CustomSearchDateField
                             type='from'
                             filters={filters}
@@ -488,9 +463,6 @@ function MasterLeadsTable() {
                             placeholder='From date'
                             label='From'
                         />
-                        {/* </Box> */}
-
-                        {/* // Example for "To" date */}
                         <CustomSearchDateField
                             type='to'
                             filters={filters}
@@ -498,256 +470,188 @@ function MasterLeadsTable() {
                             placeholder='To date'
                             label='To'
                         />
-                        {/* <TextField
-                        placeholder='search data'
-                        size='small'
-                        type='search'
-                        sx={{
-                            '& .MuiInputBase-input': {
-                                fontSize: 12
-                            },
-                            '& .MuiOutlinedInput-root': {
-                                '& fieldset': {
-                                    borderColor: 'primary.800',
-                                    borderWidth: '1.2px'
-                                },
-                                '&:hover fieldset': {
-                                    borderColor: 'primary.main'
-                                },
-                                '&.Mui-focused fieldset': {
-                                    borderColor: 'primary.main'
-                                }
-                                // padding: '0px 4px'
-                            },
-                            '& .MuiInputBase-inputSizeSmall': {
-                                padding: '3px 6px !important'
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') setSearch({ ...search, value: e.target.value })
-                        }}
-                    /> */}
-                        {/* <TextField
-                        placeholder='from date'
-                        size='small'
-                        type='date'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.from}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, from: `${e.target.value} 00:00:00` }
-                            })
-                        }
-                    /> */}
-                        {/* <TextField
-                        placeholder='To Date'
-                        type='date'
-                        size='small'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.to}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, to: `${e.target.value} 23:59:59` }
-                            })
-                        }
-                    /> */}
-                        <UiAccessGuard>
-                            <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
-                        <UiAccessGuard type='create'>
-                            <CustomButton variant='clickable' onClick={handleAdd}>
-                                Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
-                            </CustomButton>
-                        </UiAccessGuard>
-
-                        {/* render action column can be made dynamic based on user authorization  */}
-                        <ToggleColumns columns={columns} handler={handleCheckToggle} />
                     </Stack>
-                </Box>
-                <DataTable
-                    isCheckbox
-                    data={users || []}
-                    columns={enhancedColumns}
-                    queryHandler={queryHandler}
-                    reqKey='getLocationMasterLKey'
-                    refetch={refetch}
-                    globalSearch={search}
-                    globalFilters={filters}
-                    clearFilters={clearFilters}
-                    addExcelQuery={excelHandler}
-                    totalRecords={recordsCount}
-                    renderAction={row => (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'info.main' }}
-                                    size='small'
-                                    aria-label='view lead timeline'
-                                    onClick={() => handleOpenTimeline(row)}
-                                >
-                                    <Tooltip title='View Timeline'>
-                                        <Visibility fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'success.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => editHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Edit'>
-                                        <Edit fontSize='small' sx={{ fill: '#60498a' }} />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='delete lead'
-                                    onClick={() => openConfirmModal('delete', row.id)}
-                                >
-                                    <Tooltip title='Delete Lead'>
-                                        <Delete fontSize='small' color='error' />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='verify lead'
-                                    onClick={() => openConfirmModal('verify', row.id)}
-                                >
-                                    {row.status !== 'verified' && row.status !== 'Confirmed' ? (
-                                        <Tooltip title='Verify'>
-                                            <VerifiedOutlinedIcon fontSize='small' color='action' />
-                                        </Tooltip>
-                                    ) : (
-                                        <Tooltip title='Verified Lead'>
-                                            <VerifiedIcon fontSize='small' color='success' />
-                                        </Tooltip>
-                                    )}
-                                </IconButton>
-                            </UiAccessGuard>
+                    <Stack direction='row' spacing={0.5} alignItems='center'>
+                        <TextField
+                            select
+                            size='small'
+                            label='Follow-up'
+                            value={followUpState || 'All'}
+                            onChange={event =>
+                                setUrlFilters({ followUpState: event.target.value === 'All' ? '' : event.target.value })
+                            }
+                            sx={{ width: { xs: '100%', md: 160 }, '& .MuiInputBase-root': { height: 34 } }}
+                        >
+                            <MenuItem value='All'>All</MenuItem>
+                            {FOLLOW_UPS.map(item => (
+                                <MenuItem key={item.key} value={item.key}>
+                                    {item.label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <Tooltip
+                            arrow
+                            title={<Box sx={{ whiteSpace: 'pre-line', fontSize: '0.75rem' }}>{FOLLOW_UP_HELP}</Box>}
+                        >
+                            <InfoOutlined
+                                fontSize='small'
+                                sx={{ color: 'text.secondary' }}
+                                aria-label='What the follow-up states mean'
+                            />
+                        </Tooltip>
+                    </Stack>
+                    {hasFilters && (
+                        <CustomButton
+                            variant='text'
+                            customStyles={{
+                                color: 'error.main',
+                                '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
+                            }}
+                            startIcon={<FilterAltOff />}
+                            onClick={clearFilters}
+                        >
+                            Clear filters
+                        </CustomButton>
+                    )}
+                </Stack>
 
-                            {(row.status === 'verified' || row.status === 'Confirmed') && (
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => navigate(`/process/guest/add/${row.id}`)}
-                                >
-                                    <Tooltip title='Add Guest Details'>
-                                        <LocalHotelIcon fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
-                            )}
+                {emptyKind && (
+                    <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: '12px' }}>
+                        <LeadEmptyState
+                            kind={emptyKind}
+                            stage={stage}
+                            canCreate={hasCreateAccess}
+                            onAdd={handleAdd}
+                            onClear={clearFilters}
+                        />
+                    </Box>
+                )}
+
+                {/* the table stays mounted while empty so it keeps fetching */}
+                <Box sx={{ display: emptyKind ? 'none' : 'block' }}>
+                    <DataTable
+                        key={tableKey}
+                        data={rows}
+                        columns={columns}
+                        queryHandler={queryHandler}
+                        reqKey='getLeadsMasterLKey'
+                        refetch={refetch}
+                        globalSearch={search}
+                        globalFilters={filters}
+                        addExcelQuery={excelHandler}
+                        totalRecords={recordsCount}
+                        isColumnsSearchable={false}
+                        renderAction={row => (
+                            <LeadRowActions
+                                row={row}
+                                canEdit={hasEditAccess}
+                                onVerify={lead => openConfirmModal('verify', lead)}
+                                onGo={to => navigate(to)}
+                                onTimeline={handleOpenTimeline}
+                                onEdit={editHandler}
+                                onDelete={lead => openConfirmModal('delete', lead)}
+                            />
+                        )}
+                        isLoading={getLeadsMasterLKey}
+                    />
+                </Box>
+            </Stack>
+
+            <ConfirmModal
+                title={modalAction === 'delete' ? 'Delete lead' : 'Verify lead'}
+                message={
+                    modalAction === 'delete' ? (
+                        <>Delete {selectedLead?.fullName || 'this lead'}? This can&apos;t be undone.</>
+                    ) : (
+                        <>
+                            Mark <strong>{selectedLead?.fullName || 'this lead'}</strong> as verified? Do this once
+                            you&apos;ve spoken to the guest and the enquiry is real. Next you&apos;ll build their
+                            quotation.
+                        </>
+                    )
+                }
+                icon={modalAction === 'delete' ? 'warning' : 'info'}
+                confirmText={modalAction === 'delete' ? 'Delete' : 'Mark as verified'}
+                customStyle={{ width: { xs: '300px', sm: '456px' } }}
+                onConfirm={() => (modalAction === 'delete' ? deleteActionHandler() : verifyLead(selectedLead))}
+                isLoading={modalAction === 'delete' ? deleteLeadKey : updateLeadKey}
+            />
+
+            <Modal open={timelineModal.open} onClose={() => setTimelineModal(prev => ({ ...prev, open: false }))}>
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: { xs: '92vw', md: '760px' },
+                        maxHeight: '85vh',
+                        overflow: 'auto',
+                        bgcolor: 'background.paper',
+                        borderRadius: '16px',
+                        boxShadow: 24,
+                        p: 3
+                    }}
+                >
+                    <Typography variant='h4' sx={{ mb: 1 }}>
+                        {timelineModal.leadName} Timeline
+                    </Typography>
+                    <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+                        This shows lead progress, package conversion, service assignment, and payment activity.
+                    </Typography>
+
+                    {timelineModal.loading && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+                            <CircularProgress />
                         </Box>
                     )}
-                    setIsShowClearButton={setIsShowClearButton}
-                    clearAllFilters={clearAllFilters}
-                    isLoading={getLeadsMasterLKey}
-                    enableContextMenu
-                />
-                <PopperContextMenu options={menuOptions} />
-
-                <ConfirmModal
-                    title={modalAction === 'delete' ? 'Delete Lead' : 'Verify Lead'}
-                    message={
-                        modalAction === 'delete' ? (
-                            <>Are you sure you want to delete this lead?</>
-                        ) : (
-                            <>Are you sure you want to verify this lead?</>
-                        )
-                    }
-                    icon='warning'
-                    confirmText={modalAction === 'delete' ? 'Delete' : 'Yes'}
-                    customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={() => (modalAction === 'delete' ? deleteActionHandler() : verifyLead(selectedLeadId))}
-                    isLoading={modalAction === 'delete' ? deleteLeadKey : updateLeadKey}
-                />
-
-                <Modal open={timelineModal.open} onClose={() => setTimelineModal(prev => ({ ...prev, open: false }))}>
-                    <Box
-                        sx={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            width: { xs: '92vw', md: '760px' },
-                            maxHeight: '85vh',
-                            overflow: 'auto',
-                            bgcolor: 'background.paper',
-                            borderRadius: '16px',
-                            boxShadow: 24,
-                            p: 3
-                        }}
-                    >
-                        <Typography variant='h4' sx={{ mb: 1 }}>
-                            {timelineModal.leadName} Timeline
-                        </Typography>
-                        <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
-                            This shows lead progress, package conversion, service assignment, and payment activity.
-                        </Typography>
-
-                        {timelineModal.loading && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-                                <CircularProgress />
-                            </Box>
-                        )}
-                        {!timelineModal.loading && timelineModal.events.length > 0 && (
-                            <Stack spacing={2}>
-                                {timelineModal.events.map(event => (
+                    {!timelineModal.loading && timelineModal.events.length > 0 && (
+                        <Stack spacing={2}>
+                            {timelineModal.events.map(event => (
+                                <Box
+                                    key={`${event.type}-${event.timestamp}-${event.title}`}
+                                    sx={{
+                                        p: 2,
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
+                                        bgcolor: '#fbfdff'
+                                    }}
+                                >
                                     <Box
-                                        key={`${event.type}-${event.timestamp}-${event.title}`}
                                         sx={{
-                                            p: 2,
-                                            borderRadius: '12px',
-                                            border: '1px solid #e2e8f0',
-                                            bgcolor: '#fbfdff'
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: 1,
+                                            flexWrap: 'wrap'
                                         }}
                                     >
-                                        <Box
-                                            sx={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                gap: 1,
-                                                flexWrap: 'wrap'
-                                            }}
-                                        >
-                                            <Typography variant='subtitle1' fontWeight={700}>
-                                                {event.title}
-                                            </Typography>
-                                            <Chip
-                                                size='small'
-                                                label={new Date(event.timestamp).toLocaleString('en-IN')}
-                                                variant='outlined'
-                                            />
-                                        </Box>
-                                        {event.description && (
-                                            <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
-                                                {event.description}
-                                            </Typography>
-                                        )}
+                                        <Typography variant='subtitle1' fontWeight={700}>
+                                            {event.title}
+                                        </Typography>
+                                        <Chip
+                                            size='small'
+                                            label={new Date(event.timestamp).toLocaleString('en-IN')}
+                                            variant='outlined'
+                                        />
                                     </Box>
-                                ))}
-                            </Stack>
-                        )}
-                        {!timelineModal.loading && timelineModal.events.length === 0 && (
-                            <Typography variant='body2' color='text.secondary'>
-                                No timeline activity is available for this lead yet.
-                            </Typography>
-                        )}
-                    </Box>
-                </Modal>
-            </MainCard>
-        </ContextMenuProvider>
+                                    {event.description && (
+                                        <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>
+                                            {event.description}
+                                        </Typography>
+                                    )}
+                                </Box>
+                            ))}
+                        </Stack>
+                    )}
+                    {!timelineModal.loading && timelineModal.events.length === 0 && (
+                        <Typography variant='body2' color='text.secondary'>
+                            No timeline activity is available for this lead yet.
+                        </Typography>
+                    )}
+                </Box>
+            </Modal>
+        </MainCard>
     )
 }
 
