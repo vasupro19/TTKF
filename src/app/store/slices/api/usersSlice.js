@@ -33,7 +33,9 @@ export const usersSlice = apiSliceConfig.injectEndpoints({
                     url: `/role/client${query}`,
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
-            }
+            },
+            // ? a role made or renamed on the Roles screen shows in the users form at once
+            providesTags: ['clientRoleManagement']
         }),
         createUser: build.mutation({
             query: payload => {

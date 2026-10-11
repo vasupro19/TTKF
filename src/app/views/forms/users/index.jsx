@@ -1,6 +1,7 @@
 /* eslint-disable react/jsx-props-no-spreading */
 import React, { useCallback, useEffect, useState, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import PropTypes from 'prop-types'
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import {
     Grid,
     TextField,
@@ -12,7 +13,8 @@ import {
     Divider,
     Box,
     styled,
-    Tooltip
+    Tooltip,
+    Link
 } from '@mui/material'
 import { Formik, Form, Field } from 'formik'
 import { Badge, Build, Verified, Visibility, VisibilityOff } from '@mui/icons-material'
@@ -29,6 +31,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import usePrompt from '@hooks/usePrompt'
 import IdentityCard from '@core/components/IdentityCard'
+import { accessMeta } from '@views/permissions/menuAccess'
 import {
     useGetDataForCreateQuery,
     useCreateUserMutation,
@@ -36,6 +39,38 @@ import {
     getDataForUpdate,
     useGetUserRolesQuery
 } from '@/app/store/slices/api/usersSlice'
+
+/** @description under the role: what the chosen role may do; and, while there is only ADMIN, where to make roles */
+function RoleHint({ roles, chosen }) {
+    const role = roles.find(item => Number(item.id) === Number(chosen?.id)) || chosen
+    const onlyAdmin = roles.length > 0 && roles.every(item => item.isSystem)
+    const label = role?.accessLabel || (role?.access ? accessMeta(role.access).label : '')
+    return (
+        <Box sx={{ mt: 0.75 }}>
+            {label ? (
+                <Typography variant='caption' color='text.secondary' component='div'>
+                    {label}
+                </Typography>
+            ) : null}
+            {onlyAdmin ? (
+                <Typography variant='caption' color='text.secondary' component='div' sx={{ mt: 0.5 }}>
+                    Your agency has only the ADMIN role.{' '}
+                    <Link component={RouterLink} to='/userManagement/role/create'>
+                        Create a role
+                    </Link>{' '}
+                    such as SALES to give people fewer screens.
+                </Typography>
+            ) : null}
+        </Box>
+    )
+}
+
+RoleHint.propTypes = {
+    roles: PropTypes.arrayOf(
+        PropTypes.shape({ id: PropTypes.number, isSystem: PropTypes.bool, accessLabel: PropTypes.string })
+    ).isRequired,
+    chosen: PropTypes.shape({ id: PropTypes.number, access: PropTypes.string, accessLabel: PropTypes.string })
+}
 
 // Styled components
 const CustomTextField = styled(TextField)({
@@ -763,12 +798,14 @@ export default function SetupUserForm() {
                                         showAdornment
                                         customInputSx={customInputSx}
                                         customTextSx={customTextSx}
+                                        // ? roles have an id, no value: comparing value matched every role
                                         isOptionEqualToValue={(option, selectedValue) =>
-                                            option.value === selectedValue.value
+                                            Number(option?.id) === Number(selectedValue?.id)
                                         }
                                         getOptionLabel={option => option.name}
                                         innerLabel={false}
                                     />
+                                    <RoleHint roles={roles} chosen={values.role} />
                                 </Grid>
 
                                 <Box sx={{ display: 'flex', gap: 1, justifyContent: 'end', width: '100%', mt: 2 }}>

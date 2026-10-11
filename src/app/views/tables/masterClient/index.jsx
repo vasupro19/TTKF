@@ -376,7 +376,9 @@ function MasterClientTable() {
                                     size='small'
                                     aria-label='settings row'
                                     onClick={() => {
-                                        navigate(`/master/client/permissions/${row.id}/${row.email}`)
+                                        navigate(`/master/client/permissions/${row.id}/${row.email}`, {
+                                            state: { name: row.name }
+                                        })
                                     }}
                                 >
                                     <Tooltip title='Settings'>

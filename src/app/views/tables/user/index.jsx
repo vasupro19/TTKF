@@ -369,7 +369,13 @@ function SetupUserTable() {
                                             navigate(
                                                 `/master/client/permissions/user/${
                                                     row.clientId ?? myClientId ?? 'own'
-                                                }/${encodeURIComponent(row.email)}`
+                                                }/${encodeURIComponent(row.email)}`,
+                                                {
+                                                    state: {
+                                                        name: row.name,
+                                                        role: row.role === 'No role' ? null : row.role
+                                                    }
+                                                }
                                             )
                                         }
                                     >

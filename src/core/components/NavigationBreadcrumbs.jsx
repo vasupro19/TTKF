@@ -7,8 +7,16 @@ import House from '@mui/icons-material/House'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 
 // Helper: convert route segments into a more readable format
-const formatLabel = str => {
-    if (!str) return ''
+const formatLabel = raw => {
+    if (!raw) return ''
+    // ? a segment like "sales%40agency.com" is an email in the address: shown as written
+    let str = raw
+    try {
+        str = decodeURIComponent(raw)
+    } catch (error) {
+        str = raw
+    }
+    if (str.includes('@')) return str
     const spaced = str.replace(/(?<!\d)([A-Z])/g, ' $1').trim()
     return spaced
         .split(' ')

@@ -1,37 +1,20 @@
-import { useEffect, useState } from 'react'
-import {
-    Box,
-    Typography,
-    Grid,
-    Checkbox,
-    FormControlLabel,
-    IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    CircularProgress,
-    Alert,
-    styled
-} from '@mui/material'
-import SettingsIcon from '@mui/icons-material/Settings'
-import { useDispatch, useSelector } from 'react-redux'
-import { openSnackbar } from '@app/store/slices/snackbar'
-import { useParams } from 'react-router-dom'
-import { useMenuByConfigClientQuery, useUpdateMenuAccessClientMutation } from '@app/store/slices/api/menuSlice' // <-- make sure mutation is defined here
+import { useMemo } from 'react'
+import { Chip, Stack, Typography } from '@mui/material'
+import { useSelector } from 'react-redux'
+import { useLocation, useParams } from 'react-router-dom'
+import { useMenuByConfigClientQuery, useUpdateMenuAccessClientMutation } from '@app/store/slices/api/menuSlice'
+import MenuAccessPage from '@views/permissions/MenuAccessPage'
+import { roleNameOf } from '@views/permissions/menuAccess'
 
-const StyledCheckbox = styled(Checkbox)(() => ({
-    paddingTop: '2px',
-    paddingBottom: '2px'
-}))
+const NO_MENUS = []
 
+/**
+ * @description the screens one agency user opens: their role's (locked) plus any given to them alone.
+ * Route /master/client/permissions/user/:id/:email — :id is the agency (the super admin needs it).
+ */
 export default function UserMenuAccessClient() {
     const params = useParams()
-    const dispatch = useDispatch()
-    const [menuDialogOpen, setMenuDialogOpen] = useState(false)
-    const [menus, setMenus] = useState([])
-    const [permission, setPermission] = useState([])
+    const location = useLocation()
 
     // ? the agency: from the link, else the signed-in user's own. An agency admin's own agency is used by the API
     // ? anyway; the super admin's request needs it to pick the workspace (it read "null" and failed)
@@ -41,156 +24,49 @@ export default function UserMenuAccessClient() {
     const email = params.email || ''
     const query = new URLSearchParams({ ...(clientId ? { clientId } : {}), email }).toString()
 
-    // ✅ Fetch menu access data using RTK Query
-    const {
-        data,
-        isFetching,
-        error: loadError,
-        refetch
-    } = useMenuByConfigClientQuery(`?${query}`, {
-        skip: !email
-    })
+    const { data, isFetching, error, refetch } = useMenuByConfigClientQuery(`?${query}`, { skip: !email })
+    const [updateMenuAccessClient] = useUpdateMenuAccessClientMutation()
 
-    // ✅ Mutation to update access
-    const [updateMenuAccessClient, { isLoading: isUpdating }] = useUpdateMenuAccessClientMutation(`?${query}`)
+    const menus = useMemo(() => (Array.isArray(data?.data) ? data.data : NO_MENUS), [data])
+    const roleName = roleNameOf(menus) || location.state?.role || null
+    const name = location.state?.name
+    const fromRole = menus.some(menu => menu.fromRole)
+    let hint = 'This user has no role yet: only the screens turned on here open for them.'
+    if (fromRole)
+        hint = 'Screens from the role are locked — change them on the role. Turn on extra screens for this user alone.'
+    else if (roleName)
+        hint = `The role ${roleName} gives no screens yet: only the screens turned on here open for this user.`
 
-    useEffect(() => {
-        if (data?.data) {
-            setMenus(data.data)
-        }
-    }, [data])
-    useEffect(() => {
-        if (menus && menus.length > 0) {
-            // Find all menus that already have access and set their IDs as the initial state
-            const alreadyHasAccess = menus
-                .filter(menu => menu.access === true || menu.access === 1)
-                .map(menu => menu.id)
-
-            setPermission(alreadyHasAccess)
-        }
-    }, [menus]) //
-    // ✅ Toggle access and update backend
-    const handleMenuAccessChange = async menuId => {
-        try {
-            setPermission(
-                prev =>
-                    // eslint-disable-next-line no-nested-ternary
-                    Array.isArray(prev) // make sure prev is always an array
-                        ? prev.includes(menuId)
-                            ? prev.filter(id => id !== menuId)
-                            : [...prev, menuId]
-                        : [menuId] // fallback if prev is corrupted
-            )
-
-            // update menus state for UI
-            setMenus(prev => prev.map(menu => (menu.id === menuId ? { ...menu, access: !menu.access } : menu)))
-        } catch (error) {
-            console.error(error)
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.message || 'Failed to update access',
-                    variant: 'alert',
-                    alert: { color: 'error' }
-                })
-            )
-        }
-    }
-    const submit = async () => {
-        try {
-            // ? unwrap: a refused save (403) used to show "Access granted successfully"
-            const reply = await updateMenuAccessClient({
-                menuIds: permission,
-                userId: email,
-                ...(clientId ? { clientId: Number(clientId) } : {})
-            }).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: reply?.message || 'Access granted successfully',
-                    variant: 'alert',
-                    alert: { color: 'success' }
-                })
-            )
-            setMenuDialogOpen(false)
-            refetch() // optionally refetch menus
-        } catch (error) {
-            console.error(error)
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.message || 'Failed to update access',
-                    variant: 'alert',
-                    alert: { color: 'error' }
-                })
-            )
-        }
-    }
-    if (isFetching) return <CircularProgress />
+    // ? only the user's own extra screens are sent: what the role gives stays on the role
+    const save = menuIds =>
+        updateMenuAccessClient({
+            menuIds,
+            userId: email,
+            ...(clientId ? { clientId: Number(clientId) } : {})
+        }).unwrap()
 
     return (
-        <Box p={2}>
-            <Grid container spacing={2} alignItems='center'>
-                <Grid item xs={3}>
-                    <Typography variant='h6'>User Menu Access</Typography>
-                    <Typography variant='body2' color='text.secondary'>
-                        {email}
+        <MenuAccessPage
+            title='Screens for this user'
+            backTo='/master/user'
+            backLabel='Users'
+            subtitle={
+                <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap>
+                    <Typography variant='body1' sx={{ fontWeight: 600 }} component='span'>
+                        {name ? `${name} · ${email}` : email || 'No user chosen'}
                     </Typography>
-                    <IconButton onClick={() => setMenuDialogOpen(true)}>
-                        <SettingsIcon />
-                    </IconButton>
-                </Grid>
-            </Grid>
-
-            {loadError ? (
-                <Alert severity='error' sx={{ mt: 2 }}>
-                    {loadError?.data?.message || 'Couldn’t load this user’s menus.'}
-                </Alert>
-            ) : null}
-
-            {/* Menu Access Dialog */}
-            <Dialog open={menuDialogOpen} onClose={() => setMenuDialogOpen(false)} maxWidth='sm' fullWidth>
-                <DialogTitle>Set Menu Access</DialogTitle>
-                <DialogContent dividers>
-                    {menus.length === 0 && (
-                        <Typography variant='body2' color='text.secondary'>
-                            No menus found.
-                        </Typography>
-                    )}
-
-                    {menus.map(menu => (
-                        <Box
-                            key={menu.id}
-                            mb={1}
-                            p={1}
-                            border={1}
-                            borderColor={menu.access ? 'primary.main' : 'grey.300'}
-                            borderRadius={1}
-                        >
-                            <FormControlLabel
-                                control={
-                                    <StyledCheckbox
-                                        checked={!!menu.access}
-                                        disabled={isUpdating}
-                                        onChange={() => handleMenuAccessChange(menu.id, menu.access)}
-                                    />
-                                }
-                                label={
-                                    <Typography variant='subtitle1'>
-                                        {menu.label} ({menu.group})
-                                    </Typography>
-                                }
-                            />
-                        </Box>
-                    ))}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setMenuDialogOpen(false)}>Close</Button>
-                    <Button onClick={() => submit()} variant='outlined' color='primary'>
-                        Submit
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+                    {roleName ? <Chip size='small' color='primary' label={`Role ${roleName}`} /> : null}
+                    <Typography variant='body2' color='text.secondary' component='span'>
+                        {hint}
+                    </Typography>
+                </Stack>
+            }
+            menus={menus}
+            loading={isFetching && !data}
+            error={error || (!email ? { message: 'No user in the link.' } : null)}
+            onRetry={email ? refetch : null}
+            onSave={save}
+            emptyText='The platform hasn’t given this agency any screens yet.'
+        />
     )
 }

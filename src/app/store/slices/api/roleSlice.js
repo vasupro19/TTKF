@@ -1,6 +1,13 @@
 import { customResponseHandler, dispatchLoaderEvent } from '@store/helpers'
 import { apiSliceConfig } from './configSlice'
 
+// ? a role's screens open in the sidebar of whoever holds it, and show locked on their permissions page
+const ROLE_CHANGED = ['clientRoleManagement', 'clientRoleManagementById', 'menu', 'Menu']
+
+/**
+ * The platform keeps two roles, ADMIN (the super admin) and CLIENT (an agency's own login); they can't be
+ * created or changed (the API refuses). Each agency makes its own roles under /role/client.
+ */
 export const roleSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
         getMainRoles: build.query({
@@ -14,43 +21,6 @@ export const roleSlice = apiSliceConfig.injectEndpoints({
             },
             providesTags: ['roleManagement']
         }),
-        getMainRoleById: build.query({
-            query: id => ({
-                url: `/role?id=${id}`,
-                responseHandler: async result => customResponseHandler({ result })
-            }),
-            transformResponse: response => ({
-                ...response,
-                data: Array.isArray(response?.data) ? response.data[0] || null : response?.data || null
-            }),
-            providesTags: ['roleManagementById']
-        }),
-        createMainRole: build.mutation({
-            query: payload => {
-                const KEY = 'createMainRoleLKey'
-                dispatchLoaderEvent(KEY)
-                return {
-                    url: '/role',
-                    method: 'POST',
-                    body: payload,
-                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
-                }
-            },
-            invalidatesTags: ['roleManagement', 'roleManagementById']
-        }),
-        updateMainRole: build.mutation({
-            query: ({ id, ...payload }) => {
-                const KEY = 'updateMainRoleLKey'
-                dispatchLoaderEvent(KEY)
-                return {
-                    url: `/role/${id}`,
-                    method: 'PUT',
-                    body: payload,
-                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
-                }
-            },
-            invalidatesTags: ['roleManagement', 'roleManagementById']
-        }),
         getClientRoles: build.query({
             query: () => {
                 const KEY = 'getClientRolesLKey'
@@ -62,19 +32,20 @@ export const roleSlice = apiSliceConfig.injectEndpoints({
             },
             providesTags: ['clientRoleManagement']
         }),
+        // ? every screen the agency may give a new role, and what each access level means
+        getClientRoleMenus: build.query({
+            query: () => ({
+                url: '/role/client/menus',
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            providesTags: ['clientRoleManagementById']
+        }),
+        // ? one role, with every screen the agency may give marked when the role has it
         getClientRoleById: build.query({
-            async queryFn(id, _api, _extraOptions, fetchWithBQ) {
-                const result = await fetchWithBQ('/role/client')
-
-                if (result.error) {
-                    return { error: result.error }
-                }
-
-                const payload = await customResponseHandler({ result: result.data })
-                const matchedRole = payload?.data?.find(role => Number(role.id) === Number(id)) || null
-
-                return { data: { ...payload, data: matchedRole } }
-            },
+            query: id => ({
+                url: `/role/client/${id}`,
+                responseHandler: async result => customResponseHandler({ result })
+            }),
             providesTags: ['clientRoleManagementById']
         }),
         createClientRole: build.mutation({
@@ -88,18 +59,43 @@ export const roleSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['clientRoleManagement', 'clientRoleManagementById']
+            invalidatesTags: ROLE_CHANGED
+        }),
+        updateClientRole: build.mutation({
+            query: ({ id, ...payload }) => {
+                const KEY = 'updateClientRoleLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/role/client/${id}`,
+                    method: 'PUT',
+                    body: payload,
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ROLE_CHANGED
+        }),
+        deleteClientRole: build.mutation({
+            query: id => {
+                const KEY = 'deleteClientRoleLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/role/client/${id}`,
+                    method: 'DELETE',
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ROLE_CHANGED
         })
     })
 })
 
 export const {
     useGetMainRolesQuery,
-    useGetMainRoleByIdQuery,
-    useCreateMainRoleMutation,
-    useUpdateMainRoleMutation,
     useGetClientRolesQuery,
+    useGetClientRoleMenusQuery,
     useGetClientRoleByIdQuery,
     useCreateClientRoleMutation,
-    endpoints: { getMainRoles, getMainRoleById, getClientRoles, getClientRoleById }
+    useUpdateClientRoleMutation,
+    useDeleteClientRoleMutation,
+    endpoints: { getMainRoles, getClientRoles, getClientRoleById }
 } = roleSlice

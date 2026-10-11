@@ -20,7 +20,8 @@ export const menuSlice = apiSliceConfig.injectEndpoints({
                 method: 'POST',
                 body
             }),
-            invalidatesTags: ['menu']
+            // ? the sidebar (Menu) follows what was given
+            invalidatesTags: ['menu', 'Menu']
         }),
         menuByConfigClient: build.query({
             query: (query, removeLoader = true) => {
@@ -39,7 +40,8 @@ export const menuSlice = apiSliceConfig.injectEndpoints({
                 method: 'POST',
                 body
             }),
-            invalidatesTags: ['menu']
+            // ? the sidebar (Menu) follows what was given
+            invalidatesTags: ['menu', 'Menu']
         })
     })
 })
