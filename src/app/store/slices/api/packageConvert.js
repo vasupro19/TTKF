@@ -92,12 +92,14 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             invalidatesTags: ['ServiceList', 'confirmedBooking']
         }),
 
-        // ? one page of the bookings list: `{ page, pageSize, stage, q }` → rows, how many match, and the chip counts
+        // ? one page of the bookings list: `{ page, pageSize, stage, q, convertedBy }` → rows, how many match, and the
+        // ? chip counts (`convertedBy`: one person's bookings, for those who see everyone's)
         getBookingsPage: build.query({
-            query: ({ page = 0, pageSize = 25, stage = 'all', q = '' } = {}) => {
+            query: ({ page = 0, pageSize = 25, stage = 'all', q = '', convertedBy = '' } = {}) => {
                 const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
                 if (stage && stage !== 'all') params.set('stage', stage)
                 if (q) params.set('q', q)
+                if (convertedBy) params.set('convertedBy', String(convertedBy))
                 return {
                     url: `/package?${params.toString()}`,
                     responseHandler: async result => customResponseHandler({ result })

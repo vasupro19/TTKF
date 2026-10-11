@@ -16,6 +16,7 @@ import {
 import { alpha } from '@mui/material/styles'
 import { CheckCircle, RadioButtonUnchecked, Search } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
+import AssigneeFilter from '@/core/components/AssigneeFilter'
 import { useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
 import { STAGES, STEPS, dateRange, doneCount, guestMoney, nextStep, progressOf, rupees, urgency } from './bookingFacts'
 
@@ -177,6 +178,7 @@ function BookingsPage() {
     const [search, setSearch] = useState('')
     const [query, setQuery] = useState('')
     const [page, setPage] = useState(0)
+    const [convertedBy, setConvertedBy] = useState('')
 
     // ? search once the agent stops typing, from the first page
     useEffect(() => {
@@ -188,7 +190,7 @@ function BookingsPage() {
     }, [search])
 
     const { data, isLoading, isFetching, isError, refetch } = useGetBookingsPageQuery(
-        { page, pageSize: PAGE_SIZE, stage, q: query },
+        { page, pageSize: PAGE_SIZE, stage, q: query, convertedBy },
         { refetchOnMountOrArgChange: true }
     )
 
@@ -200,8 +202,17 @@ function BookingsPage() {
     const from = count ? page * PAGE_SIZE + 1 : 0
     const to = Math.min(count, (page + 1) * PAGE_SIZE)
 
+    let emptyText = 'No confirmed bookings yet.'
+    if (total) emptyText = 'No bookings match.'
+    else if (convertedBy) emptyText = 'No bookings converted by them yet.'
+
     const chooseStage = key => {
         setStage(key)
+        setPage(0)
+    }
+
+    const choosePerson = id => {
+        setConvertedBy(id)
         setPage(0)
     }
 
@@ -259,21 +270,24 @@ function BookingsPage() {
                             />
                         ))}
                     </Stack>
-                    <TextField
-                        size='small'
-                        placeholder='Search guest, phone, email or booking no.'
-                        value={search}
-                        onChange={event => setSearch(event.target.value)}
-                        sx={{ width: { xs: '100%', md: 320 } }}
-                        InputProps={{
-                            inputProps: { 'aria-label': 'Search bookings' },
-                            startAdornment: (
-                                <InputAdornment position='start'>
-                                    <Search fontSize='small' />
-                                </InputAdornment>
-                            )
-                        }}
-                    />
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                        <AssigneeFilter label='Converted by' value={convertedBy} onChange={choosePerson} width={180} />
+                        <TextField
+                            size='small'
+                            placeholder='Search guest, phone, email or booking no.'
+                            value={search}
+                            onChange={event => setSearch(event.target.value)}
+                            sx={{ width: { xs: '100%', md: 320 } }}
+                            InputProps={{
+                                inputProps: { 'aria-label': 'Search bookings' },
+                                startAdornment: (
+                                    <InputAdornment position='start'>
+                                        <Search fontSize='small' />
+                                    </InputAdornment>
+                                )
+                            }}
+                        />
+                    </Stack>
                 </Stack>
 
                 {isLoading ? (
@@ -304,7 +318,7 @@ function BookingsPage() {
                             </Box>
                         ) : (
                             <Typography color='text.secondary' sx={{ py: 4 }}>
-                                {total ? 'No bookings match.' : 'No confirmed bookings yet.'}
+                                {emptyText}
                             </Typography>
                         )}
 

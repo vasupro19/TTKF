@@ -135,10 +135,14 @@ export const isFollowUp = value => FOLLOW_UPS.some(item => item.key === value)
 // ? the dashboard and older links filter by the stored status
 const STATUS_TO_STAGE = { verified: 'verified', Verified: 'verified', Confirmed: 'booked', Pending: 'new' }
 
+/** @description a user id from the address bar ("12"), or '' — anything else is ignored */
+export const userIdOf = value => (/^[1-9]\d*$/.test(String(value ?? '')) ? String(value) : '')
+
 /**
- * @description what the address bar asks for: ?stage= wins, else the old ?status=; ?followUpState= as is
+ * @description what the address bar asks for: ?stage= wins, else the old ?status=; ?followUpState= and
+ * ?assignedTo= as is
  * @param {string} search location.search
- * @returns {{ stage: string, followUpState: string }} 'all' / '' when not asked for
+ * @returns {{ stage: string, followUpState: string, assignedTo: string }} 'all' / '' when not asked for
  */
 export const filtersFromSearch = search => {
     const params = new URLSearchParams(search || '')
@@ -148,31 +152,38 @@ export const filtersFromSearch = search => {
     let chosen = ALL
     if (isStage(stage)) chosen = stage
     else if (status && STATUS_TO_STAGE[status]) chosen = STATUS_TO_STAGE[status]
-    return { stage: chosen, followUpState: isFollowUp(followUp) ? followUp : '' }
+    return {
+        stage: chosen,
+        followUpState: isFollowUp(followUp) ? followUp : '',
+        assignedTo: userIdOf(params.get('assignedTo'))
+    }
 }
 
 /**
- * @description the address bar after choosing a step or follow-up: ?stage= replaces the old ?status=
+ * @description the address bar after choosing a step, follow-up or person: ?stage= replaces the old ?status=
  * @returns {string} '' or '?…'
  */
-export const searchWithFilters = (search, { stage, followUpState }) => {
+export const searchWithFilters = (search, { stage, followUpState, assignedTo }) => {
     const params = new URLSearchParams(search || '')
     params.delete('status')
     if (isStage(stage)) params.set('stage', stage)
     else params.delete('stage')
     if (isFollowUp(followUpState)) params.set('followUpState', followUpState)
     else params.delete('followUpState')
+    if (userIdOf(assignedTo)) params.set('assignedTo', userIdOf(assignedTo))
+    else params.delete('assignedTo')
     const text = params.toString()
     return text ? `?${text}` : ''
 }
 
 /**
- * @description the table's query string plus the step and follow-up the server filters by
+ * @description the table's query string plus the step, follow-up and person the server filters by
  */
-export const withLeadFilters = (query, { stage, followUpState }) => {
+export const withLeadFilters = (query, { stage, followUpState, assignedTo }) => {
     const extra = new URLSearchParams()
     if (isStage(stage)) extra.set('stage', stage)
     if (isFollowUp(followUpState)) extra.set('followUpState', followUpState)
+    if (userIdOf(assignedTo)) extra.set('assignedTo', userIdOf(assignedTo))
     const text = extra.toString()
     if (!text) return query || ''
     if (!query) return `?${text}`

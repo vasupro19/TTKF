@@ -57,9 +57,9 @@ describe('stages', () => {
 
 describe('address bar', () => {
     test('?stage= is read as is', () => {
-        expect(filtersFromSearch('?stage=sent')).toEqual({ stage: 'sent', followUpState: '' })
-        expect(filtersFromSearch('?stage=bogus')).toEqual({ stage: 'all', followUpState: '' })
-        expect(filtersFromSearch('')).toEqual({ stage: 'all', followUpState: '' })
+        expect(filtersFromSearch('?stage=sent')).toEqual({ stage: 'sent', followUpState: '', assignedTo: '' })
+        expect(filtersFromSearch('?stage=bogus')).toEqual({ stage: 'all', followUpState: '', assignedTo: '' })
+        expect(filtersFromSearch('')).toEqual({ stage: 'all', followUpState: '', assignedTo: '' })
     })
 
     test('the old ?status= links map onto steps', () => {
@@ -73,6 +73,16 @@ describe('address bar', () => {
     test('?followUpState= is kept when known', () => {
         expect(filtersFromSearch('?followUpState=Due%20Today').followUpState).toBe('Due Today')
         expect(filtersFromSearch('?followUpState=Later').followUpState).toBe('')
+    })
+
+    test('?assignedTo= is a user id, or nothing', () => {
+        expect(filtersFromSearch('?assignedTo=12').assignedTo).toBe('12')
+        expect(filtersFromSearch('?assignedTo=0').assignedTo).toBe('')
+        expect(filtersFromSearch('?assignedTo=abc').assignedTo).toBe('')
+        expect(searchWithFilters('?stage=new', { stage: 'new', followUpState: '', assignedTo: '4' })).toBe(
+            '?stage=new&assignedTo=4'
+        )
+        expect(searchWithFilters('?assignedTo=4', { stage: 'all', followUpState: '', assignedTo: '' })).toBe('')
     })
 
     test('choosing a step writes ?stage= and drops ?status=', () => {
@@ -93,6 +103,9 @@ describe('queries', () => {
             '?start=0&followUpState=Due+Today'
         )
         expect(withLeadFilters('?start=0', { stage: 'all', followUpState: '' })).toBe('?start=0')
+        expect(withLeadFilters('?start=0', { stage: 'new', followUpState: '', assignedTo: '7' })).toBe(
+            '?start=0&stage=new&assignedTo=7'
+        )
         expect(withLeadFilters('', { stage: 'new', followUpState: '' })).toBe('?stage=new')
     })
 

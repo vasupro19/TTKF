@@ -17,6 +17,16 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             providesTags: ['getLeads']
         }),
 
+        // ? the "Assigned to" filter's choices: everyone for admins and managers, only yourself otherwise
+        getAssignees: build.query({
+            query: () => ({
+                url: '/leads/assignees',
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            keepUnusedDataFor: 300,
+            providesTags: ['leadAssignees']
+        }),
+
         // === GET LEAD BY ID ===
         getLeadById: build.query({
             query: id => ({
@@ -119,6 +129,7 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
 export const {
     useGetLeadsQuery,
     useGetLeadByIdQuery,
+    useGetAssigneesQuery,
     useGetLeadTimelineQuery,
     useCreateLeadMutation,
     useUpdateLeadMutation,

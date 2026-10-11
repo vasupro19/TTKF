@@ -32,7 +32,8 @@ const api = vi.hoisted(() => {
         updatePayment: call(),
         formChanges: {},
         supplierPreview: null,
-        snackbars: []
+        snackbars: [],
+        people: []
     }
 })
 
@@ -113,6 +114,7 @@ vi.mock('@/app/store/slices/api/confirmedService', () => ({
     usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
 }))
 vi.mock('@/app/store/slices/api/leadSlice', () => ({
+    useGetAssigneesQuery: () => ({ data: { data: api.people } }),
     useGetLeadByIdQuery: () =>
         query({ data: { fullName: 'Asha Verma', phone: '9876543210', senderEmail: 'asha@example.com' } })
 }))
@@ -172,6 +174,7 @@ beforeEach(() => {
     api.count = 2
     api.summary = { total: 2, toCollect: 135000, stages: { action: 1, progress: 1, ready: 0 } }
     api.pageArgs = []
+    api.people = []
     api.booking = {
         id: 1,
         bookingNo: 'TTK-B-261002-003',
@@ -251,13 +254,31 @@ describe('Bookings list', () => {
 
     test('the server is asked for one page: the stage chosen, then the search typed, from the first page', async () => {
         renderList()
-        expect(lastArgs()).toEqual({ page: 0, pageSize: 25, stage: 'all', q: '' })
+        expect(lastArgs()).toEqual({ page: 0, pageSize: 25, stage: 'all', q: '', convertedBy: '' })
 
         fireEvent.click(screen.getByRole('button', { name: /Not started/ }))
         expect(lastArgs()).toMatchObject({ page: 0, stage: 'action' })
 
         fireEvent.change(screen.getByLabelText('Search bookings'), { target: { value: ' rohan ' } })
         await waitFor(() => expect(lastArgs()).toMatchObject({ page: 0, stage: 'action', q: 'rohan' }))
+    })
+
+    test('Converted by: hidden for one person; for those who see everyone, asks for one person from the first page', () => {
+        const { unmount } = renderList()
+        expect(screen.queryByRole('combobox', { name: /Converted by/ })).toBeNull()
+        unmount()
+
+        api.people = [
+            { id: 1, name: 'Asha', isMe: true },
+            { id: 4, name: 'Neha', isMe: false }
+        ]
+        renderList()
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Converted by/ }))
+        fireEvent.click(screen.getByRole('option', { name: 'Neha' }))
+        expect(lastArgs()).toMatchObject({ page: 0, convertedBy: '4' })
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Converted by/ }))
+        fireEvent.click(screen.getByRole('option', { name: 'Everyone' }))
+        expect(lastArgs()).toMatchObject({ convertedBy: '' })
     })
 
     test('more than a page: which ones are shown, and the next page on request', () => {

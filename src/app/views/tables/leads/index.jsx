@@ -25,6 +25,7 @@ import CustomButton from '@core/components/extended/CustomButton'
 import { CSVExport } from '@/core/components/extended/CreateCSV'
 import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
 import { openSnackbar } from '@app/store/slices/snackbar'
+import AssigneeFilter from '@/core/components/AssigneeFilter'
 
 import {
     getLeads,
@@ -178,16 +179,16 @@ function MasterLeadsTable() {
     const [deleteLead] = useDeleteLeadMutation()
     const { user } = useSelector(state => state.auth)
 
-    // ? the step and follow-up live in the address bar, so a link (or the dashboard) can open a filtered list
-    const { stage, followUpState } = useMemo(() => filtersFromSearch(location.search), [location.search])
+    // ? the step, follow-up and person live in the address bar, so a link (or the dashboard) can open a filtered list
+    const { stage, followUpState, assignedTo } = useMemo(() => filtersFromSearch(location.search), [location.search])
     const [searchText, setSearchText] = useState('')
     const [search, setSearch] = useState({ value: '', regex: false })
     const [filters, setFilters] = useState(EMPTY_DATES)
     const [datesKey, setDatesKey] = useState(0)
 
     // ? the latest filters for the table's query, and which request is the newest (an older reply is dropped)
-    const leadFilters = useRef({ stage, followUpState })
-    leadFilters.current = { stage, followUpState }
+    const leadFilters = useRef({ stage, followUpState, assignedTo })
+    leadFilters.current = { stage, followUpState, assignedTo }
     const requestNo = useRef(0)
     const lastQuery = useRef('')
 
@@ -206,7 +207,7 @@ function MasterLeadsTable() {
     }, [searchText])
 
     const setUrlFilters = next => {
-        const nextSearch = searchWithFilters(location.search, { stage, followUpState, ...next })
+        const nextSearch = searchWithFilters(location.search, { stage, followUpState, assignedTo, ...next })
         navigate({ pathname: location.pathname, search: nextSearch }, { replace: true })
     }
 
@@ -244,14 +245,16 @@ function MasterLeadsTable() {
         downloadCsv(response?.data || [], 'leads-all.csv')
     }
 
-    const hasFilters = Boolean(search.value || filters.created_at?.from || filters.created_at?.to || followUpState)
+    const hasFilters = Boolean(
+        search.value || filters.created_at?.from || filters.created_at?.to || followUpState || assignedTo
+    )
 
     const clearFilters = () => {
         setSearchText('')
         setSearch({ value: '', regex: false })
         setFilters(EMPTY_DATES)
         setDatesKey(key => key + 1) // ? the date boxes keep what was typed until they are drawn again
-        setUrlFilters({ followUpState: '' })
+        setUrlFilters({ followUpState: '', assignedTo: '' })
     }
 
     const openConfirmModal = useCallback(
@@ -364,8 +367,8 @@ function MasterLeadsTable() {
         else emptyKind = 'first'
     }
 
-    // ? a new step, follow-up or search starts again from the first page
-    const tableKey = `${stage}|${followUpState}|${search.value}|${filters.created_at?.from}|${filters.created_at?.to}`
+    // ? a new step, follow-up, person or search starts again from the first page
+    const tableKey = `${stage}|${followUpState}|${assignedTo}|${search.value}|${filters.created_at?.from}|${filters.created_at?.to}`
     const verifiedRow = justVerified && leads.find(lead => lead.id === justVerified.id)
 
     return (
@@ -500,6 +503,7 @@ function MasterLeadsTable() {
                             />
                         </Tooltip>
                     </Stack>
+                    <AssigneeFilter value={assignedTo} onChange={id => setUrlFilters({ assignedTo: id })} />
                     {hasFilters && (
                         <CustomButton
                             variant='text'

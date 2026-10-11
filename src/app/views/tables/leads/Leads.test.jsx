@@ -10,7 +10,8 @@ const api = vi.hoisted(() => ({
     reply: { data: [], count: 0, summary: { stages: {}, total: 0 } },
     updates: [],
     snackbars: [],
-    access: new Set()
+    access: new Set(),
+    people: []
 }))
 vi.mock('react-redux', () => ({
     useDispatch: () => action => {
@@ -25,6 +26,7 @@ vi.mock('react-redux', () => ({
 }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
 vi.mock('@/app/store/slices/api/leadSlice', () => ({
+    useGetAssigneesQuery: () => ({ data: { data: api.people } }),
     getLeads: { initiate: arg => ({ type: 'getLeads', arg }) },
     getLeadTimeline: { initiate: arg => ({ type: 'timeline', arg }) },
     useDeleteLeadMutation: () => [() => ({ unwrap: () => Promise.resolve({}) })],
@@ -111,6 +113,7 @@ beforeEach(() => {
     api.updates = []
     api.snackbars = []
     api.access = new Set()
+    api.people = []
     window.localStorage.clear()
 })
 
@@ -252,5 +255,44 @@ describe('leads screen', () => {
         expect(
             await screen.findByText(/No new leads — new enquiries from email and Facebook land here/)
         ).toBeInTheDocument()
+    })
+
+    test('Assigned to: only for those who see more than one person', async () => {
+        api.reply = { data: [lead(1, 'new')], count: 1, summary: { stages: { new: 1 }, total: 1 } }
+        api.people = [{ id: 1, name: 'Asha', isMe: true }]
+        const { unmount } = renderPage()
+        await screen.findByTestId('row-1')
+        expect(screen.queryByRole('combobox', { name: /Assigned to/ })).toBeNull()
+        unmount()
+    })
+
+    test('Assigned to: in the address bar and the query, kept with the step, cleared by Clear filters', async () => {
+        api.reply = { data: [lead(1, 'new')], count: 1, summary: { stages: { new: 1 }, total: 1 } }
+        api.people = [
+            { id: 1, name: 'Asha', isMe: true },
+            { id: 4, name: 'Neha', isMe: false }
+        ]
+        renderPage('/process/leads?stage=new')
+        await screen.findByTestId('row-1')
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Assigned to/ }))
+        fireEvent.click(screen.getByRole('option', { name: 'Neha' }))
+        await waitFor(() => expect(currentSearch).toBe('?stage=new&assignedTo=4'))
+        // ? a new table (first page) asks again with the person
+        await waitFor(() => expect(api.queries.at(-1)).toBe('?start=0&length=10&stage=new&assignedTo=4'))
+
+        fireEvent.click(screen.getByRole('button', { name: /Clear filters/ }))
+        await waitFor(() => expect(currentSearch).toBe('?stage=new'))
+    })
+
+    test('a link with ?assignedTo= opens one person’s leads', async () => {
+        api.reply = { data: [lead(1, 'new')], count: 1, summary: { stages: { new: 1 }, total: 1 } }
+        api.people = [
+            { id: 1, name: 'Asha', isMe: true },
+            { id: 4, name: 'Neha', isMe: false }
+        ]
+        renderPage('/process/leads?assignedTo=4')
+        await screen.findByTestId('row-1')
+        expect(api.queries[0]).toBe('?start=0&length=10&assignedTo=4')
+        expect(screen.getByRole('combobox', { name: /Assigned to/ })).toHaveTextContent('Neha')
     })
 })
