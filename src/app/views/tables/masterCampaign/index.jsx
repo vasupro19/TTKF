@@ -37,6 +37,7 @@ import ConfirmModal from '@/core/components/modals/ConfirmModal'
 import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
+import { rememberCampaign } from '@/app/layouts/sidebar/navModel'
 import { headers } from './helper'
 // const slimTextFieldStyle = {
 //     '& .MuiInputBase-input': {
@@ -58,6 +59,7 @@ function MasterCampaignTable() {
     const hasCreateAccess = useUiAccess('create')
     const hasEditAccess = useUiAccess('edit')
     const { getLocationMasterLKey, removeLocationMasterLKey } = useSelector(state => state.loading)
+    const authUser = useSelector(state => state.auth.user)
 
     const [columns, setColumns] = useState([...headers])
     const [users, setUsers] = useState([])
@@ -284,27 +286,16 @@ function MasterCampaignTable() {
         setCurrentRowId(null)
     }
 
-    // Handlers for the dropdown options (use currentRowId)
-    const handleDestinationsClick = () => {
+    // ? a row's Destinations / Itinerary / Packages also make that campaign the sidebar's chosen trip
+    const openCampaignList = base => {
+        const row = users.find(campaign => String(campaign.id) === String(currentRowId))
+        rememberCampaign(authUser, { id: currentRowId, title: row?.title || '' })
         handleMenuClose()
-        navigate(`/master/destinations/${currentRowId}`)
-        console.log(`Navigating to Destinations for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
+        navigate(`${base}/${currentRowId}`)
     }
-
-    const handleItineraryClick = () => {
-        handleMenuClose()
-        navigate(`/master/itenary/${currentRowId}`)
-
-        console.log(`Navigating to Itinerary for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
-    }
-    const handlePackagesClick = () => {
-        handleMenuClose()
-        navigate(`/master/packages/${currentRowId}`)
-        console.log(`Navigating to Itinerary for Row ID: ${currentRowId}`)
-        // Add your navigation or logic here
-    }
+    const handleDestinationsClick = () => openCampaignList('/master/destinations')
+    const handleItineraryClick = () => openCampaignList('/master/itenary')
+    const handlePackagesClick = () => openCampaignList('/master/packages')
     return (
         <ContextMenuProvider>
             <MainCard content={false} sx={{ py: '2px' }}>
