@@ -36,6 +36,12 @@ export const paymentShape = PropTypes.shape({
     paymentMethod: PropTypes.string,
     transactionId: PropTypes.string,
     remarks: PropTypes.string,
+    // ? PENDING (awaiting verification), VERIFIED, REJECTED, REVERSED or LEGACY (before verification)
+    status: PropTypes.string,
+    hasProof: PropTypes.bool,
+    proofName: PropTypes.string,
+    rejectionReason: PropTypes.string,
+    reversalReason: PropTypes.string,
     // ? how this payment's receipt last went; null when none was sent
     receipt: PropTypes.shape({ status: PropTypes.string, sentAt: PropTypes.string, notes: PropTypes.string })
 })

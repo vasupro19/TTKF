@@ -1,4 +1,5 @@
 import { customResponseHandler, dispatchLoaderEvent } from '@store/helpers'
+import { toFormData } from '@/app/views/payments/paymentFacts'
 import { apiSliceConfig } from './configSlice'
 
 export const bookingSlice = apiSliceConfig.injectEndpoints({
@@ -136,14 +137,22 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
         }),
         addGuestPayment: build.mutation({
             // ? the same key for every try of one payment, so a retry after a slow reply is not recorded twice
+            // ? multipart: packageId, amount, paymentMethod, transactionId, remarks, paymentDate and the proof (a File,
+            // ? required unless cash); it waits for accounts to verify it
             query: ({ idempotencyKey, ...payload }) => ({
                 url: '/package/guest-payment',
                 method: 'POST',
-                body: payload, // packageId, amount, paymentMethod, transactionId, remarks
+                body: toFormData(payload),
                 ...(idempotencyKey ? { headers: { 'x-idempotency-key': idempotencyKey } } : {})
             }),
             // This invalidates the Package list so the 'guestPaidAmount' and 'status' refresh automatically
-            invalidatesTags: ['ConfirmedPackage', 'PaymentHistory', 'GuestPayment', 'confirmedBooking']
+            invalidatesTags: [
+                'ConfirmedPackage',
+                'PaymentHistory',
+                'GuestPayment',
+                'GuestPaymentList',
+                'confirmedBooking'
+            ]
         }),
         sendVoucherEmail: build.mutation({
             query: packageId => ({
@@ -231,6 +240,7 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 }
             }
         }),
+        // ? → { data: payments, summary: { pendingAmount, canDecide } }
         getGuestPaymentHistory: build.query({
             query: packageId => ({
                 url: `/package/guest-payment-history/${packageId}`,

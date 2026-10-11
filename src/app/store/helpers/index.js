@@ -25,7 +25,8 @@ export const dispatchLoaderEvent = (key, value = true) => {
 export const customResponseHandler = async ({ result, requestKey = '', removeLoader = true }) => {
     if (result.status === 403) store.dispatch(setPermissionExpired()) // ? to fetch new permissions
     if (result.status === 401) store.dispatch(logout()) // ? to logout user manually if user logged out from server
-    if (result.status >= 500)
+    // ? a 503 says what to do (e.g. payments need a one-time update on the server): the screen shows that message
+    if (result.status >= 500 && result.status !== 503)
         store.dispatch(
             openSnackbar({
                 open: true,

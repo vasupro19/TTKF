@@ -15,6 +15,7 @@ const api = vi.hoisted(() => {
         hotels: [],
         taxis: [],
         payments: [],
+        paymentSummary: { pendingAmount: 0, canDecide: false },
         addService: call(),
         deleteService: call(),
         sendSupplierEmail: call(),
@@ -25,6 +26,10 @@ const api = vi.hoisted(() => {
         sendHotel: call(),
         sendTaxi: call(),
         downloadPdf: call(),
+        verifyPayment: call(),
+        rejectPayment: call(),
+        reversePayment: call(),
+        updatePayment: call(),
         formChanges: {},
         supplierPreview: null,
         snackbars: []
@@ -63,7 +68,7 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
     },
     useGetPackageByLeadIdQuery: () => query({ data: api.booking }),
     useGetServicesByPackageQuery: ({ type }) => query({ data: type === 'Hotel' ? api.hotels : api.taxis }),
-    useGetGuestPaymentHistoryQuery: () => query({ data: api.payments }),
+    useGetGuestPaymentHistoryQuery: () => query({ data: api.payments, summary: api.paymentSummary }),
     useAddServiceToPackageMutation: () => [api.addService, { isLoading: false }],
     useDeleteServiceMutation: () => [api.deleteService],
     useSendSupplierEmailMutation: () => [api.sendSupplierEmail],
@@ -97,6 +102,12 @@ vi.mock('@/core/components/modals/AssignmentModal', () => ({
                 </button>
             </div>
         ) : null
+}))
+vi.mock('@/app/store/slices/api/paymentSlice', () => ({
+    useVerifyGuestPaymentMutation: () => [api.verifyPayment, { isLoading: false }],
+    useRejectGuestPaymentMutation: () => [api.rejectPayment, { isLoading: false }],
+    useReverseGuestPaymentMutation: () => [api.reversePayment, { isLoading: false }],
+    useUpdateGuestPaymentMutation: () => [api.updatePayment, { isLoading: false }]
 }))
 vi.mock('@/app/store/slices/api/confirmedService', () => ({
     usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
@@ -204,9 +215,14 @@ beforeEach(() => {
             amount: '45000.00',
             paymentDate: '2026-11-01T00:00:00.000Z',
             paymentMethod: 'UPI',
-            transactionId: 'UTR123'
+            transactionId: 'UTR123',
+            status: 'VERIFIED',
+            hasProof: true,
+            proofName: 'upi.png',
+            reviewedByName: 'Meera (Accounts)'
         }
     ]
+    api.paymentSummary = { pendingAmount: 0, canDecide: false }
 })
 
 describe('Bookings list', () => {
@@ -514,19 +530,89 @@ describe('Emails about the booking are always previewed first', () => {
         expect(api.deleteService).not.toHaveBeenCalled()
     })
 
-    test('recording a guest payment shows the receipt; it goes only when Send is clicked', async () => {
+    test('a recorded guest payment waits for accounts: no receipt is offered until it is verified', async () => {
         api.addGuestPayment.mockReturnValueOnce({
-            unwrap: () => Promise.resolve({ data: { paymentId: 41, guestEmail: 'asha@example.com' } })
+            unwrap: () =>
+                Promise.resolve({
+                    data: { paymentId: 41, guestEmail: 'asha@example.com' },
+                    message: 'Payment recorded — it counts once accounts verifies it'
+                })
         })
         renderBooking()
         fireEvent.click(screen.getAllByRole('button', { name: 'Record a payment' })[0])
         fireEvent.click(screen.getByRole('button', { name: 'Save the payment' }))
         await waitFor(() => expect(api.addGuestPayment).toHaveBeenCalled())
+        await waitFor(() => expect(api.snackbars).toContain('Payment recorded — it counts once accounts verifies it'))
+        expect(screen.queryByRole('dialog', { name: 'Payment receipt' })).not.toBeInTheDocument()
+    })
 
-        const dialog = await screen.findByRole('dialog', { name: 'Payment receipt' })
-        expect(api.sendReceipt).not.toHaveBeenCalled()
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to asha@example.com' }))
-        await waitFor(() => expect(api.sendReceipt).toHaveBeenCalledWith(41))
+    test('a payment awaiting verification: its status, the amount waiting, and the receipt held back', () => {
+        api.payments = [
+            { id: 7, amount: '10000', paymentMethod: 'UPI', transactionId: 'UTR9', status: 'PENDING', hasProof: true }
+        ]
+        api.paymentSummary = { pendingAmount: 10000, canDecide: false }
+        renderBooking()
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        expect(within(payments).getByText('Awaiting verification')).toBeInTheDocument()
+        expect(within(payments).getByText(/₹10,000 awaiting verification by accounts/)).toBeInTheDocument()
+        expect(within(payments).getByRole('button', { name: 'Email receipt' })).toBeDisabled()
+        expect(within(payments).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+        // ? sales cannot decide it
+        expect(within(payments).queryByRole('button', { name: 'Verify' })).not.toBeInTheDocument()
+        expect(screen.getByText('Awaiting verification', { selector: 'p' })).toBeInTheDocument()
+    })
+
+    test('a rejected payment shows sales why, and can be corrected and resubmitted', () => {
+        api.payments = [
+            {
+                id: 8,
+                amount: '5000',
+                paymentMethod: 'UPI',
+                status: 'REJECTED',
+                rejectionReason: 'UTR not in the bank statement',
+                reviewedByName: 'Meera'
+            }
+        ]
+        renderBooking()
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        expect(within(payments).getByText('Rejected by Meera: UTR not in the bank statement')).toBeInTheDocument()
+        expect(within(payments).getByRole('button', { name: 'Correct and resubmit' })).toBeInTheDocument()
+    })
+
+    test('accounts verifies a payment after seeing it beside its amount and transaction id', async () => {
+        api.payments = [
+            { id: 7, amount: '10000', paymentMethod: 'Cash', transactionId: 'R-1', status: 'PENDING', hasProof: false }
+        ]
+        api.paymentSummary = { pendingAmount: 10000, canDecide: true }
+        renderBooking()
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        fireEvent.click(within(payments).getByRole('button', { name: 'Verify' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Verify payment' })
+        expect(within(dialog).getByText('R-1')).toBeInTheDocument()
+        expect(within(dialog).getByText('No proof attached (cash).')).toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Verify payment' }))
+        await waitFor(() => expect(api.verifyPayment).toHaveBeenCalledWith({ id: 7, reason: undefined }))
+    })
+
+    test('rejecting needs a reason', async () => {
+        api.payments = [{ id: 7, amount: '10000', paymentMethod: 'UPI', status: 'PENDING', hasProof: true }]
+        api.paymentSummary = { pendingAmount: 10000, canDecide: true }
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Reject payment' })
+        const confirm = within(dialog).getByRole('button', { name: 'Reject' })
+        expect(confirm).toBeDisabled()
+        fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Amount does not match' } })
+        fireEvent.click(confirm)
+        await waitFor(() => expect(api.rejectPayment).toHaveBeenCalledWith({ id: 7, reason: 'Amount does not match' }))
+    })
+
+    test('a verified payment can be reversed by accounts, not edited', () => {
+        api.paymentSummary = { pendingAmount: 0, canDecide: true }
+        renderBooking()
+        const payments = screen.getByRole('region', { name: 'Guest payments' })
+        expect(within(payments).getByRole('button', { name: 'Reverse' })).toBeInTheDocument()
+        expect(within(payments).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     })
 
     test('the preview says who the email comes from, and why when it is not the user’s own mailbox', async () => {

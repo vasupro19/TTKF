@@ -1,7 +1,8 @@
-import ServiceLedgerTable from '@/app/views/tables/transactions'
+import TransactionsPage from '@/app/views/payments/TransactionsPage'
 
+// ? guest payments to verify, supplier payments, and the supplier balances (the ledger this page used to be)
 function Index() {
-    return <ServiceLedgerTable />
+    return <TransactionsPage />
 }
 
 export default Index

@@ -26,6 +26,8 @@ import {
     useSendVoucherEmailMutation
 } from '@/app/store/slices/api/packageConvert'
 import { usePaySupplierMutation } from '@/app/store/slices/api/confirmedService'
+import { useUpdateGuestPaymentMutation } from '@/app/store/slices/api/paymentSlice'
+import usePaymentDecision from '@/app/views/payments/usePaymentDecision'
 import { useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
 import { useGetGuestByIdQuery } from '@/app/store/slices/api/guestSlice'
 import { useGetGuestTourByIdQuery } from '@/app/store/slices/api/guestTourSlice'
@@ -102,6 +104,7 @@ function BookingWorkspace() {
     const [sendGuestReceipt] = useSendGuestReceiptMutation()
     const [addGuestPayment, { isLoading: savingGuestPayment }] = useAddGuestPaymentMutation()
     const [paySupplier, { isLoading: savingSupplierPayment }] = usePaySupplierMutation()
+    const [updateGuestPayment, { isLoading: updatingGuestPayment }] = useUpdateGuestPaymentMutation()
     const [sendVoucherEmail] = useSendVoucherEmailMutation()
     const [sendHotelEmail] = useSendGuestHotelConfirmationEmailMutation()
     const [sendTaxiEmail] = useSendGuestTaxiConfirmationEmailMutation()
@@ -109,11 +112,14 @@ function BookingWorkspace() {
 
     const [serviceForm, setServiceForm] = useState({ open: false, type: 'Hotel', row: null })
     const [guestPaymentOpen, setGuestPaymentState] = useState(false)
+    // ? a payment being corrected (waiting, or rejected by accounts); null when a new one is recorded
+    const [editingPayment, setEditingPayment] = useState(null)
     // ? one key for every try of one payment: the API records it once even if the reply is slow and it is sent again
     const [paymentKey, setPaymentKey] = useState('')
-    const setGuestPaymentOpen = open => {
+    const setGuestPaymentOpen = (open, payment = null) => {
         if (open)
             setPaymentKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        setEditingPayment(open ? payment : null)
         setGuestPaymentState(open)
     }
     const [supplierPayment, setSupplierPayment] = useState(null)
@@ -150,6 +156,10 @@ function BookingWorkspace() {
     const taxis = listOf(taxisQuery.data)
     const services = [...hotels, ...taxis]
     const payments = listOf(paymentsQuery.data)
+    // ? beside the list: what is still waiting for accounts, and whether this user is the one who decides
+    const paymentSummary = paymentsQuery.data?.summary || {}
+    const pendingAmount = amount(paymentSummary.pendingAmount)
+    const canDecide = Boolean(paymentSummary.canDecide)
     // ? only the quote that was booked — a lead can hold several
     const bookedQuote = Number(booking?.quotationNo) || 1
     const bookedDays = listOf(tourData)
@@ -170,6 +180,8 @@ function BookingWorkspace() {
             paymentsQuery.refetch()
         }
     }
+
+    const { decide, dialog: decisionDialog } = usePaymentDecision({ notify, onDone: () => refresh() })
 
     const run = async (key, task, success, failure) => {
         setBusy(key)
@@ -363,24 +375,16 @@ function BookingWorkspace() {
         if (edited && supplierHasBooking(edited)) openSupplierEmail(edited, 'amendment')
     }
 
-    // ? the receipt is not sent by itself: once the payment is saved, the agent sees it and sends it
+    // ? a payment waits for accounts to verify it; the guest's receipt can be sent once it is verified
     const saveGuestPayment = async formData => {
         setBusy('guest-payment')
         try {
-            const response = await addGuestPayment({ packageId, ...formData, idempotencyKey: paymentKey }).unwrap()
+            const response = editingPayment
+                ? await updateGuestPayment({ id: editingPayment.id, ...formData }).unwrap()
+                : await addGuestPayment({ packageId, ...formData, idempotencyKey: paymentKey }).unwrap()
             setGuestPaymentOpen(false)
             refresh()
-            const { paymentId, guestEmail } = response?.data || {}
-            if (paymentId && guestEmail) {
-                notify('Payment recorded. Check the receipt, then send it to the guest.')
-                openMail({ kind: 'receipt', paymentId })
-            } else {
-                notify(
-                    paymentId
-                        ? 'Payment recorded. The guest has no email address, so no receipt can be sent.'
-                        : response?.message || 'Payment recorded'
-                )
-            }
+            notify(response?.message || (editingPayment ? 'Payment sent back to accounts' : 'Payment recorded'))
         } catch (error) {
             notify(errorText(error, 'Couldn’t record the payment.'), 'error')
         } finally {
@@ -399,7 +403,8 @@ function BookingWorkspace() {
                     method: formData.paymentMethod,
                     transactionId: formData.transactionId,
                     paymentDate: formData.paymentDate,
-                    remarks: formData.remarks || `Payment for ${service.type} - ${guestName}`
+                    remarks: formData.remarks || `Payment for ${service.type} - ${guestName}`,
+                    proof: formData.proof
                 }).unwrap(),
             'Supplier payment recorded',
             'Couldn’t record the supplier payment.'
@@ -605,6 +610,7 @@ function BookingWorkspace() {
                         lines={[
                             ['Package price', rupees(money.price)],
                             ['Received', rupees(money.received)],
+                            ...(pendingAmount ? [['Awaiting verification', rupees(pendingAmount)]] : []),
                             ['Balance', rupees(money.balance), true]
                         ]}
                         action={
@@ -699,6 +705,16 @@ function BookingWorkspace() {
                         </Button>
                     }
                 >
+                    {paymentsQuery.error ? (
+                        <Typography role='alert' sx={{ fontSize: '0.875rem', color: 'error.main', mb: 1 }}>
+                            {errorText(paymentsQuery.error, 'Couldn’t load the payments.')}
+                        </Typography>
+                    ) : null}
+                    {pendingAmount ? (
+                        <Typography role='status' sx={{ fontSize: '0.875rem', color: 'warning.dark', mb: 1 }}>
+                            {rupees(pendingAmount)} awaiting verification by accounts — it counts once verified.
+                        </Typography>
+                    ) : null}
                     {payments.length ? (
                         <Box component='ul' sx={{ m: 0, p: 0 }}>
                             {payments.map(payment => (
@@ -706,7 +722,17 @@ function BookingWorkspace() {
                                     key={payment.id}
                                     payment={payment}
                                     canEmail={Boolean(lead.senderEmail)}
+                                    canDecide={canDecide}
                                     onReceipt={item => openMail({ kind: 'receipt', paymentId: item.id })}
+                                    onEdit={item => setGuestPaymentOpen(true, item)}
+                                    onDecide={(mode, item) =>
+                                        decide(mode, {
+                                            ...item,
+                                            guestName,
+                                            bookingNo: booking?.bookingNo,
+                                            package: booking
+                                        })
+                                    }
                                 />
                             ))}
                         </Box>
@@ -808,7 +834,8 @@ function BookingWorkspace() {
             <GuestPaymentModal
                 open={guestPaymentOpen}
                 row={{ ...booking, guestName }}
-                isLoading={savingGuestPayment}
+                payment={editingPayment}
+                isLoading={savingGuestPayment || updatingGuestPayment}
                 onClose={() => setGuestPaymentOpen(false)}
                 onSave={saveGuestPayment}
             />
@@ -827,6 +854,8 @@ function BookingWorkspace() {
                 onClose={() => setSupplierPayment(null)}
                 onSave={saveSupplierPayment}
             />
+
+            {decisionDialog}
 
             <EmailPreview
                 open={mail.open}

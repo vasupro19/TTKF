@@ -79,7 +79,8 @@ function ServiceLedgerTable() {
                 method: formData.paymentMethod,
                 transactionId: formData.transactionId,
                 paymentDate: formData.paymentDate,
-                remarks: formData.remarks || `Payment for ${data.type} - Guest: ${data.guestName}`
+                remarks: formData.remarks || `Payment for ${data.type} - Guest: ${data.guestName}`,
+                proof: formData.proof
             }).unwrap()
 
             dispatch(
@@ -124,7 +125,7 @@ function ServiceLedgerTable() {
         <MainCard content={false} sx={{ py: '2px' }}>
             {/* Header Section */}
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
-                <Typography variant='h3'>Transaction Ledger</Typography>
+                <Typography variant='h4'>What each supplier is owed</Typography>
                 <Stack direction='row' spacing={2} alignItems='center'>
                     {isShowClearButton && (
                         <CustomButton

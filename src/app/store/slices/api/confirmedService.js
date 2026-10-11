@@ -1,4 +1,5 @@
 import { customResponseHandler, dispatchLoaderEvent } from '@store/helpers'
+import { toFormData } from '@/app/views/payments/paymentFacts'
 import { apiSliceConfig } from './configSlice'
 
 export const confirmedServiceSlice = apiSliceConfig.injectEndpoints({
@@ -25,12 +26,14 @@ export const confirmedServiceSlice = apiSliceConfig.injectEndpoints({
                 return {
                     url: '/package/supplier-payment',
                     method: 'POST',
-                    body: payload, // Expected: serviceId, amount, paymentMethod, transactionId, paymentDate, remarks
+                    // ? multipart: confirmedServiceId, amount, method, transactionId, paymentDate, remarks and the proof
+                    // ? (a File, required for every method)
+                    body: toFormData(payload),
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
             // Invalidates the ledger list to refresh balances automatically
-            invalidatesTags: ['getConfirmedServices', 'ServiceList', 'confirmedBooking']
+            invalidatesTags: ['getConfirmedServices', 'ServiceList', 'confirmedBooking', 'SupplierPaymentList']
         }),
 
         // === GET PAYMENT HISTORY FOR A SERVICE ===

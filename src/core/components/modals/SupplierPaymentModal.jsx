@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
 import dayjs from 'dayjs'
+import { SUPPLIER_METHODS, paymentFormErrors, rupees } from '@/app/views/payments/paymentFacts'
+import { ProofFileField } from '@/app/views/payments/paymentParts'
 import CustomButton from '../extended/CustomButton'
+
+// ? every supplier payment carries its proof (screenshot or PDF), whatever the method; `onSave` gets the form with
+// ? `proof` (the File)
 
 function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
     // ? today where the agent is: the UTC date was yesterday until 05:30 IST
@@ -15,8 +20,13 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
         paymentDate: today
     })
 
+    const [proof, setProof] = useState(null)
+    const [tried, setTried] = useState(false)
+
     useEffect(() => {
         if (open) {
+            setProof(null)
+            setTried(false)
             setForm({
                 amount: '',
                 paymentMethod: 'Bank Transfer',
@@ -29,7 +39,14 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
 
     // row.cost is the total amount to be paid to supplier
     // row.paidAmount is what has already been paid
-    const remainingBalance = (row?.cost || 0) - (row?.paidAmount || 0)
+    const remainingBalance = (Number(row?.cost) || 0) - (Number(row?.paidAmount) || 0)
+    const errors = paymentFormErrors(form, proof, { proof: 'always' })
+    const valid = !Object.keys(errors).length
+    const proofError = proof || tried ? errors.proof || '' : ''
+    const save = () => {
+        setTried(true)
+        if (valid) onSave({ ...form, proof })
+    }
 
     return (
         <Modal open={open} onClose={onClose}>
@@ -71,10 +88,10 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                     </Typography>
                     <Stack direction='row' justifyContent='space-between' mt={1}>
                         <Typography variant='body2'>
-                            Total Cost: <b>${row?.cost}</b>
+                            Total Cost: <b>{rupees(row?.cost)}</b>
                         </Typography>
                         <Typography variant='body2' color='error.main'>
-                            Pending Balance: <b>${remainingBalance.toFixed(2)}</b>
+                            Pending Balance: <b>{rupees(remainingBalance)}</b>
                         </Typography>
                     </Stack>
                 </Box>
@@ -107,7 +124,7 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         value={form.paymentMethod}
                         onChange={e => setForm({ ...form, paymentMethod: e.target.value })}
                     >
-                        {['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Credit Card'].map(opt => (
+                        {SUPPLIER_METHODS.map(opt => (
                             <MenuItem key={opt} value={opt}>
                                 {opt}
                             </MenuItem>
@@ -121,6 +138,8 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         placeholder='e.g. UTR or Check Number'
                         onChange={e => setForm({ ...form, transactionId: e.target.value })}
                     />
+
+                    <ProofFileField file={proof} onChange={setProof} error={proofError} required />
 
                     <TextField
                         label='Internal Remarks'
@@ -138,8 +157,8 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         <CustomButton
                             variant='clickable'
                             loading={isLoading}
-                            disabled={!form.amount || form.amount <= 0 || isLoading}
-                            onClick={() => onSave(form)}
+                            disabled={!form.amount || form.amount <= 0 || isLoading || (tried && !valid)}
+                            onClick={save}
                         >
                             Confirm Payment
                         </CustomButton>

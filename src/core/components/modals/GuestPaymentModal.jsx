@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react'
 
-import { Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
+import { Alert, Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
 import dayjs from 'dayjs'
+import { GUEST_METHODS, isCash, isoDay, paymentFormErrors } from '@/app/views/payments/paymentFacts'
+import { ProofFileField } from '@/app/views/payments/paymentParts'
 import CustomButton from '../extended/CustomButton'
 
-function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
+/**
+ * Records a guest payment — or, given `payment`, corrects one that is waiting or was rejected (it goes back to
+ * accounts). The proof (screenshot or PDF) is needed unless the guest paid in cash; `onSave` gets the form with
+ * `proof` (the File, or null).
+ */
+function GuestPaymentModal({ open, onClose, onSave, row, isLoading, payment = null }) {
     // Set default date to today in YYYY-MM-DD format for the input
     // ? today where the agent is: the UTC date was yesterday until 05:30 IST
     const today = dayjs().format('YYYY-MM-DD')
@@ -17,18 +24,40 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
         paymentDate: today // Added date field
     })
 
+    const [proof, setProof] = useState(null)
+    const [tried, setTried] = useState(false)
+
     // Reset form when modal opens with a new row
     useEffect(() => {
         if (open) {
             setForm({
-                amount: '',
-                paymentMethod: 'UPI',
-                transactionId: '',
-                remarks: '',
-                paymentDate: today
+                amount: payment ? String(payment.amount ?? '') : '',
+                paymentMethod: payment?.paymentMethod || 'UPI',
+                transactionId: payment?.transactionId || '',
+                remarks: payment?.remarks || '',
+                paymentDate: isoDay(payment?.paymentDate) || today
             })
+            setProof(null)
+            setTried(false)
         }
-    }, [open, today])
+    }, [open, today, payment])
+
+    const hasProof = Boolean(payment?.hasProof)
+    const rejected = payment?.status === 'REJECTED'
+    let title = 'Record Guest Payment'
+    let saveLabel = 'Save Payment'
+    if (payment) {
+        title = rejected ? 'Correct and resubmit payment' : 'Edit payment'
+        saveLabel = rejected ? 'Send to accounts' : 'Save changes'
+    }
+    const errors = paymentFormErrors(form, proof, { proof: 'unlessCash', hasProof })
+    const valid = !Object.keys(errors).length
+    // ? a wrong file is said at once; a missing one once Save is tried
+    const proofError = proof || tried ? errors.proof || '' : ''
+    const save = () => {
+        setTried(true)
+        if (valid) onSave({ ...form, proof })
+    }
 
     // Calculate remaining balance for UI display (amounts may arrive as decimal strings)
     const remainingBalance = Math.max(0, (Number(row?.sellingPrice) || 0) - (Number(row?.guestPaidAmount) || 0))
@@ -52,9 +81,16 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                 }}
             >
                 <Typography variant='h4' mb={2}>
-                    Record Guest Payment
+                    {title}
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
+
+                {rejected && payment.rejectionReason ? (
+                    <Alert severity='error' sx={{ mb: 2 }}>
+                        Rejected{payment.reviewedByName ? ` by ${payment.reviewedByName}` : ''}:{' '}
+                        {payment.rejectionReason}
+                    </Alert>
+                ) : null}
 
                 <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
                     <Typography variant='subtitle2' color='textSecondary'>
@@ -65,7 +101,7 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                             Total: <b>{rupees(row?.sellingPrice)}</b>
                         </Typography>
                         <Typography variant='body2' color='error'>
-                            Pending: <b>{rupees(remainingBalance)}</b>
+                            Balance: <b>{rupees(remainingBalance)}</b>
                         </Typography>
                     </Stack>
                 </Box>
@@ -86,6 +122,8 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                             fullWidth
                             value={form.amount}
                             onChange={e => setForm({ ...form, amount: e.target.value })}
+                            error={tried && Boolean(errors.amount)}
+                            helperText={tried ? errors.amount : ''}
                         />
                     </Stack>
 
@@ -96,7 +134,7 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         value={form.paymentMethod}
                         onChange={e => setForm({ ...form, paymentMethod: e.target.value })}
                     >
-                        {['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Credit Card'].map(opt => (
+                        {GUEST_METHODS.map(opt => (
                             <MenuItem key={opt} value={opt}>
                                 {opt}
                             </MenuItem>
@@ -109,6 +147,14 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         value={form.transactionId}
                         placeholder='e.g. UTR Number'
                         onChange={e => setForm({ ...form, transactionId: e.target.value })}
+                    />
+
+                    <ProofFileField
+                        file={proof}
+                        onChange={setProof}
+                        error={proofError}
+                        required={!isCash(form.paymentMethod)}
+                        hasProof={hasProof}
                     />
 
                     <TextField
@@ -127,10 +173,10 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         <CustomButton
                             variant='clickable'
                             loading={isLoading}
-                            disabled={!form.amount || form.amount <= 0}
-                            onClick={() => onSave(form)}
+                            disabled={isLoading || (tried && !valid)}
+                            onClick={save}
                         >
-                            Save Payment
+                            {saveLabel}
                         </CustomButton>
                     </Box>
                 </Stack>

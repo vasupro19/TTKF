@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import PropTypes from 'prop-types'
-import { Box, Button, CircularProgress, IconButton, Modal, Stack, Typography } from '@mui/material'
+import { Box, Button, CircularProgress, IconButton, Modal, Stack, Tooltip, Typography } from '@mui/material'
 import { CheckCircle, Close, RadioButtonUnchecked, Send } from '@mui/icons-material'
 import {
     STEPS,
@@ -13,6 +13,16 @@ import {
     supplierHasBooking
 } from './bookingFacts'
 import { paymentShape, serviceShape } from './bookingShapes'
+import {
+    RECEIPT_WAITS,
+    canEdit,
+    canReverse,
+    canSendReceipt,
+    canVerify,
+    decisionNote,
+    isCounted
+} from '../payments/paymentFacts'
+import { PaymentStatusChip, ProofLink } from '../payments/paymentParts'
 
 // ? read by screen readers, not shown
 const visuallyHidden = {
@@ -265,15 +275,29 @@ ServiceRow.propTypes = {
     emailing: PropTypes.bool
 }
 
-export function PaymentRow({ payment, onReceipt, canEmail = true }) {
+export function PaymentRow({ payment, onReceipt, onEdit, onDecide, canEmail = true, canDecide = false }) {
     const receipt = emailOutcome(payment.receipt, 'Receipt')
+    const counted = isCounted(payment)
+    const rejected = payment.status === 'REJECTED'
+    const decided = decisionNote(payment)
+    let receiptLabel = 'Email receipt'
+    if (!canEmail) receiptLabel = 'No guest email for a receipt'
+    const receiptButton = (
+        <Button size='small' disabled={!canEmail || !canSendReceipt(payment)} onClick={() => onReceipt(payment)}>
+            {receiptLabel}
+        </Button>
+    )
     return (
         <Box component='li' sx={{ listStyle: 'none', borderTop: '1px solid', borderColor: 'divider', py: 1.5 }}>
             <Stack direction='row' justifyContent='space-between' spacing={2}>
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.9375rem', fontWeight: 500 }}>
-                        {[shortDate(payment.paymentDate), payment.paymentMethod].filter(Boolean).join(' · ')}
-                    </Typography>
+                    <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap>
+                        <Typography sx={{ fontSize: '0.9375rem', fontWeight: 500 }}>
+                            {[shortDate(payment.paymentDate), payment.paymentMethod].filter(Boolean).join(' · ')}
+                        </Typography>
+                        <PaymentStatusChip payment={payment} />
+                        <ProofLink kind='guest' payment={payment} hideEmpty />
+                    </Stack>
                     {payment.transactionId || payment.remarks ? (
                         <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
                             {[payment.transactionId ? `Ref ${payment.transactionId}` : '', payment.remarks]
@@ -281,15 +305,55 @@ export function PaymentRow({ payment, onReceipt, canEmail = true }) {
                                 .join(' · ')}
                         </Typography>
                     ) : null}
+                    {decided && ['REJECTED', 'REVERSED', 'VERIFIED'].includes(payment.status) ? (
+                        <Typography
+                            color={rejected ? 'error.main' : 'text.secondary'}
+                            sx={{ fontSize: '0.8125rem', fontWeight: rejected ? 600 : 400 }}
+                        >
+                            {decided}
+                        </Typography>
+                    ) : null}
                 </Box>
-                <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, flexShrink: 0 }}>
+                <Typography
+                    sx={{
+                        fontSize: '0.9375rem',
+                        fontWeight: 600,
+                        flexShrink: 0,
+                        color: counted ? 'text.primary' : 'text.secondary',
+                        textDecoration: ['REJECTED', 'REVERSED'].includes(payment.status) ? 'line-through' : 'none'
+                    }}
+                >
                     {rupees(payment.amount)}
                 </Typography>
             </Stack>
             <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap sx={{ ml: -0.75 }}>
-                <Button size='small' disabled={!canEmail} onClick={() => onReceipt(payment)}>
-                    {canEmail ? 'Email receipt' : 'No guest email for a receipt'}
-                </Button>
+                {canEmail && !canSendReceipt(payment) ? (
+                    <Tooltip title={RECEIPT_WAITS}>
+                        <span>{receiptButton}</span>
+                    </Tooltip>
+                ) : (
+                    receiptButton
+                )}
+                {canEdit(payment) && onEdit ? (
+                    <Button size='small' onClick={() => onEdit(payment)}>
+                        {rejected ? 'Correct and resubmit' : 'Edit'}
+                    </Button>
+                ) : null}
+                {canVerify(payment, canDecide) && onDecide ? (
+                    <>
+                        <Button size='small' color='success' onClick={() => onDecide('verify', payment)}>
+                            Verify
+                        </Button>
+                        <Button size='small' color='error' onClick={() => onDecide('reject', payment)}>
+                            Reject
+                        </Button>
+                    </>
+                ) : null}
+                {canReverse(payment, canDecide) && onDecide ? (
+                    <Button size='small' sx={{ color: 'text.secondary' }} onClick={() => onDecide('reverse', payment)}>
+                        Reverse
+                    </Button>
+                ) : null}
                 {receipt ? (
                     <Typography
                         role='status'
@@ -307,7 +371,10 @@ export function PaymentRow({ payment, onReceipt, canEmail = true }) {
 PaymentRow.propTypes = {
     payment: paymentShape.isRequired,
     onReceipt: PropTypes.func.isRequired,
-    canEmail: PropTypes.bool
+    onEdit: PropTypes.func,
+    onDecide: PropTypes.func,
+    canEmail: PropTypes.bool,
+    canDecide: PropTypes.bool
 }
 
 /**
