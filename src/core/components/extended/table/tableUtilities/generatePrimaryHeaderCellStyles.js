@@ -4,9 +4,9 @@ const generatePrimaryHeaderCellStyles = (column, stickyLeft, index, headerCellSX
         position: { xs: 'static', sm: column.stick && hasData ? 'sticky' : 'static' },
         left: { xs: 'static', sm: column.stick && hasData ? `${stickyLeft}rem` : undefined },
         zIndex: { xs: 'static', sm: column.stick && hasData ? 3 : 'auto' },
-        background: 'primary.main',
+        background: '#f8fafc',
         '& .MuiTableCell-root': {
-            backgroundColor: 'primary.main',
+            backgroundColor: '#f8fafc',
             minWidth: `${column?.minWidth}rem`,
             '&:first-of-type': {
                 minWidth: '32px',
@@ -14,8 +14,8 @@ const generatePrimaryHeaderCellStyles = (column, stickyLeft, index, headerCellSX
             }
         },
         padding: '0px',
-        borderBottom: '1px solid #BCC1CAFF',
-        borderRight: '0.2px solid #dddddd', // Adjust color as needed
+        borderBottom: '1px solid #e2e8f0',
+        borderRight: '1px solid #e2e8f0',
         ...headerCellSX
     }
     return cellStyles

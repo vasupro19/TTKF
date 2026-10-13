@@ -13,7 +13,8 @@ const generateSecondaryHeaderCellStyles = (column, stickyLeftHeaderSearchRow, in
                 width: '32px'
             }
         },
-        borderRight: '0.2px solid #dddddd', // Adjust color as needed
+        borderRight: '1px solid #e2e8f0',
+        borderBottom: '1px solid #e2e8f0',
         '&:first-of-type': {
             borderLeft: 'none' // Remove left border for the first column
         },

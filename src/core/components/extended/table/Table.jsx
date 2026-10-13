@@ -616,7 +616,8 @@ function DataTable({
                         <TableRow
                             sx={{
                                 '& .MuiTableCell-root': {
-                                    backgroundColor: 'grey.300',
+                                    backgroundColor: '#f8fafc',
+                                    borderBottom: '1px solid #e2e8f0',
                                     '&:first-of-type': {
                                         minWidth: '32px', // Exception for the first column
                                         width: '32px' // Adjust width explicitly
@@ -660,12 +661,12 @@ function DataTable({
                                         checked={filteredData?.length > 0 && selected.length === filteredData?.length}
                                         onChange={handleSelectAllClick}
                                         sx={{
-                                            color: 'white', // Ensure checkbox is visible in all states
+                                            color: 'text.secondary',
                                             '&.Mui-checked': {
-                                                color: 'white' // Set checked color to white for visibility
+                                                color: 'primary.main'
                                             },
                                             '&.MuiCheckbox-indeterminate': {
-                                                color: 'white' // Set indeterminate state color to white
+                                                color: 'primary.main'
                                             },
                                             '& .MuiSvgIcon-root': { fontSize: 18 }
                                         }}
@@ -750,7 +751,8 @@ function DataTable({
                         <TableRow
                             sx={{
                                 '& .MuiTableCell-root': {
-                                    background: 'linear-gradient(180deg, #f1f5f9 0%, #e5e7eb 100%)',
+                                    background: '#f8fafc',
+                                    borderBottom: '1px solid #e2e8f0',
                                     '&:first-of-type': {
                                         minWidth: '32px', // Exception for the first column
                                         width: '32px' // Adjust width explicitly
@@ -787,8 +789,8 @@ function DataTable({
                                                     ? 3
                                                     : 'auto'
                                         },
-                                        borderBottom: '1px solid #BCC1CAFF',
-                                        borderRight: '1px solid #dddddd', // Adjust color as needed
+                                        borderBottom: '1px solid #e2e8f0',
+                                        borderRight: '1px solid #e2e8f0',
                                         '&:first-of-type': {
                                             borderLeft: 'none' // Remove left border for the first column
                                         }
@@ -799,7 +801,13 @@ function DataTable({
                                         checked={filteredData?.length > 0 && selected.length === filteredData?.length}
                                         onChange={handleSelectAllClick}
                                         sx={{
-                                            color: 'primary.main', // Ensure checkbox is visible in all states
+                                            color: 'text.secondary',
+                                            '&.Mui-checked': {
+                                                color: 'primary.main'
+                                            },
+                                            '&.MuiCheckbox-indeterminate': {
+                                                color: 'primary.main'
+                                            },
                                             '& .MuiSvgIcon-root': { fontSize: 18 }
                                         }}
                                         className='regular-size'
@@ -810,6 +818,8 @@ function DataTable({
                                 <TableCell
                                     sx={{
                                         padding: '2px 8px',
+                                        borderBottom: '1px solid #e2e8f0',
+                                        borderRight: '1px solid #e2e8f0',
                                         ...headerCellSX
                                     }}
                                     align='left'
@@ -820,7 +830,9 @@ function DataTable({
                                             display: 'flex',
                                             flexDirection: 'column',
                                             justifyContent: 'center',
-                                            color: 'text.paper',
+                                            color: 'text.primary',
+                                            fontWeight: 600,
+                                            fontSize: '0.8125rem',
                                             padding: '0px 8px'
                                         }}
                                         className='regular-height'
@@ -841,7 +853,7 @@ function DataTable({
                                 <TableCell
                                     sx={{
                                         padding: '2px 8px',
-                                        borderBottom: '1px solid #BCC1CAFF',
+                                        borderBottom: '1px solid #e2e8f0',
                                         ...headerCellSX
                                     }}
                                     align='left'
@@ -852,7 +864,9 @@ function DataTable({
                                             display: 'flex',
                                             flexDirection: 'column',
                                             justifyContent: 'center',
-                                            color: 'text.dark',
+                                            color: 'text.primary',
+                                            fontWeight: 600,
+                                            fontSize: '0.8125rem',
                                             padding: '0px 8px'
                                         }}
                                         className='regular-height'

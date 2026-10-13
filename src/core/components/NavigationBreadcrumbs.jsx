@@ -121,42 +121,42 @@ function NavigationBreadcrumbs({ breadcrumbData }) {
         return null
     }
 
-    // Clean minimal styles matching the image
+    // Clean minimal styles matching the light header
     const clickableStyle = {
         cursor: 'pointer',
-        color: '#cdd5df', // Lighter gray for better readability
+        color: 'text.secondary',
         textDecoration: 'none',
-        fontSize: '0.9rem',
-        fontWeight: 300,
+        fontSize: '0.875rem',
+        fontWeight: 400,
         transition: 'color 0.2s ease',
         '&:hover': {
-            color: '#FFFFFF',
+            color: 'primary.main',
             textDecoration: 'underline',
-            fontWeight: 400
+            fontWeight: 500
         }
     }
 
     const currentPageStyle = {
-        color: '#FFFFFF', // White for current page
-        fontSize: '0.92rem',
-        fontWeight: 500
+        color: 'text.primary',
+        fontSize: '0.875rem',
+        fontWeight: 600
     }
 
     const homeIconStyle = {
-        color: '#ffffff',
-        padding: theme.spacing(0.6),
+        color: theme.palette.text.secondary,
+        padding: theme.spacing(0.5),
         borderRadius: '8px',
-        background: alpha('#ffffff', 0.1),
-        border: `1px solid ${alpha('#ffffff', 0.15)}`,
+        background: alpha(theme.palette.text.primary, 0.04),
+        border: `1px solid ${theme.palette.divider}`,
         transition: 'all 0.2s ease-in-out',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         '&:hover': {
-            background: alpha('#ffffff', 0.18),
-            border: `1px solid ${alpha('#ffffff', 0.3)}`,
-            transform: 'translateY(-1px)',
-            boxShadow: `0 4px 12px ${alpha('#000000', 0.15)}`
+            color: theme.palette.primary.main,
+            background: alpha(theme.palette.primary.main, 0.08),
+            borderColor: theme.palette.primary.main,
+            transform: 'translateY(-1px)'
         }
     }
 

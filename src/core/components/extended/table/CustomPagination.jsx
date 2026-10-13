@@ -108,26 +108,27 @@ const CustomPagination = ({
                         onChange={handleRowsPerPageChange}
                         sx={{
                             minWidth: '65px',
-                            height: '30px',
+                            height: '32px',
                             fontFamily: 'inherit',
                             backgroundColor: 'background.paper',
+                            color: 'text.primary',
                             '& .MuiSelect-select': {
                                 padding: '4px 10px !important',
-                                fontSize: '14px',
+                                fontSize: '13px',
                                 fontFamily: 'inherit',
                                 backgroundColor: 'background.paper'
                             },
                             '& .MuiOutlinedInput-notchedOutline': {
                                 border: '1px solid',
-                                borderColor: 'primary.light',
+                                borderColor: 'divider',
                                 borderRadius: '8px'
                             },
                             '&:hover .MuiOutlinedInput-notchedOutline': {
-                                borderColor: 'primary.main'
+                                borderColor: 'grey.400'
                             },
                             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                                 borderColor: 'primary.main',
-                                borderWidth: '2px'
+                                borderWidth: '1.5px'
                             }
                         }}
                     >
@@ -137,7 +138,7 @@ const CustomPagination = ({
                                 value={option}
                                 sx={{
                                     fontFamily: 'inherit',
-                                    fontSize: '14px'
+                                    fontSize: '13px'
                                 }}
                             >
                                 {option}
@@ -148,8 +149,8 @@ const CustomPagination = ({
                 <Typography
                     variant='body2'
                     sx={{
-                        fontSize: '14px',
-                        color: 'primary.800',
+                        fontSize: '13px',
+                        color: 'text.secondary',
                         whiteSpace: 'nowrap',
                         fontFamily: 'inherit',
                         fontWeight: 500
@@ -176,23 +177,24 @@ const CustomPagination = ({
                     disabled={currentPage === 1}
                     size='small'
                     sx={{
-                        width: '28px',
-                        height: '28px',
+                        width: '32px',
+                        height: '32px',
                         border: '1px solid',
-                        borderColor: 'primary.light',
+                        borderColor: 'divider',
                         borderRadius: '8px',
-                        backgroundColor: 'grey.bgLighter',
+                        backgroundColor: 'background.paper',
+                        color: 'text.primary',
                         '&:hover': {
-                            backgroundColor: 'grey.50',
-                            borderColor: 'primary.main'
+                            backgroundColor: 'grey.100',
+                            borderColor: 'grey.400'
                         },
                         '&.Mui-disabled': {
                             opacity: 0.4,
-                            backgroundColor: 'primary.light'
+                            borderColor: 'divider'
                         }
                     }}
                 >
-                    <ChevronLeft sx={{ fontSize: '16px' }} />
+                    <ChevronLeft sx={{ fontSize: '18px' }} />
                 </IconButton>
 
                 {/* Page numbers */}
@@ -201,9 +203,9 @@ const CustomPagination = ({
                         {page === '...' ? (
                             <Typography
                                 sx={{
-                                    padding: '6px 8px',
-                                    fontSize: '14px',
-                                    color: 'primary.200',
+                                    padding: '4px 6px',
+                                    fontSize: '13px',
+                                    color: 'text.secondary',
                                     fontFamily: 'inherit'
                                 }}
                             >
@@ -214,29 +216,23 @@ const CustomPagination = ({
                                 onClick={() => handlePageChange(page)}
                                 size='small'
                                 sx={{
-                                    width: 'max-content ',
-                                    maxWidth: '32px',
-                                    height: '28px',
-                                    border: page === currentPage ? '1px solid' : '1px solid',
-                                    borderColor: page === currentPage ? 'primary.main' : 'primary.light',
+                                    minWidth: '32px',
+                                    height: '32px',
+                                    border: '1px solid',
+                                    borderColor: page === currentPage ? 'primary.main' : 'divider',
                                     borderRadius: '8px',
                                     paddingX: '8px',
                                     fontSize: '13px',
                                     fontFamily: 'inherit',
-                                    fontWeight: page === currentPage ? 600 : 500,
+                                    fontWeight: page === currentPage ? 700 : 500,
                                     backgroundColor: page === currentPage ? 'primary.main' : 'background.paper',
-                                    color: page === currentPage ? 'background.paper' : 'primary.800',
-                                    boxShadow: page === currentPage ? '0 2px 4px rgba(44, 44, 44, 0.2)' : 'none',
+                                    color: page === currentPage ? '#ffffff' : 'text.primary',
+                                    boxShadow: page === currentPage ? '0 2px 6px rgba(49, 101, 35, 0.25)' : 'none',
                                     '&:hover': {
-                                        backgroundColor: page === currentPage ? 'primary.main' : 'grey.50',
-                                        borderColor: 'primary.main',
-                                        transform: 'translateY(-1px)',
-                                        boxShadow:
-                                            page === currentPage
-                                                ? '0 4px 8px rgba(44, 44, 44, 0.3)'
-                                                : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                                        backgroundColor: page === currentPage ? 'primary.dark' : 'grey.100',
+                                        borderColor: page === currentPage ? 'primary.dark' : 'grey.400'
                                     },
-                                    transition: 'all 0.2s ease-in-out'
+                                    transition: 'all 0.15s ease-in-out'
                                 }}
                             >
                                 {page}
@@ -251,24 +247,24 @@ const CustomPagination = ({
                     disabled={currentPage === totalPages}
                     size='small'
                     sx={{
-                        width: '28px',
-                        height: '28px',
+                        width: '32px',
+                        height: '32px',
                         border: '1px solid',
-                                borderColor: 'primary.light',
-
+                        borderColor: 'divider',
                         borderRadius: '8px',
-                        backgroundColor: 'grey.bgLighter',
+                        backgroundColor: 'background.paper',
+                        color: 'text.primary',
                         '&:hover': {
-                            backgroundColor: 'grey.50',
-                            borderColor: 'primary.main'
+                            backgroundColor: 'grey.100',
+                            borderColor: 'grey.400'
                         },
                         '&.Mui-disabled': {
                             opacity: 0.4,
-                            backgroundColor: 'primary.light'
+                            borderColor: 'divider'
                         }
                     }}
                 >
-                    <ChevronRight sx={{ fontSize: '16px' }} />
+                    <ChevronRight sx={{ fontSize: '18px' }} />
                 </IconButton>
             </Box>
         </Box>

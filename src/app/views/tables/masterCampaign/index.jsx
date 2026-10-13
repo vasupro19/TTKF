@@ -301,7 +301,7 @@ function MasterCampaignTable() {
             <MainCard content={false} sx={{ py: '2px' }}>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box>
-                        <Typography variant='h3'>All Locations</Typography>
+                        <Typography variant='h3'>Campaigns</Typography>
                     </Box>
                     <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
                         {/* add your custom filters here */}

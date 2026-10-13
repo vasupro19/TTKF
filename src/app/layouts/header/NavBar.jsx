@@ -116,7 +116,9 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                 elevation={0}
                 sx={{
                     height: 'max-content',
-                    background: 'linear-gradient(135deg,rgb(0, 0, 0) 0%, #45484c 100%)'
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
+                    borderBottom: theme => `1px solid ${theme.palette.divider}`
                 }}
             >
                 <Toolbar
@@ -124,6 +126,7 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                         display: 'flex',
                         justifyContent: 'space-between',
                         gap: 1,
+                        minHeight: '64px',
                         '&.MuiToolbar-root': { paddingLeft: { xs: '8px', sm: '16px' }, paddingY: '2px' }
                     }}
                 >
@@ -134,7 +137,7 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                                 color='inherit'
                                 aria-label='Open menu'
                                 onClick={onOpenSidebar}
-                                sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+                                sx={{ display: { xs: 'inline-flex', md: 'none' }, color: 'text.primary' }}
                             >
                                 <MenuIcon />
                             </IconButton>
@@ -142,7 +145,7 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                         <NavigateBreadcrumbs breadcrumbData={breadcrumbData} />
                         <AnimatePresence>{showFloatingTab && <FloatingTab activeTab={activeTab} />}</AnimatePresence>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexShrink: 0 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexShrink: 0, alignItems: 'center' }}>
                         <NotificationMenu notifications={notifications} onDelete={handleDeleteNotification} />
 
                         <GeneralNotification
@@ -152,13 +155,17 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                         />
 
                         <IconButton
-                            sx={{ padding: 0 }}
+                            sx={{
+                                padding: 0.5,
+                                border: theme => `1px solid ${theme.palette.divider}`,
+                                '&:hover': { bgcolor: 'grey.100' }
+                            }}
                             ref={profileButtonRef}
                             aria-label='Account'
                             onClick={() => handleMenuOpen('profile', profileButtonRef)}
                         >
-                            <Avatar sx={{ color: 'secondary.light' }}>
-                                <AccountCircleIcon fontSize='large' />
+                            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
+                                {user?.name ? user.name.charAt(0).toUpperCase() : <AccountCircleIcon fontSize='small' />}
                             </Avatar>
                         </IconButton>
                     </Box>

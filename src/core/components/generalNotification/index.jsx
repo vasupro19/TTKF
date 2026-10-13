@@ -76,14 +76,14 @@ function GeneralNotification({ notifications, handleMarkAsRead, markAllAsRead })
     return (
         <>
             <IconButton
-                color='inherit'
+                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary', bgcolor: 'grey.100' } }}
                 onClick={handleMenuOpen}
                 aria-label='show notifications'
                 aria-controls='notification-menu'
                 aria-haspopup='true'
             >
                 <Badge badgeContent={unreadNotifications?.length} color='error'>
-                    <Notifications fill='#fff' />
+                    <Notifications fontSize='small' />
                 </Badge>
             </IconButton>
 

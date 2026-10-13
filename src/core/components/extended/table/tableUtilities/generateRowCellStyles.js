@@ -45,11 +45,12 @@ const generateRowCellStyles = (
             }
         },
         '.MuiTableRow-hover:hover &': {
-            backgroundColor: '#ECECEC'
+            backgroundColor: '#f1f5f9'
         },
         // note::use align for specific column because for specific column data types standards has been set string:"left", object(component):"center", number, date : right
         textAlign: column?.align ? column?.align : determinePosition(value),
-        borderRight: '0.2px solid #dddddd', // Adjust color as needed
+        borderRight: '1px solid #f1f5f9',
+        borderBottom: '1px solid #f1f5f9',
         ...rowCellSX
     }
 

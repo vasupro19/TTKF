@@ -14,17 +14,15 @@ function PrimaryHeaderCellContent({ column, handleSort, searchTerms }) {
             }}
             className='regular-height'
         >
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center', color: 'text.dark' }}>
-                <Typography sx={{ fontWeight: '500', fontSize: '0.9', textAlign: 'center' }} noWrap>
+            <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', justifyContent: 'center', color: 'text.primary' }}>
+                <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: 'text.primary', textAlign: 'center' }} noWrap>
                     {column.label}
                 </Typography>
                 {searchTerms?.[column.id] && (
                     <FilterAltOutlined
                         sx={{
-                            color: 'white',
-                            filter: 'drop-shadow(0 0 6px rgba(255, 255, 255, 0.8))',
-                            transition: 'filter 0.3s ease-in-out',
-                            '&:hover': { filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 1))' }
+                            color: 'primary.main',
+                            fontSize: '16px'
                         }}
                     />
                 )}
@@ -32,12 +30,12 @@ function PrimaryHeaderCellContent({ column, handleSort, searchTerms }) {
                 {column?.colFilter && column?.colFilter}
                 {column?.sort && (
                     <IconButton
-                        sx={{ color: 'text.dark', p: 0, m: 0 }}
+                        sx={{ color: 'text.secondary', p: 0, m: 0, '&:hover': { color: 'text.primary' } }}
                         size='small'
                         aria-label='sort column'
                         onClick={() => handleSort(column.id)}
                     >
-                        <SwapVertIcon fontSize='small' />
+                        <SwapVertIcon sx={{ fontSize: '16px' }} />
                     </IconButton>
                 )}
             </Box>

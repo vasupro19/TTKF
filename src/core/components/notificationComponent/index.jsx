@@ -69,13 +69,13 @@ function NotificationMenuComponent(props) {
         <>
             <IconButton
                 onClick={handleMenuOpen}
-                color='inherit'
+                sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary', bgcolor: 'grey.100' } }}
                 aria-label='show-notifications-file-transfer'
                 aria-describedby='notification-popper-file-transfer'
                 aria-haspopup='true'
             >
                 <Badge badgeContent={unreadCount ?? 4} color='error'>
-                    <DownloadHeaderIcon fill='#fff' width='16' height='16' />
+                    <DownloadHeaderIcon fill='currentColor' width='18' height='18' />
                 </Badge>
             </IconButton>
 
