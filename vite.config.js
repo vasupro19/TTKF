@@ -10,7 +10,15 @@ import fs from 'fs'
 export default defineConfig({
     plugins: [react(), eslint()],
     resolve: {
-        dedupe: ['react', 'react-dom', '@mui/material', '@mui/system', '@mui/utils', '@emotion/react', '@emotion/styled'],
+        dedupe: [
+            'react',
+            'react-dom',
+            '@mui/material',
+            '@mui/system',
+            '@mui/utils',
+            '@emotion/react',
+            '@emotion/styled'
+        ],
         alias: {
             '@': path.resolve(__dirname, 'src'),
             '@app': path.resolve(__dirname, 'src/app'),
