@@ -100,6 +100,14 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                 }
             }
         }),
+        // ? the private link to a quote for chats (WhatsApp): the guest's open is counted like one from the email
+        getQuoteLink: build.mutation({
+            query: ({ leadId, quoteNo }) => ({
+                url: `/leads/quote-link/${leadId}?quoteNo=${quoteNo}`,
+                method: 'POST',
+                responseHandler: async result => customResponseHandler({ result })
+            })
+        }),
         getLeadPreview: build.query({
             query: ({ leadId, quoteNo }) => ({
                 url: `/leads/preview/${leadId}?quoteNo=${quoteNo}`,
@@ -135,6 +143,7 @@ export const {
     useUpdateLeadMutation,
     useDeleteLeadMutation,
     useShareLeadDetailsMutation,
+    useGetQuoteLinkMutation,
     useGenerateQuotationPdfMutation,
     endpoints: { getLeads, getLeadById, getLeadPreview, getLeadTimeline }
 } = leadsSlice

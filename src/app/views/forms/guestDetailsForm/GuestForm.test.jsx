@@ -61,6 +61,7 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
 }))
 vi.mock('@/app/store/slices/api/leadSlice', () => ({
     useShareLeadDetailsMutation: idle,
+    useGetQuoteLinkMutation: idle,
     useGetLeadByIdQuery: () => ({ data: { data: { fullName: 'Asha Verma', phone: '9999999999', campaignId: 1 } } }),
     getLeadPreview: { initiate: () => thunk(() => ({ data: { data: { html: '' } } })) }
 }))

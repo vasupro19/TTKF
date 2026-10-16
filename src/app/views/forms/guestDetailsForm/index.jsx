@@ -27,7 +27,12 @@ import {
 } from '@/app/store/slices/api/guestTourSlice'
 import { useGetPackageByLeadIdQuery } from '@/app/store/slices/api/packageConvert'
 
-import { useShareLeadDetailsMutation, useGetLeadByIdQuery, getLeadPreview } from '@/app/store/slices/api/leadSlice'
+import {
+    useShareLeadDetailsMutation,
+    useGetQuoteLinkMutation,
+    useGetLeadByIdQuery,
+    getLeadPreview
+} from '@/app/store/slices/api/leadSlice'
 import { useAssistAiMutation, useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
 
 import { useGetAllPackagesClientQuery } from '@/app/store/slices/api/packageSlice'
@@ -48,7 +53,7 @@ import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
 import ItinerarySection from './itenarySection'
 import QuoteJourney from './quote/QuoteJourney'
-import { quoteStageKey } from './quote/quoteStatus'
+import { quoteStageKey, whatsAppMessage } from './quote/quoteStatus'
 import TripDetailsStep from './TripDetailsStep'
 import DayEditor from './quote/DayEditor'
 import { emptyTripDetails, fromGuestDetail, toGuestPayload, tripSummary } from './tripDetails'
@@ -227,6 +232,7 @@ function GuestForm() {
     const [assistAi] = useAssistAiMutation()
     const { data: confirmedPackage } = useGetPackageByLeadIdQuery(leadId)
     const [shareLeadDetails, { isLoading }] = useShareLeadDetailsMutation()
+    const [getQuoteLink] = useGetQuoteLinkMutation()
     // ? the list is paged at 25 by default, which hid older packages from the picker
     const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery('?length=200')
     const { data: leadData, refetch: refetchLead } = useGetLeadByIdQuery(leadId)
@@ -952,21 +958,28 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         }
     }
 
-    const handleShareQuotation = () => {
+    // ? WhatsApp gets the same private link as the email, so the guest's open shows on the quote and the lead
+    const handleShareQuotation = async () => {
         if (!leadData?.data?.phone) {
             notify('This lead has no phone number.', 'error')
             return
         }
 
-        const phoneNumber = leadData?.data?.phone.replace(/\D/g, '')
-        const message = encodeURIComponent(
-            `*TRAVEL QUOTATION - The Travel Kart*\n\n` +
-                `Hi ${leadData?.data?.fullName},\n\n` +
-                `I have attached your customized trip itinerary below. 📄\n\n` +
-                `_Note: Please find the attached PDF in this chat._`
-        )
-
-        window.open(`https://web.whatsapp.com/send?phone=${phoneNumber}&text=${message}`, '_blank')
+        // ? opened now, filled in below: a window opened after the request is usually blocked as a pop-up
+        const chat = window.open('', '_blank')
+        try {
+            const { data } = await getQuoteLink({ leadId, quoteNo: currentQuoteNo || 1 }).unwrap()
+            const phoneNumber = leadData.data.phone.replace(/\D/g, '')
+            const message = encodeURIComponent(
+                whatsAppMessage({ guestName: leadData.data.fullName, company: data?.company, url: data?.url })
+            )
+            const target = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${message}`
+            if (chat) chat.location.href = target
+            else window.open(target, '_blank')
+        } catch (err) {
+            if (chat) chat.close()
+            notify(err.data?.message || 'Couldn’t make the quote link. Please try again.', 'error')
+        }
     }
 
     const handlePreview = async () => {

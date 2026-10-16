@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { hasPrice, quoteStageKey, sendChecklist, sentLine, viewLine } from './quoteStatus'
+import { hasPrice, quoteStageKey, sendChecklist, sentLine, viewLine, whatsAppMessage } from './quoteStatus'
 
 describe('quote status', () => {
     test('a price in any hotel category counts', () => {
@@ -55,5 +55,18 @@ describe('quote status', () => {
         expect(opened).toMatchObject({ show: true, viewed: true })
         expect(opened.text).toContain('3 times')
         expect(opened.text).toContain('2 hours ago')
+    })
+
+    test('the WhatsApp message carries the private link on its own line', () => {
+        const text = whatsAppMessage({
+            guestName: 'Asha',
+            company: 'Acme',
+            url: 'https://crm.example.com/v1/public/quote/a/b'
+        })
+        expect(text).toContain('Your travel quotation – Acme')
+        expect(text).toContain('Hi Asha,')
+        expect(text.split('\n')).toContain('https://crm.example.com/v1/public/quote/a/b')
+        expect(text).not.toMatch(/attached/i)
+        expect(whatsAppMessage({ url: 'x' })).toContain('Hi there,')
     })
 })

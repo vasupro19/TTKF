@@ -96,3 +96,13 @@ export const viewLine = ({
         text: `Opened ${times} · last ${ago(mine.lastViewedAt, now)}. A good time to call.`
     }
 }
+
+/**
+ * @description the WhatsApp message that carries the private quote link — the link is what lets the team see the
+ *              guest opened it, so it stands on its own line
+ */
+export const whatsAppMessage = ({ guestName = '', company = '', url }) =>
+    `*Your travel quotation${company ? ` – ${company}` : ''}*\n\n` +
+    `Hi ${guestName || 'there'},\n\n` +
+    `Here is your trip itinerary with hotel options and prices:\n${url}\n\n` +
+    `Tap the link to view it on your phone. Reply here if you would like to change anything.`
