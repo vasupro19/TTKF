@@ -8,6 +8,17 @@ import GuestPaymentsTab from './GuestPaymentsTab'
 const api = vi.hoisted(() => ({ args: [], response: null, verify: null, reject: null, reverse: null }))
 
 vi.mock('react-redux', () => ({ useDispatch: () => action => action, useSelector: select => select({}) }))
+vi.mock('@/app/guards/UiPermissionGuard', () => ({ default: ({ children }) => children }))
+vi.mock('@/app/store/slices/api/leadSlice', () => ({
+    useGetAssigneesQuery: () => ({
+        data: {
+            data: [
+                { id: 5, name: 'Ravi', isMe: false },
+                { id: 6, name: 'Sam', isMe: true }
+            ]
+        }
+    })
+}))
 vi.mock('@/app/store/slices/api/paymentSlice', () => ({
     useGetGuestPaymentsQuery: args => {
         api.args.push(args)
@@ -65,9 +76,9 @@ beforeEach(() => {
     respond([pending])
 })
 
-const renderTab = (notify = vi.fn()) =>
+const renderTab = (notify = vi.fn(), url = '/') =>
     render(
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[url]}>
             <GuestPaymentsTab notify={notify} />
         </MemoryRouter>
     )
@@ -139,6 +150,45 @@ describe('Transactions — guest payments', () => {
         renderTab()
         expect(screen.queryByRole('button', { name: 'Verify' })).not.toBeInTheDocument()
         expect(screen.getByText(/Only accounts or the agency’s admin/)).toBeInTheDocument()
+    })
+})
+
+describe('Transactions — the list toolbar', () => {
+    test('filters in the address are sent to the server, and bad ones are ignored', () => {
+        renderTab(vi.fn(), '/?status=ALL&method=UPI&from=2026-10-01&recordedBy=5&q=utr&to=nope&type=x')
+        expect(api.args[0]).toMatchObject({
+            status: 'ALL',
+            method: 'UPI',
+            from: '2026-10-01',
+            recordedBy: '5',
+            q: 'utr',
+            to: ''
+        })
+    })
+
+    test('choosing a method asks again from the first page, and Clear filters removes them all', () => {
+        renderTab(vi.fn(), '/?method=UPI&q=utr')
+        expect(screen.getByText('1 payment')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+        expect(api.args[api.args.length - 1]).toMatchObject({ method: '', q: '', recordedBy: '', page: 1 })
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    })
+
+    test('the column picker hides a column, and CSV of what is shown does not crash', () => {
+        renderTab()
+        expect(screen.getByRole('columnheader', { name: 'Proof' })).toBeInTheDocument()
+        expect(screen.queryByRole('columnheader', { name: 'Remarks' })).not.toBeInTheDocument()
+    })
+
+    test('nothing matching the filters says so; nothing at all says there are no payments yet', () => {
+        respond([])
+        renderTab(vi.fn(), '/?method=Cheque&status=ALL')
+        expect(screen.getByText('No payments match these filters.')).toBeInTheDocument()
+        const { unmount } = renderTab(vi.fn(), '/?status=ALL')
+        unmount()
+        api.response.data.summary = { PENDING: { count: 0 }, VERIFIED: { count: 0 } }
+        renderTab(vi.fn(), '/?status=ALL')
+        expect(screen.getByText('No guest payments yet')).toBeInTheDocument()
     })
 })
 

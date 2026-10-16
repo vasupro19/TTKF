@@ -21,16 +21,6 @@ export default defineConfig({
             '@hooks': path.resolve(__dirname, './src/hooks')
         }
     },
-    optimizeDeps: {
-        include: [
-            '@mui/material',
-            '@mui/material/styles',
-            '@mui/system',
-            '@mui/utils',
-            '@emotion/react',
-            '@emotion/styled'
-        ]
-    },
     // server: {
     //     host: 'devcerebrum.holisol.test'
     //     // host: '127.0.0.1'

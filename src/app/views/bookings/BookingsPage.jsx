@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
-import { useNavigate } from 'react-router-dom'
+import { useDispatch } from 'react-redux'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
     Box,
     Button,
@@ -8,16 +9,34 @@ import {
     CircularProgress,
     InputAdornment,
     LinearProgress,
+    MenuItem,
     Pagination,
     Stack,
     TextField,
     Typography
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { CheckCircle, RadioButtonUnchecked, Search } from '@mui/icons-material'
+import { CheckCircle, FilterAltOff, RadioButtonUnchecked, Search } from '@mui/icons-material'
 import MainCard from '@core/components/extended/MainCard'
 import AssigneeFilter from '@/core/components/AssigneeFilter'
-import { useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
+import CustomButton from '@core/components/extended/CustomButton'
+import { CSVExport } from '@/core/components/extended/CreateCSV'
+import ListEmptyState from '@/core/listing/ListEmptyState'
+import { downloadCsv } from '@/core/listing/listingFacts'
+import { openSnackbar } from '@app/store/slices/snackbar'
+import { getBookingsPage, useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
+import {
+    DEFAULT_PAGE_SIZE,
+    EMPTY_FILTERS,
+    EXPORT_CAP,
+    INVOICE_OPTIONS,
+    PAGE_SIZES,
+    PAYMENT_OPTIONS,
+    bookingsCsv,
+    filtersFromSearch,
+    hasAnyFilter,
+    searchWithFilters
+} from './bookingsListFacts'
 import { STAGES, STEPS, dateRange, doneCount, guestMoney, nextStep, progressOf, rupees, urgency } from './bookingFacts'
 
 const rowShape = PropTypes.shape({
@@ -165,20 +184,78 @@ BookingRow.propTypes = {
     onOpen: PropTypes.func.isRequired
 }
 
-const PAGE_SIZE = 25
+const BOX_SX = { '& .MuiInputBase-root': { height: 34 } }
+
+function SelectFilter({ label, value, options, onChange, width = 160 }) {
+    return (
+        <TextField
+            select
+            size='small'
+            label={label}
+            value={value || 'All'}
+            onChange={event => onChange(event.target.value === 'All' ? '' : event.target.value)}
+            sx={{ width: { xs: '100%', md: width }, ...BOX_SX }}
+            inputProps={{ 'aria-label': label }}
+        >
+            <MenuItem value='All'>All</MenuItem>
+            {options.map(option => (
+                <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                </MenuItem>
+            ))}
+        </TextField>
+    )
+}
+
+SelectFilter.propTypes = {
+    label: PropTypes.string.isRequired,
+    value: PropTypes.string,
+    options: PropTypes.arrayOf(PropTypes.shape({ value: PropTypes.string, label: PropTypes.string })).isRequired,
+    onChange: PropTypes.func.isRequired,
+    width: PropTypes.number
+}
+
+function DateBox({ label, value, onChange }) {
+    return (
+        <TextField
+            type='date'
+            size='small'
+            label={label}
+            value={value}
+            onChange={event => onChange(event.target.value)}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ 'aria-label': label }}
+            sx={{ width: { xs: '100%', md: 150 }, ...BOX_SX }}
+        />
+    )
+}
+
+DateBox.propTypes = { label: PropTypes.string.isRequired, value: PropTypes.string, onChange: PropTypes.func.isRequired }
+
+const snack = (message, color) =>
+    openSnackbar({
+        open: true,
+        message,
+        variant: 'alert',
+        alert: { color },
+        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+    })
 
 /**
  * Confirmed bookings: where each one stands and what to do next, upcoming trips first. A page at a time — the server
- * works out stage, search and order, and the chip counts — and everything about a booking (hotels, transport,
- * payments, voucher) is one click away on its own page.
+ * works out stage, search, filters, order and the chip counts — and everything about a booking (hotels, transport,
+ * payments, voucher) is one click away on its own page. The stage and filters live in the address bar.
  */
 function BookingsPage() {
     const navigate = useNavigate()
-    const [stage, setStage] = useState('all')
+    const location = useLocation()
+    const dispatch = useDispatch()
     const [search, setSearch] = useState('')
     const [query, setQuery] = useState('')
     const [page, setPage] = useState(0)
-    const [convertedBy, setConvertedBy] = useState('')
+    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+
+    const { stage, ...values } = useMemo(() => filtersFromSearch(location.search), [location.search])
 
     // ? search once the agent stops typing, from the first page
     useEffect(() => {
@@ -189,8 +266,14 @@ function BookingsPage() {
         return () => clearTimeout(timer)
     }, [search])
 
+    const setFilters = next => {
+        setPage(0)
+        navigate({ pathname: location.pathname, search: searchWithFilters(location.search, next) }, { replace: true })
+    }
+
+    const args = { stage, q: query, ...values }
     const { data, isLoading, isFetching, isError, refetch } = useGetBookingsPageQuery(
-        { page, pageSize: PAGE_SIZE, stage, q: query, convertedBy },
+        { page, pageSize, ...args },
         { refetchOnMountOrArgChange: true }
     )
 
@@ -198,96 +281,171 @@ function BookingsPage() {
     const count = Number(data?.count) || 0
     const summary = data?.summary || { total: 0, toCollect: 0, stages: {} }
     const total = Number(summary.total) || 0
-    const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
-    const from = count ? page * PAGE_SIZE + 1 : 0
-    const to = Math.min(count, (page + 1) * PAGE_SIZE)
+    const pages = Math.max(1, Math.ceil(count / pageSize))
+    const from = count ? page * pageSize + 1 : 0
+    const to = Math.min(count, (page + 1) * pageSize)
+    const filtered = hasAnyFilter(values, query)
 
-    let emptyText = 'No confirmed bookings yet.'
-    if (total) emptyText = 'No bookings match.'
-    else if (convertedBy) emptyText = 'No bookings converted by them yet.'
-
-    const chooseStage = key => {
-        setStage(key)
-        setPage(0)
+    const clearFilters = () => {
+        setSearch('')
+        setQuery('')
+        setFilters({ ...EMPTY_FILTERS })
     }
 
-    const choosePerson = id => {
-        setConvertedBy(id)
-        setPage(0)
+    const exportCurrent = () => downloadCsv(bookingsCsv(rows), 'bookings.csv')
+
+    const exportAll = async () => {
+        try {
+            const all = []
+            const wanted = Math.min(count, EXPORT_CAP)
+            for (let next = 0; all.length < wanted; next += 1) {
+                // eslint-disable-next-line no-await-in-loop
+                const { data: reply } = await dispatch(
+                    getBookingsPage.initiate({ page: next, pageSize: 100, ...args }, { forceRefetch: true })
+                )
+                const batch = Array.isArray(reply?.data) ? reply.data : []
+                all.push(...batch)
+                if (batch.length < 100) break
+            }
+            downloadCsv(bookingsCsv(all.slice(0, EXPORT_CAP)), 'bookings-all.csv')
+            if (count > EXPORT_CAP) {
+                dispatch(
+                    snack(
+                        `Exported the first ${EXPORT_CAP} of ${count} bookings. Narrow the filters to get the rest.`,
+                        'warning'
+                    )
+                )
+            }
+        } catch (error) {
+            dispatch(snack('Couldn’t export the bookings.', 'error'))
+        }
     }
+
+    // ? nothing yet (no booking exists) or nothing matches (the filters or the stage hide them all)
+    const emptyKind = filtered || (stage !== 'all' && total) ? 'filtered' : 'first'
 
     return (
-        <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
-            <Box
-                sx={{
-                    maxWidth: 1100,
-                    '& .MuiButton-root': { textTransform: 'none' },
-                    '& .MuiInputBase-input': { fontSize: '1rem' }
-                }}
-            >
-                <Typography
-                    color='text.secondary'
-                    sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600 }}
+        <MainCard content={false} sx={{ py: '2px' }}>
+            <Stack spacing={2} sx={{ py: 1.5, px: { xs: 2, sm: 2.5 } }}>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        gap: 2,
+                        justifyContent: 'space-between',
+                        alignItems: { xs: 'flex-start', md: 'center' },
+                        flexDirection: { xs: 'column', md: 'row' }
+                    }}
                 >
-                    BOOKINGS
-                </Typography>
-                <Typography component='h1' sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 600, mt: 0.5 }}>
-                    Confirmed bookings
-                </Typography>
-                <Typography color='text.secondary' sx={{ fontSize: '1rem', mt: 0.5, mb: 3 }}>
-                    {total
-                        ? `${total} booking${total === 1 ? '' : 's'} · ${rupees(summary.toCollect)} still to collect from guests · ${Number(summary.stages?.action) || 0} not started`
-                        : 'A booking appears here when a quotation is converted.'}
-                </Typography>
+                    <Box>
+                        <Typography variant='h3' component='h1'>
+                            Bookings
+                        </Typography>
+                        <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                            {total
+                                ? `${total} booking${total === 1 ? '' : 's'} · ${rupees(summary.toCollect)} still to collect from guests · ${Number(summary.stages?.action) || 0} not started`
+                                : 'A booking appears here when a quotation is converted.'}
+                        </Typography>
+                    </Box>
+                    <CSVExport handleExcelClick={exportCurrent} exportAllFunc={exportAll} />
+                </Box>
+
+                <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap role='group' aria-label='Show bookings'>
+                    <StagePill
+                        label='All'
+                        count={total}
+                        selected={stage === 'all'}
+                        onClick={() => setFilters({ stage: 'all' })}
+                    />
+                    {STAGES.map(item => (
+                        <StagePill
+                            key={item.key}
+                            label={item.label}
+                            count={Number(summary.stages?.[item.key]) || 0}
+                            selected={stage === item.key}
+                            onClick={() => setFilters({ stage: item.key })}
+                        />
+                    ))}
+                </Stack>
 
                 <Stack
                     direction={{ xs: 'column', md: 'row' }}
-                    spacing={2}
-                    justifyContent='space-between'
-                    sx={{ mb: 2 }}
+                    spacing={1.5}
+                    alignItems={{ md: 'center' }}
+                    useFlexGap
+                    flexWrap='wrap'
                 >
-                    <Stack
-                        direction='row'
-                        spacing={1}
-                        flexWrap='wrap'
-                        useFlexGap
-                        role='group'
-                        aria-label='Show bookings'
-                    >
-                        <StagePill
-                            label='All'
-                            count={total}
-                            selected={stage === 'all'}
-                            onClick={() => chooseStage('all')}
-                        />
-                        {STAGES.map(item => (
-                            <StagePill
-                                key={item.key}
-                                label={item.label}
-                                count={Number(summary.stages?.[item.key]) || 0}
-                                selected={stage === item.key}
-                                onClick={() => chooseStage(item.key)}
-                            />
-                        ))}
-                    </Stack>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
-                        <AssigneeFilter label='Converted by' value={convertedBy} onChange={choosePerson} width={180} />
-                        <TextField
-                            size='small'
-                            placeholder='Search guest, phone, email or booking no.'
-                            value={search}
-                            onChange={event => setSearch(event.target.value)}
-                            sx={{ width: { xs: '100%', md: 320 } }}
-                            InputProps={{
-                                inputProps: { 'aria-label': 'Search bookings' },
-                                startAdornment: (
-                                    <InputAdornment position='start'>
-                                        <Search fontSize='small' />
-                                    </InputAdornment>
-                                )
+                    <TextField
+                        size='small'
+                        placeholder='Search guest, phone, email or booking no.'
+                        value={search}
+                        onChange={event => setSearch(event.target.value)}
+                        sx={{ width: { xs: '100%', md: 340 }, ...BOX_SX }}
+                        InputProps={{
+                            inputProps: { 'aria-label': 'Search bookings' },
+                            startAdornment: (
+                                <InputAdornment position='start'>
+                                    <Search fontSize='small' />
+                                </InputAdornment>
+                            )
+                        }}
+                    />
+                    <DateBox
+                        label='Created from'
+                        value={values.createdFrom}
+                        onChange={day => setFilters({ createdFrom: day })}
+                    />
+                    <DateBox
+                        label='Created to'
+                        value={values.createdTo}
+                        onChange={day => setFilters({ createdTo: day })}
+                    />
+                    <DateBox
+                        label='Travel from'
+                        value={values.travelFrom}
+                        onChange={day => setFilters({ travelFrom: day })}
+                    />
+                    <DateBox
+                        label='Travel to'
+                        value={values.travelTo}
+                        onChange={day => setFilters({ travelTo: day })}
+                    />
+                    <SelectFilter
+                        label='Guest payment'
+                        value={values.guestPayment}
+                        options={PAYMENT_OPTIONS}
+                        onChange={value => setFilters({ guestPayment: value })}
+                    />
+                    <SelectFilter
+                        label='Supplier payment'
+                        value={values.supplierPayment}
+                        options={PAYMENT_OPTIONS}
+                        onChange={value => setFilters({ supplierPayment: value })}
+                    />
+                    <SelectFilter
+                        label='Invoice'
+                        value={values.invoice}
+                        options={INVOICE_OPTIONS}
+                        onChange={value => setFilters({ invoice: value })}
+                    />
+                    <AssigneeFilter
+                        label='Converted by'
+                        value={values.convertedBy}
+                        onChange={id => setFilters({ convertedBy: id })}
+                        width={180}
+                    />
+                    {filtered && (
+                        <CustomButton
+                            variant='text'
+                            customStyles={{
+                                color: 'error.main',
+                                '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
                             }}
-                        />
-                    </Stack>
+                            startIcon={<FilterAltOff />}
+                            onClick={clearFilters}
+                        >
+                            Clear filters
+                        </CustomButton>
+                    )}
                 </Stack>
 
                 {isLoading ? (
@@ -317,41 +475,62 @@ function BookingsPage() {
                                 ))}
                             </Box>
                         ) : (
-                            <Typography color='text.secondary' sx={{ py: 4 }}>
-                                {emptyText}
-                            </Typography>
+                            <ListEmptyState
+                                kind={emptyKind || 'first'}
+                                noun='bookings'
+                                title='No confirmed bookings yet'
+                                text='A booking appears here when a quotation is converted.'
+                                onClear={clearFilters}
+                            />
                         )}
 
-                        {count > PAGE_SIZE ? (
-                            <Stack
-                                direction={{ xs: 'column', sm: 'row' }}
-                                spacing={1.5}
-                                justifyContent='space-between'
-                                alignItems={{ sm: 'center' }}
-                                sx={{ mt: 2 }}
-                            >
-                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} role='status'>
-                                    {from}–{to} of {count}
-                                </Typography>
-                                <Pagination
-                                    count={pages}
-                                    page={page + 1}
-                                    onChange={(event, value) => setPage(value - 1)}
-                                    shape='rounded'
-                                    size='small'
-                                    aria-label='Pages of bookings'
-                                />
-                            </Stack>
-                        ) : null}
-
-                        {isFetching ? (
-                            <Typography color='text.secondary' sx={{ fontSize: '0.8125rem', mt: 1 }} role='status'>
-                                Updating…
+                        <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1.5}
+                            justifyContent='space-between'
+                            alignItems={{ sm: 'center' }}
+                        >
+                            <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }} role='status'>
+                                {count
+                                    ? `Showing ${from}–${to} of ${count} booking${count === 1 ? '' : 's'}`
+                                    : '0 bookings'}
+                                {filtered && total ? ` (filtered from ${total})` : ''}
+                                {isFetching ? ' · Updating…' : ''}
                             </Typography>
-                        ) : null}
+                            <Stack direction='row' spacing={1.5} alignItems='center'>
+                                <TextField
+                                    select
+                                    size='small'
+                                    label='Rows'
+                                    value={pageSize}
+                                    onChange={event => {
+                                        setPageSize(Number(event.target.value))
+                                        setPage(0)
+                                    }}
+                                    sx={{ width: 90, ...BOX_SX }}
+                                    inputProps={{ 'aria-label': 'Rows per page' }}
+                                >
+                                    {PAGE_SIZES.map(size => (
+                                        <MenuItem key={size} value={size}>
+                                            {size}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                {count > pageSize ? (
+                                    <Pagination
+                                        count={pages}
+                                        page={page + 1}
+                                        onChange={(event, value) => setPage(value - 1)}
+                                        shape='rounded'
+                                        size='small'
+                                        aria-label='Pages of bookings'
+                                    />
+                                ) : null}
+                            </Stack>
+                        </Stack>
                     </>
                 ) : null}
-            </Box>
+            </Stack>
         </MainCard>
     )
 }

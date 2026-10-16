@@ -28,13 +28,25 @@ import {
     Timeline as TimelineIcon
 } from '@mui/icons-material'
 import { Link as RouterLink } from 'react-router-dom'
-import { ALL, STAGES, followUpMeta, fullDateTime, nextAction, relativeTime, stageDetail, stageMeta } from './leadStages'
+import {
+    ALL,
+    STAGES,
+    followUpMeta,
+    fullDateTime,
+    nextAction,
+    quoteOpened,
+    relativeTime,
+    stageDetail,
+    stageMeta
+} from './leadStages'
 
 const leadShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     fullName: PropTypes.string,
     stage: PropTypes.string,
     quoteSentAt: PropTypes.string,
+    quoteViewedAt: PropTypes.string,
+    quoteViews: PropTypes.number,
     nextCallAt: PropTypes.string
 })
 
@@ -245,7 +257,15 @@ export function StageCell({ row, now }) {
                     border: `1px solid ${alpha(meta.color, 0.25)}`
                 }}
             />
-            <Typography sx={{ fontSize: '11px', color: 'text.secondary', mt: 0.25 }} noWrap>
+            <Typography
+                sx={{
+                    fontSize: '11px',
+                    color: quoteOpened(row) && meta.key === 'sent' ? 'success.dark' : 'text.secondary',
+                    fontWeight: quoteOpened(row) && meta.key === 'sent' ? 600 : 400,
+                    mt: 0.25
+                }}
+                noWrap
+            >
                 {stageDetail(row, now)}
             </Typography>
         </Box>

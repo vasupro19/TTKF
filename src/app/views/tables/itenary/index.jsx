@@ -1,427 +1,140 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-
-import { Box, IconButton, Button, Tooltip, Menu, MenuItem, Typography, CircularProgress } from '@mui/material'
+import { useCallback, useState } from 'react'
+import { Button, CircularProgress } from '@mui/material'
+import { CloudUpload } from '@mui/icons-material'
 import * as XLSX from 'xlsx'
-import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff, MoreVert, CloudUpload } from '@mui/icons-material'
-
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
-// project imports
-import MainCard from '@core/components/extended/MainCard'
-import DataTable from '@core/components/extended/table/Table'
-import CustomButton from '@core/components/extended/CustomButton'
-import { CSVExport } from '@/core/components/extended/CreateCSV'
-import CustomSearchTextField from '@/core/components/extended/CustomSearchTextField'
-import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
+import { useNavigate, useParams } from 'react-router-dom'
+import ListPage from '@core/listing/ListPage'
 import { openSnackbar } from '@app/store/slices/snackbar'
-
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
 import {
     getItenaryClients,
     useDeleteItenaryClientMutation,
     useUploadItinerariesMutation
 } from '@/app/store/slices/api/itenarySlice'
-
-import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
-
-// import { getObjectKeys, toCapitalizedWords } from '@/utilities'
-// import { Typography } from '@mui/material'
-import ToggleColumns from '@/core/components/ToggleColumns'
-
-import { TOGGLE_ALL, isExcelQuery } from '@/constants'
 import UiAccessGuard from '@/app/guards/UiPermissionGuard'
-import ConfirmModal from '@/core/components/modals/ConfirmModal'
-import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
+import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
+import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
-// const slimTextFieldStyle = {
-//     '& .MuiInputBase-input': {
-//         fontSize: 12,
-//         height: 8,
-//         padding: 1
-//     }
-// }
 
+const FILTERS = [
+    STATUS_FILTER,
+    {
+        key: 'usage',
+        label: 'Used in packages',
+        width: 170,
+        options: [
+            { value: 'used', label: 'Used in a package' },
+            { value: 'unused', label: 'Not used yet' }
+        ]
+    }
+]
+
+// ? the day plans of a campaign (title and description) that packages are built from
 function MasterItenaryTable() {
-    const [anchorEl, setAnchorEl] = useState(null)
-    const params = useParams()
+    const { id: campaignId } = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
-    const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
-    const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, deleteItenaryClientLKey } = useSelector(state => state.loading)
-    const [uploadTrigger, { isLoading }] = useUploadItinerariesMutation()
-    const [deleteItenaryClient] = useDeleteItenaryClientMutation()
-    const [columns, setColumns] = useState([...headers])
-    const [users, setUsers] = useState([])
-    const [recordsCount, setRecordsCount] = useState(0)
-    const [excelHandler, setExcelHandler] = useState(false)
-    const [removeId, setRemoveId] = useState(null)
+    const campaignName = useCampaignName(campaignId)
+    const removing = Boolean(useSelector(state => state.loading?.deleteItenaryClientLKey))
+    const [uploadTrigger, { isLoading: uploading }] = useUploadItinerariesMutation()
+    const [deleteItenary] = useDeleteItenaryClientMutation()
+    const [reload, setReload] = useState(0)
 
-    const [isShowClearButton, setIsShowClearButton] = useState(false)
-    const [clearAllFilters, setClearAllFilters] = useState(false)
-    const [refetch, setRefetch] = useState(false)
-    // const [getDestinationClient] = useGetDestinationClientsQuery()
-
-    const [search, setSearch] = useState({
-        // value: '',
-        // regex: false
+    const add = useCallback(() => navigate('/master/itenary/add', { state: { campaignId } }), [navigate, campaignId])
+    useKeyboardShortcut('Alt+A', () => {
+        if (hasCreateAccess) add()
     })
-    const [filters, setFilters] = useState({
-        created_at: { from: '', to: '' },
-        campaignId: params.id
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/master/itenary/edit/${id}`), [])
 
-    const handleExcelClick = () => {
-        setExcelHandler(true)
-        setTimeout(() => setExcelHandler(false), 1000)
-    }
-    const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getItenaryClients.initiate(queryString, false))
-        if (isExcelQuery(queryString)) {
-            return true
-        }
-        setUsers(response?.data || [])
-        setRecordsCount(response?.count || 0)
-        return true
-    }
-
-    const clearFilters = () => {
-        setSearch({
-            value: '',
-            regex: false
-        })
-        setFilters({ created_at: { from: '', to: '' } })
-    }
-
-    const deleteHandler = useCallback(async id => {
-        setRemoveId(id)
+    const tell = (message, color) =>
         dispatch(
-            openModal({
-                type: 'confirm_modal'
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
         )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
-    const deleteActionHandler = async () => {
-        try {
-            await deleteItenaryClient(removeId).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Itinerary deleted successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
-        } catch (reqError) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: reqError?.data?.message || 'Unable to delete itinerary!',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        } finally {
-            dispatch(closeModal())
-        }
-    }
-
-    // column toggler
-    const handleCheckToggle = key => {
-        setColumns([
-            ...columns.map(item => {
-                if (key === TOGGLE_ALL) return { ...item, visible: true }
-                if (key === item.key) return { ...item, visible: !item.visible }
-                return item
-            })
-        ])
-    }
-
-    const handleAdd = () => {
-        navigate('/master/itenary/add', {
-            state: { campaignId: params.id }
-        })
-    }
-
-    const menuOptions = useMemo(
-        () => [
-            {
-                label: 'Edit',
-                icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
-                onClick: row => editHandler(row.id, row),
-                condition: row => hasEditAccess
-            },
-            {
-                label: 'Delete',
-                icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
-                onClick: row => deleteHandler(row.id, row),
-                condition: row => hasEditAccess
-            }
-        ],
-        [editHandler, deleteHandler, hasEditAccess]
-    )
-
-    useEffect(() => {
-        setRefetch(true)
-        setTimeout(() => setRefetch(false), 500)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname])
-
-    // use keyboard shortcut
-    useKeyboardShortcut('Alt+A', () => {
-        if (hasCreateAccess) {
-            handleAdd()
-        }
+    const { ask, confirmProps } = useDeleteFlow({
+        noun: 'Itinerary',
+        nameOf: row => row?.title,
+        loading: removing,
+        remove: id => deleteItenary(id).unwrap(),
+        done: () => setReload(count => count + 1)
     })
-    const handleFileUpload = e => {
-        const file = e.target.files[0]
+
+    const handleFileUpload = event => {
+        const file = event.target.files[0]
         if (!file) return
-
         const reader = new FileReader()
-        reader.onload = async event => {
-            const workbook = XLSX.read(event.target.result, { type: 'binary' })
-            const sheet = workbook.Sheets[workbook.SheetNames[0]]
-            const parsedData = XLSX.utils.sheet_to_json(sheet)
-
-            // Logic for formatting data (based on your specific model)
-            const formattedData = parsedData.map(row => ({
+        reader.onload = async loaded => {
+            const workbook = XLSX.read(loaded.target.result, { type: 'binary' })
+            const parsed = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]])
+            const formatted = parsed.map(row => ({
                 title: row.Title || row.title,
                 description: row.Description || row.description
             }))
-
             try {
-                // The loading state 'isLoading' becomes true once this is called
-                await uploadTrigger({
-                    itineraries: formattedData, // or destinations
-                    campaignId: params.id
-                }).unwrap()
-
-                // Reset input value so same file can be uploaded again if needed
-                e.target.value = ''
-            } catch (err) {
-                console.error('Upload failed:', err)
+                await uploadTrigger({ itineraries: formatted, campaignId }).unwrap()
+                tell('Itineraries uploaded successfully!', 'success')
+                setReload(count => count + 1)
+            } catch (error) {
+                tell(error?.data?.message || 'Upload failed. Please check the file and try again.', 'error')
             }
         }
         reader.readAsBinaryString(file)
+        event.target.value = ''
     }
+
     return (
-        <ContextMenuProvider>
-            <MainCard content={false} sx={{ py: '2px' }}>
-                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                        <Typography variant='h3'>Itineraries</Typography>
-                    </Box>
-                    <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
-                        {/* add your custom filters here */}
-                        {isShowClearButton && (
-                            <CustomButton
-                                variant='text'
-                                customStyles={{
-                                    color: 'error.main',
-                                    '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
-                                }}
-                                startIcon={<FilterAltOff />}
-                                onClick={() => {
-                                    setClearAllFilters(prev => !prev)
-                                }}
-                            >
-                                Clear All Filters
-                            </CustomButton>
-                        )}
-                        {/* <CustomSearchTextField
-                            search={search}
-                            setSearch={setSearch}
-                            placeholder='Search locations...'
-                        /> */}
-                        {/* // Example for "From" date */}
-                        {/* <CustomSearchDateField
-                            type='from'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='From date'
-                            label='From'
-                        />
-                        {/* </Box> */}
-
-                        {/* // Example for "To" date */}
-                        {/* <CustomSearchDateField
-                            type='to'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='To date'
-                            label='To'
-                        />  */}
-                        {/* <TextField
-                        placeholder='search data'
-                        size='small'
-                        type='search'
-                        sx={{
-                            '& .MuiInputBase-input': {
-                                fontSize: 12
-                            },
-                            '& .MuiOutlinedInput-root': {
-                                '& fieldset': {
-                                    borderColor: 'primary.800',
-                                    borderWidth: '1.2px'
-                                },
-                                '&:hover fieldset': {
-                                    borderColor: 'primary.main'
-                                },
-                                '&.Mui-focused fieldset': {
-                                    borderColor: 'primary.main'
-                                }
-                                // padding: '0px 4px'
-                            },
-                            '& .MuiInputBase-inputSizeSmall': {
-                                padding: '3px 6px !important'
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') setSearch({ ...search, value: e.target.value })
-                        }}
-                    /> */}
-                        {/* <TextField
-                        placeholder='from date'
-                        size='small'
-                        type='date'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.from}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, from: `${e.target.value} 00:00:00` }
-                            })
-                        }
-                    /> */}
-                        {/* <TextField
-                        placeholder='To Date'
-                        type='date'
-                        size='small'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.to}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, to: `${e.target.value} 23:59:59` }
-                            })
-                        }
-                    /> */}
-                        {/* <UiAccessGuard>
-                            <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard> */}
-                        <Box sx={{ m: 1, position: 'relative' }}>
-                            <Button
-                                variant='contained'
-                                component='label'
-                                // Disable button during loading to prevent multiple clicks
-                                disabled={isLoading}
-                                startIcon={!isLoading && <CloudUpload />}
-                            >
-                                {isLoading ? 'Uploading...' : `Upload Excel`}
-
-                                {/* Hidden File Input */}
-                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
-
-                                {/* Circular Progress Overlay */}
-                                {isLoading && (
-                                    <CircularProgress
-                                        size={24}
-                                        sx={{
-                                            color: 'primary.main',
-                                            position: 'absolute',
-                                            top: '50%',
-                                            left: '50%',
-                                            marginTop: '-12px',
-                                            marginLeft: '-12px'
-                                        }}
-                                    />
-                                )}
-                            </Button>
-                        </Box>
+        <>
+            <ListPage
+                title='Itineraries'
+                subtitle={scopedSubtitle('The day plans packages are built from.', campaignName)}
+                noun='itineraries'
+                searchPlaceholder='Search itinerary title or description'
+                headers={headers}
+                endpoint={getItenaryClients}
+                baseParams={{ campaignId }}
+                reqKey='getItinerariesListKey'
+                filters={FILTERS}
+                csvName='itineraries'
+                canAdd
+                addLabel='Add Itinerary'
+                onAdd={add}
+                reloadSignal={reload}
+                emptyText='Add the day plans for this campaign (arrival, sightseeing, departure), then use them to build packages.'
+                extraActions={
+                    <>
+                        <BackToCampaigns />
                         <UiAccessGuard type='create'>
-                            <CustomButton variant='clickable' onClick={handleAdd}>
-                                Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
-                            </CustomButton>
+                            <Button
+                                size='small'
+                                variant='outlined'
+                                component='label'
+                                disabled={uploading}
+                                startIcon={uploading ? <CircularProgress size={16} color='inherit' /> : <CloudUpload />}
+                            >
+                                {uploading ? 'Uploading...' : 'Upload Excel'}
+                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                            </Button>
                         </UiAccessGuard>
-
-                        {/* render action column can be made dynamic based on user authorization  */}
-                        <ToggleColumns columns={columns} handler={handleCheckToggle} />
-                    </Stack>
-                </Box>
-                <DataTable
-                    isCheckbox
-                    data={users || []}
-                    columns={columns}
-                    queryHandler={queryHandler}
-                    reqKey='getLocationMasterLKey'
-                    refetch={refetch}
-                    globalSearch={search}
-                    globalFilters={filters}
-                    clearFilters={clearFilters}
-                    addExcelQuery={excelHandler}
-                    totalRecords={recordsCount}
-                    renderAction={row => (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'success.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => editHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Edit'>
-                                        <Edit fontSize='small' sx={{ fill: '#60498a' }} />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => deleteHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Delete'>
-                                        <Delete fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                        </Box>
-                    )}
-                    setIsShowClearButton={setIsShowClearButton}
-                    clearAllFilters={clearAllFilters}
-                    isLoading={getLocationMasterLKey}
-                    enableContextMenu
-                />
-                <PopperContextMenu options={menuOptions} />
-                <ConfirmModal
-                    title='Delete Itinerary'
-                    message={
-                        <>
-                            Are you sure you want to delete this itinerary:{' '}
-                            <strong>{users?.find(user => user?.id === removeId)?.title || 'Unknown'}</strong>?
-                        </>
-                    }
-                    icon='warning'
-                    confirmText='Yes, Delete'
-                    customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={deleteActionHandler}
-                    isLoading={deleteItenaryClientLKey}
-                />
-            </MainCard>
-        </ContextMenuProvider>
+                    </>
+                }
+                renderAction={row => (
+                    <CatalogRowActions
+                        label={row.title}
+                        onEdit={() => navigate(`/master/itenary/edit/${row.id}`)}
+                        onDelete={() => ask(row)}
+                    />
+                )}
+            />
+            <DeleteConfirm flow={confirmProps} />
+        </>
     )
 }
 

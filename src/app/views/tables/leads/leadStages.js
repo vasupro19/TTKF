@@ -252,6 +252,15 @@ export const relativeTime = (value, now = new Date()) => {
     return plural(Math.floor(days / 365), 'year')
 }
 
+/** @description whether the guest has opened the quote we emailed (the private link in the email) */
+export const quoteOpened = row => Boolean(toDate(row?.quoteViewedAt)) && Number(row?.quoteViews) > 0
+
+/** @description "Quote opened 2 hours ago · 3 times" — the cue to call */
+export const openedLine = (row, now = new Date()) => {
+    const times = Number(row?.quoteViews) || 1
+    return `Quote opened ${relativeTime(row.quoteViewedAt, now)}${times > 1 ? ` · ${times} times` : ''}`
+}
+
 /**
  * @description the small line under a row's step chip: the next call booked, else when the quote went, else
  * what the step means
@@ -260,6 +269,8 @@ export const stageDetail = (row, now = new Date()) => {
     const meta = stageMeta(row?.stage)
     const call = toDate(row?.nextCallAt)
     if (call && meta.key !== 'booked') return `Next call ${shortDate(call, now)} ${clockTime(call)}`
+    const opened = toDate(row?.quoteViewedAt)
+    if (opened && meta.key === 'sent') return openedLine(row, now)
     const sent = toDate(row?.quoteSentAt)
     if (sent && (meta.key === 'sent' || meta.key === 'booked')) return `Quote sent ${shortDate(sent, now)}`
     return meta.detail
@@ -282,6 +293,7 @@ export const CSV_COLUMNS = [
     ['Trip', row => row.campaignName],
     ['Step', row => stageMeta(row.stage).label],
     ['Quote sent', row => shortDate(row.quoteSentAt)],
+    ['Quote opened', row => (quoteOpened(row) ? shortDate(row.quoteViewedAt) : '')],
     ['Next call', row => fullDateTime(row.nextCallAt)],
     ['Follow-up', row => row.followUpState],
     ['Assigned to', row => row.assignedTo],

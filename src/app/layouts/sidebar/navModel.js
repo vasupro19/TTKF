@@ -17,6 +17,8 @@ export const NAV_SECTIONS = [
             { url: '/process/leads', label: 'Leads', also: ['/process/guest'] },
             { url: '/process/packages', label: 'Bookings' },
             { url: '/process/transactions', label: 'Transactions' },
+            { url: '/process/invoices', label: 'Invoices' },
+            { url: '/process/incentives', label: 'Incentives' },
             { url: '/process/candidates', label: 'Job Candidates' }
         ]
     },
@@ -43,6 +45,8 @@ export const NAV_SECTIONS = [
         items: [
             { url: '/master/user', label: 'Users', also: ['/userManagement/user'] },
             { url: '/userManagement/role', label: 'Roles' },
+            { url: '/master/company', label: 'Company' },
+            { url: '/master/gst', label: 'GST Settings' },
             { url: '/master/client', label: 'Clients' }
         ]
     }
@@ -225,6 +229,8 @@ export const writeCollapsed = collapsed => {
 }
 
 /** @description the name shown at the top of the sidebar */
+export const agencyLogoFor = user => (user?.clientId && user.clientLogo) || ''
+
 export const agencyNameFor = user => {
     if (!user) return ''
     if (!user.clientId) return 'Platform admin'

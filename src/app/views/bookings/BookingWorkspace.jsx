@@ -32,6 +32,7 @@ import { useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
 import { useGetGuestByIdQuery } from '@/app/store/slices/api/guestSlice'
 import { useGetGuestTourByIdQuery } from '@/app/store/slices/api/guestTourSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
+import InvoicePanel from './InvoicePanel'
 import {
     STEPS,
     amount,
@@ -169,7 +170,9 @@ function BookingWorkspace() {
     const step = nextStep(progress)
     const money = guestMoney(booking)
     const suppliers = supplierMoney(services)
-    const margin = money.price - suppliers.cost - amount(booking?.otherCosts)
+    // ? the GST in the price belongs to the government, so the margin leaves it out
+    const gstInPrice = amount(booking?.tax?.gst)
+    const margin = money.price - gstInPrice - suppliers.cost - amount(booking?.otherCosts)
     const soon = urgency(guest.pickupDate, !step)
 
     const refresh = () => {
@@ -540,7 +543,7 @@ function BookingWorkspace() {
 
     return (
         <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
-            <Box sx={{ maxWidth: 960, '& .MuiButton-root': { textTransform: 'none' } }}>
+            <Box sx={{ maxWidth: 1240, '& .MuiButton-root': { textTransform: 'none' } }}>
                 <Button startIcon={<ArrowBack />} onClick={() => navigate('/process/packages')} sx={{ ml: -1, mb: 2 }}>
                     All bookings
                 </Button>
@@ -566,21 +569,254 @@ function BookingWorkspace() {
                     </Typography>
                 </Stack>
 
-                <Box
-                    sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: { xs: 2, sm: 2.5 }, mb: 3 }}
-                >
-                    <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', fontWeight: 600, mb: 1.5 }}>
-                        {doneCount(progress)} of {STEPS.length} done
+                <Box sx={{ mb: 3 }}>
+                    <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', fontWeight: 600, mb: 1 }}>
+                        {doneCount(progress)} of {STEPS.length} done — select a step to jump to it
                     </Typography>
                     <StepsBar progress={progress} />
-                    <Stack
-                        direction={{ xs: 'column', sm: 'row' }}
-                        spacing={1.5}
-                        alignItems={{ xs: 'flex-start', sm: 'center' }}
-                        justifyContent='space-between'
-                        sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}
+                </Box>
+
+                <Box
+                    sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 340px' },
+                        gap: { xs: 0, lg: 3 },
+                        alignItems: 'start'
+                    }}
+                >
+                    <Box sx={{ minWidth: 0, order: { xs: 2, lg: 1 } }}>
+                        <Section
+                            id='itinerary'
+                            title={`Itinerary · Quote ${bookedQuote}`}
+                            action={
+                                <Button
+                                    onClick={() =>
+                                        navigate(`/process/guest/add/${leadId}`, {
+                                            state: { convertedQuoteNo: bookedQuote }
+                                        })
+                                    }
+                                >
+                                    Open the quotation
+                                </Button>
+                            }
+                        >
+                            {bookedDays.length ? (
+                                <Box component='ol' sx={{ m: 0, p: 0 }}>
+                                    {bookedDays.map((day, index) => (
+                                        <Stack
+                                            component='li'
+                                            key={day.id}
+                                            direction='row'
+                                            spacing={2}
+                                            sx={{
+                                                listStyle: 'none',
+                                                borderTop: '1px solid',
+                                                borderColor: 'divider',
+                                                py: 1.25
+                                            }}
+                                        >
+                                            <Typography
+                                                sx={{ fontSize: '0.875rem', fontWeight: 600, width: 56, flexShrink: 0 }}
+                                            >
+                                                Day {index + 1}
+                                            </Typography>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ fontSize: '0.9375rem' }}>
+                                                    {day.title || 'Untitled day'}
+                                                </Typography>
+                                                {day.destination?.name ? (
+                                                    <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
+                                                        {day.destination.name}
+                                                    </Typography>
+                                                ) : null}
+                                            </Box>
+                                        </Stack>
+                                    ))}
+                                </Box>
+                            ) : (
+                                <Typography
+                                    color='text.secondary'
+                                    sx={{
+                                        fontSize: '0.9375rem',
+                                        borderTop: '1px solid',
+                                        borderColor: 'divider',
+                                        pt: 2
+                                    }}
+                                >
+                                    Quote {bookedQuote} has no days.
+                                </Typography>
+                            )}
+                        </Section>
+
+                        {serviceList('Hotel', hotels)}
+                        {serviceList('Taxi', taxis)}
+
+                        <Section
+                            id='payments'
+                            title='Guest payments'
+                            action={
+                                <Button startIcon={<Add />} onClick={() => setGuestPaymentOpen(true)}>
+                                    Record a payment
+                                </Button>
+                            }
+                        >
+                            {paymentsQuery.error ? (
+                                <Typography role='alert' sx={{ fontSize: '0.875rem', color: 'error.main', mb: 1 }}>
+                                    {errorText(paymentsQuery.error, 'Couldn’t load the payments.')}
+                                </Typography>
+                            ) : null}
+                            {pendingAmount ? (
+                                <Typography role='status' sx={{ fontSize: '0.875rem', color: 'warning.dark', mb: 1 }}>
+                                    {rupees(pendingAmount)} awaiting verification by accounts — it counts once verified.
+                                </Typography>
+                            ) : null}
+                            {payments.length ? (
+                                <Box component='ul' sx={{ m: 0, p: 0 }}>
+                                    {payments.map(payment => (
+                                        <PaymentRow
+                                            key={payment.id}
+                                            payment={payment}
+                                            canEmail={Boolean(lead.senderEmail)}
+                                            canDecide={canDecide}
+                                            onReceipt={item => openMail({ kind: 'receipt', paymentId: item.id })}
+                                            onEdit={item => setGuestPaymentOpen(true, item)}
+                                            onDecide={(mode, item) =>
+                                                decide(mode, {
+                                                    ...item,
+                                                    guestName,
+                                                    bookingNo: booking?.bookingNo,
+                                                    package: booking
+                                                })
+                                            }
+                                        />
+                                    ))}
+                                </Box>
+                            ) : (
+                                <Typography
+                                    color='text.secondary'
+                                    sx={{
+                                        fontSize: '0.9375rem',
+                                        borderTop: '1px solid',
+                                        borderColor: 'divider',
+                                        pt: 2
+                                    }}
+                                >
+                                    No payments recorded yet.
+                                </Typography>
+                            )}
+                        </Section>
+
+                        <InvoicePanel booking={booking} notify={notify} />
+
+                        <Section id='documents' title='Send to the guest'>
+                            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 2 }}>
+                                <Typography sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                                    Booking voucher
+                                    <Typography
+                                        component='span'
+                                        sx={{
+                                            ml: 1,
+                                            fontSize: '0.8125rem',
+                                            fontWeight: 600,
+                                            color: voucherColor
+                                        }}
+                                    >
+                                        {voucherStatus}
+                                    </Typography>
+                                </Typography>
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 1 }}>
+                                    The trip, hotels, transport and payments in one document.
+                                </Typography>
+                                <Stack
+                                    direction={{ xs: 'column', sm: 'row' }}
+                                    spacing={1}
+                                    alignItems={{ xs: 'stretch', sm: 'center' }}
+                                >
+                                    <Button variant='contained' onClick={openPreview}>
+                                        Preview and email
+                                    </Button>
+                                    <Button
+                                        variant='outlined'
+                                        disabled={busy === 'pdf'}
+                                        onClick={async () => {
+                                            setBusy('pdf')
+                                            try {
+                                                const blob = await downloadPdf(packageId).unwrap()
+                                                downloadBlob(
+                                                    blob,
+                                                    `${guestName.replace(/\s+/g, '_')}_booking_voucher.pdf`
+                                                )
+                                            } catch (error) {
+                                                notify(errorText(error, 'Couldn’t create the PDF.'), 'error')
+                                            } finally {
+                                                setBusy('')
+                                            }
+                                        }}
+                                    >
+                                        {busy === 'pdf' ? 'Creating PDF…' : 'Download PDF'}
+                                    </Button>
+                                </Stack>
+                            </Box>
+                            <Box
+                                sx={{
+                                    display: 'grid',
+                                    gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                                    gap: 2,
+                                    mt: 2
+                                }}
+                            >
+                                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 2 }}>
+                                    <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
+                                        Hotel confirmation
+                                    </Typography>
+                                    <Button
+                                        size='small'
+                                        sx={{ ml: -0.75 }}
+                                        disabled={!hotels.length}
+                                        onClick={() => openMail({ kind: 'guestService', type: 'Hotel' })}
+                                    >
+                                        {hotels.length ? 'Preview and email' : 'Add a hotel first'}
+                                    </Button>
+                                    <EmailNote email={booking?.emails?.hotel} />
+                                </Box>
+                                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 2 }}>
+                                    <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
+                                        Transport confirmation
+                                    </Typography>
+                                    <Button
+                                        size='small'
+                                        sx={{ ml: -0.75 }}
+                                        disabled={!taxis.length}
+                                        onClick={() => openMail({ kind: 'guestService', type: 'Taxi' })}
+                                    >
+                                        {taxis.length ? 'Preview and email' : 'Add transport first'}
+                                    </Button>
+                                    <EmailNote email={booking?.emails?.taxi} />
+                                </Box>
+                            </Box>
+                        </Section>
+                    </Box>
+                    <Box
+                        sx={{
+                            order: { xs: 1, lg: 2 },
+                            mb: { xs: 2.5, lg: 0 },
+                            position: { lg: 'sticky' },
+                            top: { lg: 80 }
+                        }}
                     >
-                        <Box>
+                        <Box
+                            sx={{
+                                border: '1px solid',
+                                borderColor: step ? 'primary.main' : 'success.main',
+                                borderRadius: 2,
+                                p: 2,
+                                mb: 2,
+                                bgcolor: 'background.paper'
+                            }}
+                        >
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', mb: 0.5 }}>
+                                WHAT TO DO NEXT
+                            </Typography>
                             <Typography
                                 sx={{
                                     fontSize: '1rem',
@@ -595,232 +831,64 @@ function BookingWorkspace() {
                                     The guest {soon}.
                                 </Typography>
                             ) : null}
-                        </Box>
-                        {step ? (
-                            <Button variant='contained' onClick={doNext}>
-                                {step.next}
-                            </Button>
-                        ) : null}
-                    </Stack>
-                </Box>
-
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 5 }}>
-                    <MoneyCard
-                        title='From the guest'
-                        lines={[
-                            ['Package price', rupees(money.price)],
-                            ['Received', rupees(money.received)],
-                            ...(pendingAmount ? [['Awaiting verification', rupees(pendingAmount)]] : []),
-                            ['Balance', rupees(money.balance), true]
-                        ]}
-                        action={
-                            money.balance ? (
-                                <Button variant='outlined' size='small' onClick={() => setGuestPaymentOpen(true)}>
-                                    Record a payment
+                            {step ? (
+                                <Button variant='contained' fullWidth onClick={doNext} sx={{ mt: 1.5 }}>
+                                    {step.next}
                                 </Button>
-                            ) : null
-                        }
-                    />
-                    <MoneyCard
-                        title='To suppliers'
-                        lines={[
-                            ['Cost', rupees(suppliers.cost)],
-                            ['Paid', rupees(suppliers.paid)],
-                            ['Due', rupees(suppliers.due), true]
-                        ]}
-                    />
-                    {services.length ? (
-                        <MoneyCard
-                            title='Margin'
-                            lines={[
-                                ['Price − supplier costs', rupees(margin), true],
-                                ['Share of price', money.price ? `${Math.round((margin / money.price) * 100)}%` : '—']
-                            ]}
-                        />
-                    ) : (
-                        <MoneyCard title='Margin' lines={[['Shown once hotels and transport are added', '']]} />
-                    )}
-                </Stack>
-
-                <Section
-                    id='itinerary'
-                    title={`Itinerary · Quote ${bookedQuote}`}
-                    action={
-                        <Button
-                            onClick={() =>
-                                navigate(`/process/guest/add/${leadId}`, { state: { convertedQuoteNo: bookedQuote } })
-                            }
-                        >
-                            Open the quotation
-                        </Button>
-                    }
-                >
-                    {bookedDays.length ? (
-                        <Box component='ol' sx={{ m: 0, p: 0 }}>
-                            {bookedDays.map((day, index) => (
-                                <Stack
-                                    component='li'
-                                    key={day.id}
-                                    direction='row'
-                                    spacing={2}
-                                    sx={{ listStyle: 'none', borderTop: '1px solid', borderColor: 'divider', py: 1.25 }}
-                                >
-                                    <Typography
-                                        sx={{ fontSize: '0.875rem', fontWeight: 600, width: 56, flexShrink: 0 }}
-                                    >
-                                        Day {index + 1}
-                                    </Typography>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography sx={{ fontSize: '0.9375rem' }}>
-                                            {day.title || 'Untitled day'}
-                                        </Typography>
-                                        {day.destination?.name ? (
-                                            <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
-                                                {day.destination.name}
-                                            </Typography>
-                                        ) : null}
-                                    </Box>
-                                </Stack>
-                            ))}
+                            ) : null}
                         </Box>
-                    ) : (
-                        <Typography
-                            color='text.secondary'
-                            sx={{ fontSize: '0.9375rem', borderTop: '1px solid', borderColor: 'divider', pt: 2 }}
-                        >
-                            Quote {bookedQuote} has no days.
-                        </Typography>
-                    )}
-                </Section>
-
-                {serviceList('Hotel', hotels)}
-                {serviceList('Taxi', taxis)}
-
-                <Section
-                    id='payments'
-                    title='Guest payments'
-                    action={
-                        <Button startIcon={<Add />} onClick={() => setGuestPaymentOpen(true)}>
-                            Record a payment
-                        </Button>
-                    }
-                >
-                    {paymentsQuery.error ? (
-                        <Typography role='alert' sx={{ fontSize: '0.875rem', color: 'error.main', mb: 1 }}>
-                            {errorText(paymentsQuery.error, 'Couldn’t load the payments.')}
-                        </Typography>
-                    ) : null}
-                    {pendingAmount ? (
-                        <Typography role='status' sx={{ fontSize: '0.875rem', color: 'warning.dark', mb: 1 }}>
-                            {rupees(pendingAmount)} awaiting verification by accounts — it counts once verified.
-                        </Typography>
-                    ) : null}
-                    {payments.length ? (
-                        <Box component='ul' sx={{ m: 0, p: 0 }}>
-                            {payments.map(payment => (
-                                <PaymentRow
-                                    key={payment.id}
-                                    payment={payment}
-                                    canEmail={Boolean(lead.senderEmail)}
-                                    canDecide={canDecide}
-                                    onReceipt={item => openMail({ kind: 'receipt', paymentId: item.id })}
-                                    onEdit={item => setGuestPaymentOpen(true, item)}
-                                    onDecide={(mode, item) =>
-                                        decide(mode, {
-                                            ...item,
-                                            guestName,
-                                            bookingNo: booking?.bookingNo,
-                                            package: booking
-                                        })
-                                    }
+                        <Stack spacing={2}>
+                            <MoneyCard
+                                title='From the guest'
+                                lines={[
+                                    ['Package price', rupees(money.price)],
+                                    ['Received', rupees(money.received)],
+                                    ...(pendingAmount ? [['Awaiting verification', rupees(pendingAmount)]] : []),
+                                    ['Balance', rupees(money.balance), true]
+                                ]}
+                                action={
+                                    money.balance ? (
+                                        <Button
+                                            variant='outlined'
+                                            size='small'
+                                            onClick={() => setGuestPaymentOpen(true)}
+                                        >
+                                            Record a payment
+                                        </Button>
+                                    ) : null
+                                }
+                            />
+                            <MoneyCard
+                                title='To suppliers'
+                                lines={[
+                                    ['Cost', rupees(suppliers.cost)],
+                                    ['Paid', rupees(suppliers.paid)],
+                                    ['Due', rupees(suppliers.due), true]
+                                ]}
+                            />
+                            {services.length ? (
+                                <MoneyCard
+                                    title='Margin'
+                                    lines={[
+                                        [
+                                            gstInPrice > 0 ? 'Price − GST − supplier costs' : 'Price − supplier costs',
+                                            rupees(margin),
+                                            true
+                                        ],
+                                        [
+                                            gstInPrice > 0 ? 'Share of price without GST' : 'Share of price',
+                                            money.price - gstInPrice > 0
+                                                ? `${Math.round((margin / (money.price - gstInPrice)) * 100)}%`
+                                                : '—'
+                                        ]
+                                    ]}
                                 />
-                            ))}
-                        </Box>
-                    ) : (
-                        <Typography
-                            color='text.secondary'
-                            sx={{ fontSize: '0.9375rem', borderTop: '1px solid', borderColor: 'divider', pt: 2 }}
-                        >
-                            No payments recorded yet.
-                        </Typography>
-                    )}
-                </Section>
-
-                <Section id='documents' title='Send to the guest'>
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2 }}>
-                        <Typography sx={{ fontSize: '1rem', fontWeight: 600 }}>
-                            Booking voucher
-                            <Typography
-                                component='span'
-                                sx={{
-                                    ml: 1,
-                                    fontSize: '0.8125rem',
-                                    fontWeight: 600,
-                                    color: voucherColor
-                                }}
-                            >
-                                {voucherStatus}
-                            </Typography>
-                        </Typography>
-                        <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 1 }}>
-                            The trip, hotels, transport and payments in one document.
-                        </Typography>
-                        <Stack
-                            direction={{ xs: 'column', sm: 'row' }}
-                            spacing={1}
-                            alignItems={{ xs: 'stretch', sm: 'center' }}
-                        >
-                            <Button variant='contained' onClick={openPreview}>
-                                Preview and email
-                            </Button>
-                            <Button
-                                variant='outlined'
-                                disabled={busy === 'pdf'}
-                                onClick={async () => {
-                                    setBusy('pdf')
-                                    try {
-                                        const blob = await downloadPdf(packageId).unwrap()
-                                        downloadBlob(blob, `${guestName.replace(/\s+/g, '_')}_booking_voucher.pdf`)
-                                    } catch (error) {
-                                        notify(errorText(error, 'Couldn’t create the PDF.'), 'error')
-                                    } finally {
-                                        setBusy('')
-                                    }
-                                }}
-                            >
-                                {busy === 'pdf' ? 'Creating PDF…' : 'Download PDF'}
-                            </Button>
+                            ) : (
+                                <MoneyCard title='Margin' lines={[['Shown once hotels and transport are added', '']]} />
+                            )}
                         </Stack>
                     </Box>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 3 }} sx={{ mt: 3 }}>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>Hotel confirmation</Typography>
-                            <Button
-                                size='small'
-                                sx={{ ml: -0.75 }}
-                                disabled={!hotels.length}
-                                onClick={() => openMail({ kind: 'guestService', type: 'Hotel' })}
-                            >
-                                {hotels.length ? 'Preview and email' : 'Add a hotel first'}
-                            </Button>
-                            <EmailNote email={booking?.emails?.hotel} />
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
-                                Transport confirmation
-                            </Typography>
-                            <Button
-                                size='small'
-                                sx={{ ml: -0.75 }}
-                                disabled={!taxis.length}
-                                onClick={() => openMail({ kind: 'guestService', type: 'Taxi' })}
-                            >
-                                {taxis.length ? 'Preview and email' : 'Add transport first'}
-                            </Button>
-                            <EmailNote email={booking?.emails?.taxi} />
-                        </Box>
-                    </Stack>
-                </Section>
+                </Box>
             </Box>
 
             <AssignmentModal

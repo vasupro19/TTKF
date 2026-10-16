@@ -11,6 +11,8 @@ const api = vi.hoisted(() => {
         count: 0,
         summary: null,
         pageArgs: [],
+        exportCalls: [],
+        exportRows: [],
         booking: null,
         hotels: [],
         taxis: [],
@@ -30,6 +32,10 @@ const api = vi.hoisted(() => {
         rejectPayment: call(),
         reversePayment: call(),
         updatePayment: call(),
+        // ? the booking's invoices, and whether this user may cancel one
+        invoices: [],
+        invoiceSummary: { canCancel: false },
+        createInvoice: call(),
         formChanges: {},
         supplierPreview: null,
         snackbars: [],
@@ -40,7 +46,20 @@ const api = vi.hoisted(() => {
 const query = data => ({ data, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() })
 const navigate = vi.hoisted(() => vi.fn())
 
-vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => navigate }))
+// ? the real navigate runs too, so the address bar (where the filters live) changes
+vi.mock('react-router-dom', async importOriginal => {
+    const actual = await importOriginal()
+    return {
+        ...actual,
+        useNavigate: () => {
+            const real = actual.useNavigate()
+            return (...args) => {
+                navigate(...args)
+                return real(...args)
+            }
+        }
+    }
+})
 vi.mock('react-redux', () => ({
     useDispatch: () => action => {
         if (action?.type === 'preview') return Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } })
@@ -56,6 +75,11 @@ vi.mock('react-redux', () => ({
             return Promise.resolve({
                 data: { data: { to: 'asha@example.com', subject: 'Hotel Confirmation', html: '<p>hotel</p>' } }
             })
+        if (action?.type === 'bookingsPage') {
+            api.exportCalls.push(action.arg)
+            const start = action.arg.page * action.arg.pageSize
+            return Promise.resolve({ data: { data: api.exportRows.slice(start, start + action.arg.pageSize) } })
+        }
         if (action?.type === 'snackbar') api.snackbars.push(action.payload.message)
         return action
     },
@@ -63,6 +87,7 @@ vi.mock('react-redux', () => ({
 }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
+    getBookingsPage: { initiate: arg => ({ type: 'bookingsPage', arg }) },
     useGetBookingsPageQuery: args => {
         api.pageArgs.push(args)
         return query({ data: api.list, count: api.count, summary: api.summary })
@@ -109,6 +134,14 @@ vi.mock('@/app/store/slices/api/paymentSlice', () => ({
     useRejectGuestPaymentMutation: () => [api.rejectPayment, { isLoading: false }],
     useReverseGuestPaymentMutation: () => [api.reversePayment, { isLoading: false }],
     useUpdateGuestPaymentMutation: () => [api.updatePayment, { isLoading: false }]
+}))
+vi.mock('@/app/store/slices/api/gstSlice', () => ({
+    useGetBookingInvoicesQuery: () => query({ data: api.invoices, summary: api.invoiceSummary }),
+    useCreateInvoiceMutation: () => [api.createInvoice, { isLoading: false }],
+    useGetInvoicePreviewQuery: () => query(null),
+    useDownloadInvoicePdfMutation: () => [vi.fn(), { isLoading: false }],
+    useEmailInvoiceMutation: () => [vi.fn(), { isLoading: false }],
+    useCancelInvoiceMutation: () => [vi.fn(), { isLoading: false }]
 }))
 vi.mock('@/app/store/slices/api/confirmedService', () => ({
     usePaySupplierMutation: () => [api.paySupplier, { isLoading: false }]
@@ -174,6 +207,8 @@ beforeEach(() => {
     api.count = 2
     api.summary = { total: 2, toCollect: 135000, stages: { action: 1, progress: 1, ready: 0 } }
     api.pageArgs = []
+    api.exportCalls = []
+    api.exportRows = []
     api.people = []
     api.booking = {
         id: 1,
@@ -226,6 +261,8 @@ beforeEach(() => {
         }
     ]
     api.paymentSummary = { pendingAmount: 0, canDecide: false }
+    api.invoices = []
+    api.invoiceSummary = { canCancel: false }
 })
 
 describe('Bookings list', () => {
@@ -254,7 +291,20 @@ describe('Bookings list', () => {
 
     test('the server is asked for one page: the stage chosen, then the search typed, from the first page', async () => {
         renderList()
-        expect(lastArgs()).toEqual({ page: 0, pageSize: 25, stage: 'all', q: '', convertedBy: '' })
+        expect(lastArgs()).toEqual({
+            page: 0,
+            pageSize: 25,
+            stage: 'all',
+            q: '',
+            convertedBy: '',
+            createdFrom: '',
+            createdTo: '',
+            travelFrom: '',
+            travelTo: '',
+            guestPayment: '',
+            supplierPayment: '',
+            invoice: ''
+        })
 
         fireEvent.click(screen.getByRole('button', { name: /Not started/ }))
         expect(lastArgs()).toMatchObject({ page: 0, stage: 'action' })
@@ -285,7 +335,7 @@ describe('Bookings list', () => {
         api.count = 60
         api.summary = { ...api.summary, total: 60 }
         renderList()
-        expect(screen.getByText('1–25 of 60')).toBeInTheDocument()
+        expect(screen.getByText(/Showing 1–25 of 60 bookings/)).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }))
         expect(lastArgs()).toMatchObject({ page: 1 })
     })
@@ -294,7 +344,61 @@ describe('Bookings list', () => {
         api.list = []
         api.count = 0
         renderList()
-        expect(screen.getByText('No bookings match.')).toBeInTheDocument()
+        expect(screen.getByText('No confirmed bookings yet')).toBeInTheDocument()
+        expect(screen.queryByText(/No bookings match these filters/)).toBeNull()
+    })
+
+    test('nothing matches the filters: says so, and Clear filters brings everything back', () => {
+        api.list = []
+        api.count = 0
+        api.summary = { total: 8, toCollect: 0, stages: { action: 8 } }
+        render(
+            <MemoryRouter initialEntries={['/process/packages?guestPayment=paid&invoice=none']}>
+                <BookingsPage />
+            </MemoryRouter>
+        )
+        expect(lastArgs()).toMatchObject({ guestPayment: 'paid', invoice: 'none' })
+        expect(screen.getByText('No bookings match these filters.')).toBeInTheDocument()
+        expect(screen.getByText('0 bookings (filtered from 8)')).toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0])
+        expect(lastArgs()).toMatchObject({ guestPayment: '', invoice: '' })
+    })
+
+    test('the dates and dropdowns are sent to the server from the first page, and kept in the address bar', () => {
+        renderList()
+        fireEvent.change(screen.getByLabelText('Travel from'), { target: { value: '2026-11-01' } })
+        expect(lastArgs()).toMatchObject({ page: 0, travelFrom: '2026-11-01' })
+        fireEvent.change(screen.getByLabelText('Created to'), { target: { value: '2026-10-14' } })
+        expect(lastArgs()).toMatchObject({ travelFrom: '2026-11-01', createdTo: '2026-10-14' })
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /^Invoice/ }))
+        fireEvent.click(screen.getByRole('option', { name: 'Has GST invoice' }))
+        expect(lastArgs()).toMatchObject({ invoice: 'with' })
+        expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    })
+
+    test('the page size is kept as a choice', () => {
+        renderList()
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Rows/ }))
+        fireEvent.click(screen.getByRole('option', { name: '50' }))
+        expect(lastArgs()).toMatchObject({ page: 0, pageSize: 50 })
+    })
+
+    test('export all asks for every page of what is filtered', async () => {
+        api.count = 120
+        api.summary = { ...api.summary, total: 120 }
+        api.exportRows = Array.from({ length: 120 }, (_, index) => listRow({ id: index + 1 }))
+        global.URL.createObjectURL = vi.fn(() => 'blob:x')
+        global.URL.revokeObjectURL = vi.fn()
+        render(
+            <MemoryRouter initialEntries={['/process/packages?guestPayment=paid']}>
+                <BookingsPage />
+            </MemoryRouter>
+        )
+        fireEvent.click(screen.getByRole('button', { name: /export/i }))
+        fireEvent.click(await screen.findByText('Export All'))
+        await waitFor(() => expect(api.exportCalls).toHaveLength(2))
+        expect(api.exportCalls[0]).toMatchObject({ page: 0, pageSize: 100, guestPayment: 'paid' })
+        expect(api.exportCalls[1]).toMatchObject({ page: 1 })
     })
 })
 
@@ -313,7 +417,7 @@ describe('One booking', () => {
         expect(screen.getByRole('heading', { name: 'Asha Verma' })).toBeInTheDocument()
         expect(screen.getByText('BOOKING · TTK-B-261002-003')).toBeInTheDocument()
         expect(screen.getByText(/12 Dec 2026 – 17 Dec 2026 · 2 adults, 1 child · Deluxe · Quote 1/)).toBeInTheDocument()
-        expect(screen.getByText('1 of 5 done')).toBeInTheDocument()
+        expect(screen.getByText(/1 of 5 done/)).toBeInTheDocument()
         expect(screen.getByText('Next: Add transport')).toBeInTheDocument()
 
         const hotels = screen.getByRole('region', { name: 'Hotels' })
@@ -326,6 +430,77 @@ describe('One booking', () => {
         expect(within(payments).getByText('Ref UTR123')).toBeInTheDocument()
         expect(screen.getByText('Price − supplier costs')).toBeInTheDocument()
         expect(screen.getByText('₹70,000')).toBeInTheDocument()
+    })
+
+    test('the margin leaves out the GST in the price', () => {
+        api.booking = { ...api.booking, tax: { mode: 'exclusive', rate: 5, taxable: 85714.29, gst: 4285.71 } }
+        renderBooking()
+        expect(screen.getByText('Price − GST − supplier costs')).toBeInTheDocument()
+        expect(screen.getByText('₹65,714.29')).toBeInTheDocument()
+        expect(screen.getByText('Share of price without GST')).toBeInTheDocument()
+    })
+
+    test('an invoice is issued after a look at what it will be, and opens once made', async () => {
+        api.booking = { ...api.booking, tax: { mode: 'exclusive', rate: 5, taxable: 85714.29, gst: 4285.71 } }
+        renderBooking()
+        const invoice = screen.getByRole('region', { name: /^Invoice/ })
+        expect(within(invoice).getByText(/No invoice yet/)).toBeInTheDocument()
+        expect(
+            within(invoice).getByText(
+                /includes GST ₹4,285.71 \(taxable value ₹85,714.29\), so its invoice is a tax invoice/
+            )
+        ).toBeInTheDocument()
+        fireEvent.click(within(invoice).getByRole('button', { name: 'Issue invoice' }))
+        const dialog = await screen.findByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText('Billed to (optional)'), { target: { value: 'ACME Pvt Ltd' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Issue invoice' }))
+        await waitFor(() =>
+            expect(api.createInvoice).toHaveBeenCalledWith({ packageId: 1, customerName: 'ACME Pvt Ltd' })
+        )
+    })
+
+    test('a booking with no GST says its invoice is a bill of supply', () => {
+        renderBooking()
+        expect(
+            screen.getByText(/No GST is charged on this booking, so its invoice is a bill of supply/)
+        ).toBeInTheDocument()
+    })
+
+    test('an issued invoice is listed, and the booking is not offered a second', () => {
+        api.invoices = [
+            {
+                id: 4,
+                number: 'TTK/2627/00004',
+                kind: 'TAX_INVOICE',
+                status: 'ISSUED',
+                total: 90000,
+                gst: 4285.71,
+                invoiceDate: '2026-10-13T00:00:00.000Z'
+            }
+        ]
+        renderBooking()
+        const invoice = screen.getByRole('region', { name: /^Invoice/ })
+        expect(within(invoice).getByText('Tax invoice TTK/2627/00004 · ₹90,000.00')).toBeInTheDocument()
+        expect(within(invoice).getByText(/13 Oct 2026 · includes GST ₹4,285.71/)).toBeInTheDocument()
+        expect(within(invoice).queryByRole('button', { name: 'Issue invoice' })).not.toBeInTheDocument()
+    })
+
+    test('a cancelled invoice stays listed and the booking can be invoiced again', () => {
+        api.invoices = [
+            {
+                id: 4,
+                number: 'TTK/2627/00004',
+                kind: 'BILL_OF_SUPPLY',
+                status: 'CANCELLED',
+                total: 90000,
+                gst: 0,
+                invoiceDate: '2026-10-13T00:00:00.000Z'
+            }
+        ]
+        renderBooking()
+        const invoice = screen.getByRole('region', { name: /^Invoice/ })
+        expect(within(invoice).getByText('Cancelled')).toBeInTheDocument()
+        expect(within(invoice).getByRole('button', { name: 'Issue invoice' })).toBeInTheDocument()
     })
 
     test('the itinerary shows only the booked quote, in order', () => {

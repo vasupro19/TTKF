@@ -15,6 +15,13 @@ export const agentSlice = apiSliceConfig.injectEndpoints({
             },
             providesTags: ['agentMaster']
         }),
+        getAgentOptions: build.query({
+            query: () => ({
+                url: '/agent?options=1',
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            providesTags: ['agentMaster']
+        }),
         getAgentById: build.query({
             query: id => ({
                 url: `/agent/${id}`,
@@ -46,7 +53,7 @@ export const agentSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['locationMaster', 'locationMasterById']
+            invalidatesTags: ['agentMaster', 'agentMasterById']
         })
     })
 })
@@ -54,7 +61,8 @@ export const agentSlice = apiSliceConfig.injectEndpoints({
 export const {
     useGetAgentsQuery,
     useGetAgentByIdQuery,
-    endpoints: { getAgentById, getAgents },
+    useGetAgentOptionsQuery,
+    endpoints: { getAgentById, getAgents, getAgentOptions },
     useCreateAgentMutation,
     useUpdateAgentMutation
 } = agentSlice

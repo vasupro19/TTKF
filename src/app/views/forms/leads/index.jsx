@@ -8,12 +8,10 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate } from 'react-router-dom'
 
 // theme components
-import { Box, Divider, Grid } from '@mui/material'
+import { Box, Button, CircularProgress, MenuItem, Stack, Typography } from '@mui/material'
 
 // components
-import FormComponent from '@core/components/forms/FormComponent'
 import MainCard from '@core/components/extended/MainCard'
-import MyTabs from '@/core/components/CapsuleTabs'
 
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
@@ -24,6 +22,18 @@ import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
+import LeadField from './LeadField'
+
+const LEAD_SOURCES = [
+    { label: 'Added by hand', value: 'Manual' },
+    { label: 'Phone call', value: 'Call' },
+    { label: 'Walk-in', value: 'Walk-in' },
+    { label: 'Referral', value: 'Referral' },
+    { label: 'Website', value: 'Website' },
+    { label: 'Facebook', value: 'Facebook' },
+    { label: 'Instagram', value: 'Instagram' },
+    { label: 'Other', value: 'Other' }
+]
 
 function LeadsForm() {
     const { id: formId } = useParams()
@@ -37,14 +47,13 @@ function LeadsForm() {
     const { createLeadLKey, updateLeadLKey } = useSelector(state => state.loading)
     const { user } = useSelector(state => state.auth)
 
-    const [activeTab, setActiveTab] = useState(0)
-    const [tabsEnabled, setTabsEnabled] = useState([true, false])
     const [leadId, setLeadId] = useState(null)
 
     const [createLead] = useCreateLeadMutation()
     const [updateLead] = useUpdateLeadMutation()
 
-    const clientUserId = users?.data?.find(teamUser => teamUser.email === user?.email)?.id || user?.id
+    // ? the team member row for this login, matched by email — the login's own id belongs to another table; with no match the server works it out
+    const clientUserId = users?.data?.find(teamUser => teamUser.email === user?.email)?.id
 
     const userOptions =
         users?.data?.map(teamUser => ({
@@ -63,7 +72,7 @@ function LeadsForm() {
         fullName: '',
         phone: '',
         senderEmail: '',
-        leadSource: '',
+        leadSource: 'Manual',
         leadStatus: '',
         remarks: '',
         assignedTo: '',
@@ -72,42 +81,31 @@ function LeadsForm() {
         followupremarks: ''
     }
 
-    // Validation schema per tab
-    const validationSchema = [
-        z.object({
-            fullName: z.string().nonempty('Full name is required').min(3, 'Must be at least 3 characters'),
-            // ? one rule for every phone in the app (utilities/phone.js): 10 digits for India, or a foreign number
-            phone: z.string().superRefine((val, ctx) => {
+    // ? only a name and a phone number are needed; the email is checked only when one is typed
+    const schema = z.object({
+        fullName: z.string().trim().min(1, 'Enter the guest’s name'),
+        // ? one rule for every phone in the app (utilities/phone.js): 10 digits for India, or a foreign number
+        phone: z
+            .string()
+            .trim()
+            .min(1, 'Enter a phone number')
+            .superRefine((val, ctx) => {
                 const problem = phoneProblem(val)
                 if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
             }),
-            senderEmail: z.string().email('Invalid email').optional()
-        }),
-        z.object({
-            followupdate: z.string().optional(),
-            followupremarks: z.string().optional()
-        })
-    ]
+        senderEmail: z.union([z.literal(''), z.string().trim().email('Enter a valid email, or leave it empty')])
+    })
 
     const validate = values => {
-        try {
-            validationSchema[activeTab].parse(values)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
-            })
-            // ? an older lead's number, left as it was, doesn't stop the rest of the lead being saved
-            if (formikErrors.phone && editData?.phone && values.phone === String(editData.phone))
-                delete formikErrors.phone
-            return formikErrors
-        }
-    }
-
-    const enableTabsAfterValidation = upToIndex => {
-        const updated = tabsEnabled.map((enabled, index) => index <= upToIndex)
-        setTabsEnabled(updated)
+        const parsed = schema.safeParse(values)
+        if (parsed.success) return {}
+        const formikErrors = {}
+        parsed.error.errors.forEach(err => {
+            if (!formikErrors[err.path[0]]) formikErrors[err.path[0]] = err.message
+        })
+        // ? an older lead's number, left as it was, doesn't stop the rest of the lead being saved
+        if (formikErrors.phone && editData?.phone && values.phone === String(editData.phone)) delete formikErrors.phone
+        return formikErrors
     }
 
     const formik = useFormik({
@@ -115,48 +113,38 @@ function LeadsForm() {
         enableReinitialize: true,
         onSubmit: async values => {
             try {
-                let response
                 if (!formId) {
-                    response = await createLead({
+                    await createLead({
                         ...values,
+                        fullName: values.fullName.trim(),
                         phone: leadPhoneToSave(values.phone),
                         updatedBy: clientUserId
                     }).unwrap()
-                    setLeadId(response.data.id)
-                    navigate(-1)
-
-                    setActiveTab(0)
-                    enableTabsAfterValidation(1)
                 } else {
                     // ? saved as "+919876543210" however it was typed: one format for search and WhatsApp links
-                    response = await updateLead({
+                    await updateLead({
                         id: leadId,
                         ...values,
                         phone: leadPhoneToSave(values.phone),
                         updatedBy: clientUserId
                     }).unwrap()
                     formik.resetForm()
-                    setActiveTab(0)
-                    setTabsEnabled([true, false])
-                    navigate(-1)
                 }
-
-                if (response.success && response.status_code === 200) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: response.message || 'Lead saved successfully!',
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                }
+                dispatch(
+                    openSnackbar({
+                        open: true,
+                        message: formId ? 'Lead updated' : 'Lead created',
+                        variant: 'alert',
+                        alert: { color: 'success' },
+                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                    })
+                )
+                navigate(-1)
             } catch (error) {
                 dispatch(
                     openSnackbar({
                         open: true,
-                        message: error.data?.data?.message || 'Something went wrong',
+                        message: error.data?.message || error.data?.data?.message || 'Something went wrong',
                         variant: 'alert',
                         alert: { color: 'error' },
                         anchorOrigin: { vertical: 'top', horizontal: 'right' }
@@ -168,10 +156,6 @@ function LeadsForm() {
         validateOnChange: true,
         validate
     })
-
-    const handleTabChange = (event, newVal) => {
-        if (tabsEnabled[newVal]) setActiveTab(newVal)
-    }
 
     const getLead = async id => {
         const { data, error } = await dispatch(getLeadById.initiate(id))
@@ -203,7 +187,6 @@ function LeadsForm() {
             formatted.followupremarks = row.upcomingCall.description || ''
         }
         formik.setValues({ ...formatted })
-        enableTabsAfterValidation(1)
     }
 
     useEffect(() => {
@@ -214,171 +197,152 @@ function LeadsForm() {
         if (editData && objectLength(editData)) editHandler(formId, editData)
     }, [editData])
 
-    const customSx = {
-        '& input': {
-            backgroundColor: '#fff',
-            padding: '12px 8px'
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white'
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray'
-        },
-        flexGrow: 1
-    }
+    // ? a new lead goes to the person adding it unless they choose someone else
+    useEffect(() => {
+        if (!formId && clientUserId && !formik.values.assignedTo)
+            formik.setFieldValue('assignedTo', String(clientUserId))
+    }, [formId, clientUserId])
 
-    const tabsFields = [
-        {
-            label: 'Lead Information',
-            fields: [
-                {
-                    name: 'fullName',
-                    label: 'Full Name',
-                    type: 'text',
-                    placeholder: 'Enter full name',
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'phone',
-                    label: 'Phone Number',
-                    type: 'text',
-                    placeholder: 'e.g. 98765 43210 or +44 7911 123456',
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'senderEmail',
-                    label: 'Email',
-                    type: 'email',
-                    placeholder: 'Enter email',
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'assignedTo',
-                    label: 'Assigned To',
-                    type: 'select',
-                    options: userOptions || [],
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'leadSource',
-                    label: 'Lead Source',
-                    type: 'select',
-                    options: [
-                        { label: 'Select Source', value: '' },
-                        { label: 'Website', value: 'Website' },
-                        { label: 'Facebook', value: 'Facebook' },
-                        { label: 'Referral', value: 'Referral' },
-                        { label: 'Call', value: 'Call' },
-                        { label: 'Other', value: 'Other' }
-                    ],
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'leadStatus',
-                    label: 'Status',
-                    type: 'select',
-                    options:
-                        formik.values.leadStatus === 'Confirmed' || formik.values.leadStatus === 'verified'
-                            ? [
-                                  { label: 'Confirmed', value: 'Confirmed' },
-                                  { label: 'Verified', value: 'verified' }
-                              ]
-                            : [{ label: 'Pending', value: 'Pending' }],
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx,
-                    isDisabled: !!formId
-                },
-                {
-                    name: 'campaignId',
-                    label: 'Campaign Name',
-                    type: 'select',
-                    options: campaignOptions || [],
-                    grid: { xs: 12, sm: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'remarks',
-                    label: 'Remarks',
-                    type: 'text',
-                    placeholder: 'Write remarks',
-                    grid: { xs: 12, sm: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'followupdate',
-                    label: 'Schedule Call',
-                    type: 'dateTime',
-                    grid: { xs: 12, sm: 3 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'followupremarks',
-                    label: 'Call Reminder Notes',
-                    type: 'text',
-                    placeholder: 'What should be discussed on the call?',
-                    grid: { xs: 12 },
-                    size: 'small',
-                    customSx
-                }
-            ]
-        }
-    ]
-    // eslint-disable-next-line no-shadow
-    const handleCustomChange = (e, formik) => {
-        formik.handleChange(e)
-    }
+    const saving = Boolean(createLeadLKey || updateLeadLKey)
+
+    const section = (title, hint, children) => (
+        <Box
+            component='section'
+            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: { xs: 2, sm: 2.5 }, mb: 2.5 }}
+        >
+            <Typography component='h2' sx={{ fontSize: '1.0625rem', fontWeight: 600 }}>
+                {title}
+            </Typography>
+            <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 2 }}>
+                {hint}
+            </Typography>
+            {children}
+        </Box>
+    )
+
+    const columns = { display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 2 }
+
     return (
-        <MainCard sx={{ py: '1px' }} contentSX={{ px: '2px', py: 1.5 }}>
-            <Grid container gap={4} sx={{ border: '1px solid #d0d0d0', px: 1.5, py: 2, borderRadius: '8px' }}>
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        <MyTabs
-                            activeTab={activeTab}
-                            handleTabChange={handleTabChange}
-                            tabsFields={tabsFields}
-                            tabsEnabled={tabsEnabled}
-                        />
+        <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
+            <Box sx={{ maxWidth: 780, '& .MuiButton-root': { textTransform: 'none' } }}>
+                <Typography
+                    color='text.secondary'
+                    sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600 }}
+                >
+                    {formId ? 'EDIT LEAD' : 'NEW LEAD'}
+                </Typography>
+                <Typography component='h1' sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 600, mt: 0.5 }}>
+                    {formId ? 'Edit lead' : 'Add a lead'}
+                </Typography>
+                <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: 0.5, mb: 3 }}>
+                    Only a name and a phone number are needed. Add the rest now, or later.
+                </Typography>
 
-                        <Box sx={{ padding: 2 }}>
-                            <FormComponent
-                                fields={tabsFields[activeTab].fields}
+                <Box component='form' noValidate onSubmit={formik.handleSubmit}>
+                    {section(
+                        'Who is it?',
+                        'The guest who enquired.',
+                        <Box sx={columns}>
+                            <LeadField formik={formik} name='fullName' label='Full name' required />
+                            <LeadField
                                 formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                submitting={createLeadLKey || updateLeadLKey}
-                                submitButtonText={formId ? 'Update Lead' : 'Create Lead'}
-                                submitButtonSx={{ textAlign: 'right', marginTop: 2 }}
-                                showSeparaterBorder={false}
+                                name='phone'
+                                label='Phone number'
+                                type='tel'
+                                required
+                                placeholder='98765 43210 or +44 7911 123456'
+                                helperText='10 digits for India, or the full number with country code'
+                            />
+                            <LeadField
+                                formik={formik}
+                                name='senderEmail'
+                                label='Email (optional)'
+                                type='email'
+                                helperText='Needed later to email the quotation'
+                                wide
                             />
                         </Box>
-                    </Box>
-                </Grid>
+                    )}
 
-                <Grid item xs={12} md={6} lg={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
-                    />
-                </Grid>
-            </Grid>
+                    {section(
+                        'What are they asking about?',
+                        'All optional — it helps the quotation later.',
+                        <Box sx={columns}>
+                            <LeadField formik={formik} name='campaignId' label='Campaign' select>
+                                <MenuItem value=''>None</MenuItem>
+                                {campaignOptions.map(option => (
+                                    <MenuItem key={option.value} value={String(option.value)}>
+                                        {option.label}
+                                    </MenuItem>
+                                ))}
+                            </LeadField>
+                            <LeadField formik={formik} name='leadSource' label='How did they reach you?' select>
+                                {LEAD_SOURCES.map(source => (
+                                    <MenuItem key={source.value} value={source.value}>
+                                        {source.label}
+                                    </MenuItem>
+                                ))}
+                            </LeadField>
+                            <LeadField
+                                formik={formik}
+                                name='remarks'
+                                label='Notes'
+                                placeholder='Anything the guest said'
+                                multiline
+                                wide
+                            />
+                        </Box>
+                    )}
+
+                    {section(
+                        'Who follows up?',
+                        'The lead goes to the person you choose, and can have a call reminder.',
+                        <Box sx={columns}>
+                            <LeadField
+                                formik={formik}
+                                name='assignedTo'
+                                label='Assigned to'
+                                helperText='Yourself, unless you choose someone else'
+                                select
+                            >
+                                <MenuItem value=''>Me</MenuItem>
+                                {userOptions.map(option => (
+                                    <MenuItem key={option.value} value={String(option.value)}>
+                                        {option.label}
+                                    </MenuItem>
+                                ))}
+                            </LeadField>
+                            <LeadField
+                                formik={formik}
+                                name='followupdate'
+                                label='Schedule a call (optional)'
+                                type='datetime-local'
+                            />
+                            <LeadField
+                                formik={formik}
+                                name='followupremarks'
+                                label='What to discuss on the call'
+                                placeholder='Optional'
+                                wide
+                            />
+                        </Box>
+                    )}
+
+                    <Stack direction='row' spacing={1.5} justifyContent='flex-end'>
+                        <Button onClick={() => navigate(-1)} disabled={saving}>
+                            Cancel
+                        </Button>
+                        <Button
+                            type='submit'
+                            variant='contained'
+                            disabled={saving}
+                            startIcon={saving ? <CircularProgress size={16} color='inherit' /> : null}
+                        >
+                            {formId ? 'Save changes' : 'Create lead'}
+                        </Button>
+                    </Stack>
+                </Box>
+            </Box>
         </MainCard>
     )
 }

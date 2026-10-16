@@ -1,3 +1,5 @@
+import { createdColumn, statusColumn } from '../campaignCatalog/catalogFacts'
+
 export const headers = [
     {
         id: 0,
@@ -15,7 +17,7 @@ export const headers = [
     {
         id: 1,
         label: 'Campaign Title',
-        search: true,
+        search: false,
         sort: false,
         stick: true,
         key: 'title',
@@ -26,14 +28,16 @@ export const headers = [
     {
         id: 2,
         label: 'Campaign Description',
-        search: true,
+        search: false,
         sort: false,
         stick: true,
         key: 'description',
         visible: true,
         minWidth: 8,
         maxWidth: 8
-    }
+    },
+    statusColumn,
+    createdColumn('createdAt')
 ]
 
 export default headers

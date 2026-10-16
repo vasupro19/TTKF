@@ -16,56 +16,32 @@ import {
     CircularProgress
 } from '@mui/material'
 import { Eye, Mail, PhoneCall } from 'lucide-react'
-import { useSelector } from 'react-redux'
-import MainCard from '@core/components/extended/MainCard'
-import DataTable from '@core/components/extended/table/Table'
-import { useGetJobCandidatesQuery, useUpdateJobCandidateMutation } from '@/app/store/slices/api/jobSlice'
+import { useDispatch, useSelector } from 'react-redux'
+import { openSnackbar } from '@app/store/slices/snackbar'
+import ListPage from '@core/listing/ListPage'
+import { getJobCandidates, useUpdateJobCandidateMutation } from '@/app/store/slices/api/jobSlice'
 import { headers } from './helper'
+import { CANDIDATE_STATUSES, STATUS_FILTER, candidateRow, statusColor } from './candidateFacts'
+
+const FILTERS = [STATUS_FILTER]
+
+// ? the table's rows: the applicant's details, and the status as a coloured chip
+const rowsOf = rows =>
+    rows.map(item => ({
+        ...candidateRow(item),
+        statusLabel: <Chip label={item.status} color={statusColor(item.status)} size='small' />
+    }))
 
 export default function JobCandidates() {
+    const dispatch = useDispatch()
     const user = useSelector(state => state.auth.user)
     const [selectedCandidate, setSelectedCandidate] = useState(null)
     const [openModal, setOpenModal] = useState(false)
     const [status, setStatus] = useState('')
     const [remarks, setRemarks] = useState('')
-    const [columns] = useState([...headers])
+    const [reloadSignal, setReloadSignal] = useState(0)
     const clientId = user?.clientId
-    const getStatusColor = val => {
-        switch (val) {
-            case 'Pending':
-                return 'warning'
-            case 'Viewed':
-                return 'info'
-            case 'Call Scheduled':
-                return 'success'
-            case 'Selected':
-                return 'success'
-            case 'Rejected':
-                return 'error'
-            case 'Closed':
-                return 'default'
-            default:
-                return 'default'
-        }
-    }
-    const { data: candidatesResponse, isLoading } = useGetJobCandidatesQuery(
-        clientId ? `?clientId=${clientId}` : undefined,
-        {
-            skip: !clientId
-        }
-    )
     const [updateJobCandidate, { isLoading: actionLoading }] = useUpdateJobCandidateMutation()
-    const candidates =
-        candidatesResponse?.data?.map(item => ({
-            ...item,
-            fullName: item.jobApplication?.fullName || '-',
-            email: item.jobApplication?.email || '-',
-            phone: item.jobApplication?.phone || '-',
-            createdAt: item.jobApplication?.createdAt
-                ? new Date(item.jobApplication.createdAt).toLocaleDateString()
-                : '-',
-            statusLabel: <Chip label={item.status} color={getStatusColor(item.status)} size='small' />
-        })) || []
 
     const handleOpenModal = candidate => {
         setSelectedCandidate(candidate)
@@ -83,17 +59,18 @@ export default function JobCandidates() {
                 remarks
             }).unwrap()
             setOpenModal(false)
+            setReloadSignal(value => value + 1)
         } catch (err) {
-            console.error('Failed to update candidate', err)
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: err?.data?.message || 'Could not update this candidate',
+                    variant: 'alert',
+                    alert: { color: 'error' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            )
         }
-    }
-
-    if (isLoading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
-                <CircularProgress />
-            </Box>
-        )
     }
 
     if (!clientId) {
@@ -114,34 +91,35 @@ export default function JobCandidates() {
     }
 
     return (
-        <MainCard content={false}>
-            <Box sx={{ p: 3 }}>
-                <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant='h5' sx={{ fontWeight: 700, color: '#1a2535' }}>
-                        Job Candidates
-                    </Typography>
-                    <Chip
-                        label={user?.client?.name || `Client #${clientId}`}
-                        sx={{ bgcolor: '#eef6ff', color: '#1c2d45', fontWeight: 700 }}
-                    />
-                </Box>
-
-                <DataTable
-                    data={candidates}
-                    columns={columns}
-                    queryHandler={async () => true}
-                    totalRecords={candidates.length}
-                    isCheckbox={false}
-                    isLoading={isLoading}
-                    renderAction={row => (
-                        <Tooltip title='Review candidate'>
-                            <IconButton size='small' onClick={() => handleOpenModal(row)}>
-                                <Eye size={16} />
-                            </IconButton>
-                        </Tooltip>
-                    )}
-                />
-            </Box>
+        <>
+            <ListPage
+                title='Job Candidates'
+                subtitle={`People who applied to ${user?.clientName || user?.client?.name || 'your company'}, and where each one stands.`}
+                noun='candidates'
+                searchPlaceholder='Search name, email or phone'
+                headers={headers}
+                endpoint={getJobCandidates}
+                baseParams={{ clientId }}
+                reqKey='getJobCandidatesKey'
+                filters={FILTERS}
+                rowsOf={rowsOf}
+                csvName='job-candidates'
+                canAdd={false}
+                emptyTitle='No candidates yet'
+                emptyText='People who apply for a job with you will show up here, with their status.'
+                reloadSignal={reloadSignal}
+                renderAction={row => (
+                    <Tooltip title='Review candidate'>
+                        <IconButton
+                            size='small'
+                            aria-label={`Review ${row.fullName}`}
+                            onClick={() => handleOpenModal(row)}
+                        >
+                            <Eye size={16} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            />
 
             {/* Action Modal */}
             <Dialog
@@ -209,13 +187,11 @@ export default function JobCandidates() {
                                 sx={{ mt: 2 }}
                                 disabled={selectedCandidate.status === 'Closed'}
                             >
-                                {['Pending', 'Viewed', 'Call Scheduled', 'Selected', 'Rejected', 'Closed'].map(
-                                    option => (
-                                        <MenuItem key={option} value={option}>
-                                            {option}
-                                        </MenuItem>
-                                    )
-                                )}
+                                {CANDIDATE_STATUSES.map(option => (
+                                    <MenuItem key={option} value={option}>
+                                        {option}
+                                    </MenuItem>
+                                ))}
                             </TextField>
 
                             <TextField
@@ -246,6 +222,6 @@ export default function JobCandidates() {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </MainCard>
+        </>
     )
 }

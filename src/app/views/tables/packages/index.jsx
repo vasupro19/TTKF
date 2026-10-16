@@ -1,415 +1,129 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-
-import { Box, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
-import Stack from '@mui/material/Stack'
-import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
-
-import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
-// project imports
-import MainCard from '@core/components/extended/MainCard'
-import DataTable from '@core/components/extended/table/Table'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { IconButton, Tooltip } from '@mui/material'
+import { EventNote } from '@mui/icons-material'
+import { useSelector } from 'react-redux'
+import { useNavigate, useParams } from 'react-router-dom'
+import ListPage from '@core/listing/ListPage'
 import CustomButton from '@core/components/extended/CustomButton'
-import { CSVExport } from '@/core/components/extended/CreateCSV'
-import CustomSearchTextField from '@/core/components/extended/CustomSearchTextField'
-import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
-import { openSnackbar } from '@app/store/slices/snackbar'
-
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
 import { getPackageClients, useDeletePackageClientMutation } from '@/app/store/slices/api/packageSlice'
-
-import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
-
-// import { getObjectKeys, toCapitalizedWords } from '@/utilities'
-// import { Typography } from '@mui/material'
-import ToggleColumns from '@/core/components/ToggleColumns'
-
-import { TOGGLE_ALL, isExcelQuery } from '@/constants'
 import UiAccessGuard from '@/app/guards/UiPermissionGuard'
-import ConfirmModal from '@/core/components/modals/ConfirmModal'
-import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
+import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
+import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
-// const slimTextFieldStyle = {
-//     '& .MuiInputBase-input': {
-//         fontSize: 12,
-//         height: 8,
-//         padding: 1
-//     }
-// }
 
+const FILTERS = [
+    STATUS_FILTER,
+    {
+        key: 'plan',
+        label: 'Day-by-day plan',
+        width: 170,
+        options: [
+            { value: 'planned', label: 'Has days planned' },
+            { value: 'empty', label: 'No days yet' }
+        ]
+    }
+]
+
+// ? the ready-made packages of a campaign; a package's name opens its day-by-day plan
 function MasterPackagesTable() {
-    const [anchorEl, setAnchorEl] = useState(null)
-    const params = useParams()
+    const { id: campaignId } = useParams()
     const navigate = useNavigate()
-    const dispatch = useDispatch()
-    const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
-    const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, deletePackageClientLKey } = useSelector(state => state.loading)
-    const [deletePackageClient] = useDeletePackageClientMutation()
+    const campaignName = useCampaignName(campaignId)
+    const removing = Boolean(useSelector(state => state.loading?.deletePackageClientLKey))
+    const [deletePackage] = useDeletePackageClientMutation()
+    const [reload, setReload] = useState(0)
 
-    const [columns, setColumns] = useState([...headers])
-    const [users, setUsers] = useState([])
-    const [recordsCount, setRecordsCount] = useState(0)
-    const [excelHandler, setExcelHandler] = useState(false)
-    const [removeId, setRemoveId] = useState(null)
-
-    const [isShowClearButton, setIsShowClearButton] = useState(false)
-    const [clearAllFilters, setClearAllFilters] = useState(false)
-    const [refetch, setRefetch] = useState(false)
-    // const [getDestinationClient] = useGetDestinationClientsQuery()
-
-    const [search, setSearch] = useState({
-        // value: '',
-        // regex: false
-    })
-    const [filters, setFilters] = useState({
-        created_at: { from: '', to: '' },
-        campaignId: params.id
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/master/packages/edit/${id}`), [])
-
-    const handleExcelClick = () => {
-        setExcelHandler(true)
-        setTimeout(() => setExcelHandler(false), 1000)
-    }
-    const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getPackageClients.initiate(queryString, false))
-        if (isExcelQuery(queryString)) {
-            return true
-        }
-        console.log(response.data)
-        // const result = response.data.map(item => {
-        //     return { ...response.data, url: `/package/activities/:${item.id}` };
-        // })
-        setUsers(response?.data || [])
-        setRecordsCount(response?.count || 0)
-        return true
-    }
-
-    const clearFilters = () => {
-        setSearch({
-            value: '',
-            regex: false
-        })
-        setFilters({ created_at: { from: '', to: '' } })
-    }
-    const viewPackageItenary = row => {
-        console.log(row, 'row')
-        navigate(`/package/activities/${row.id}`)
-    }
-    const deleteHandler = useCallback(async id => {
-        setRemoveId(id)
-        dispatch(
-            openModal({
-                type: 'confirm_modal'
-            })
-        )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-
-    const deleteActionHandler = async () => {
-        try {
-            await deletePackageClient(removeId).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Package deleted successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
-        } catch (reqError) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: reqError?.data?.message || 'Unable to delete package!',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        } finally {
-            dispatch(closeModal())
-        }
-    }
-
-    // column toggler
-    const handleCheckToggle = key => {
-        setColumns([
-            ...columns.map(item => {
-                if (key === TOGGLE_ALL) return { ...item, visible: true }
-                if (key === item.key) return { ...item, visible: !item.visible }
-                return item
-            })
-        ])
-    }
-
-    const enhancedColumns = useMemo(
-        () =>
-            columns.map(col =>
-                col.key === 'name'
-                    ? {
-                          ...col,
-                          isClickable: true,
-                          onClick: row => viewPackageItenary(row)
-                      }
-                    : col
-            ),
-        [columns]
+    const goTo = useRef(navigate)
+    goTo.current = navigate
+    const openPlan = useCallback(
+        row => {
+            const owner = row?.campaignId || campaignId
+            if (owner && row?.id) goTo.current(`/package/activities/${owner}/${row.id}`)
+        },
+        [campaignId]
+    )
+    // ? the package name is a link to its day-by-day plan
+    const columns = useMemo(
+        () => headers.map(column => (column.key === 'name' ? { ...column, onClick: row => openPlan(row) } : column)),
+        [openPlan]
     )
 
-    const handleAdd = () => {
-        navigate('/master/packages/add', {
-            state: { campaignId: params.id }
-        })
-    }
-
-    const handleWizardAdd = () => {
-        navigate('/master/packages/wizard', {
-            state: { campaignId: params.id }
-        })
-    }
-
-    const menuOptions = useMemo(
-        () => [
-            {
-                label: 'Edit',
-                icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
-                onClick: row => editHandler(row.id, row),
-                condition: row => hasEditAccess
-            },
-            {
-                label: 'Delete',
-                icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
-                onClick: row => deleteHandler(row.id, row),
-                condition: row => hasEditAccess
-            }
-        ],
-        [editHandler, deleteHandler, hasEditAccess]
+    const wizard = useCallback(
+        () => navigate('/master/packages/wizard', { state: { campaignId } }),
+        [navigate, campaignId]
     )
-
-    useEffect(() => {
-        setRefetch(true)
-        setTimeout(() => setRefetch(false), 500)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname])
-
-    // use keyboard shortcut
     useKeyboardShortcut('Alt+A', () => {
-        if (hasCreateAccess) {
-            handleAdd()
-        }
+        if (hasCreateAccess) wizard()
     })
 
-    const addActivityHandler = row => {
-        const campaignId = row?.campaignId || params.id
-        if (!campaignId || !row?.id) return
-        navigate(`/package/activities/${campaignId}/${row.id}`)
-    }
+    const { ask, confirmProps } = useDeleteFlow({
+        noun: 'Package',
+        nameOf: row => row?.name,
+        loading: removing,
+        remove: id => deletePackage(id).unwrap(),
+        done: () => setReload(count => count + 1)
+    })
 
     return (
-        <ContextMenuProvider>
-            <MainCard content={false} sx={{ py: '2px' }}>
-                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                        <Typography variant='h3'>All Packages</Typography>
-                    </Box>
-                    <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
-                        {/* add your custom filters here */}
-                        {isShowClearButton && (
-                            <CustomButton
-                                variant='text'
-                                customStyles={{
-                                    color: 'error.main',
-                                    '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
-                                }}
-                                startIcon={<FilterAltOff />}
-                                onClick={() => {
-                                    setClearAllFilters(prev => !prev)
-                                }}
-                            >
-                                Clear All Filters
-                            </CustomButton>
-                        )}
-                        {/* <CustomSearchTextField
-                            search={search}
-                            setSearch={setSearch}
-                            placeholder='Search locations...'
-                        />
-                        {/* // Example for "From" date */}
-                        {/* <CustomSearchDateField
-                            type='from'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='From date'
-                            label='From'
-                        /> */}
-                        {/* </Box> */}
-
-                        {/* // Example for "To" date */}
-                        {/* <CustomSearchDateField
-                            type='to'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='To date'
-                            label='To'
-                        />  */}
-                        {/* <TextField
-                        placeholder='search data'
-                        size='small'
-                        type='search'
-                        sx={{
-                            '& .MuiInputBase-input': {
-                                fontSize: 12
-                            },
-                            '& .MuiOutlinedInput-root': {
-                                '& fieldset': {
-                                    borderColor: 'primary.800',
-                                    borderWidth: '1.2px'
-                                },
-                                '&:hover fieldset': {
-                                    borderColor: 'primary.main'
-                                },
-                                '&.Mui-focused fieldset': {
-                                    borderColor: 'primary.main'
-                                }
-                                // padding: '0px 4px'
-                            },
-                            '& .MuiInputBase-inputSizeSmall': {
-                                padding: '3px 6px !important'
-                            }
-                        }}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') setSearch({ ...search, value: e.target.value })
-                        }}
-                    /> */}
-                        {/* <TextField
-                        placeholder='from date'
-                        size='small'
-                        type='date'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.from}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, from: `${e.target.value} 00:00:00` }
-                            })
-                        }
-                    /> */}
-                        {/* <TextField
-                        placeholder='To Date'
-                        type='date'
-                        size='small'
-                        sx={slimTextFieldStyle}
-                        defaultValue={filters?.created_at?.to}
-                        onChange={e =>
-                            setFilters({
-                                ...filters,
-                                created_at: { ...filters.created_at, to: `${e.target.value} 23:59:59` }
-                            })
-                        }
-                    /> */}
-                        <UiAccessGuard>
-                            <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard>
+        <>
+            <ListPage
+                title='Packages'
+                subtitle={scopedSubtitle(
+                    'The ready-made packages you quote from. Click a name to open its day-by-day plan.',
+                    campaignName
+                )}
+                noun='packages'
+                searchPlaceholder='Search package or campaign name'
+                headers={columns}
+                endpoint={getPackageClients}
+                baseParams={{ campaignId }}
+                reqKey='getPackagesListKey'
+                filters={FILTERS}
+                csvName='packages'
+                canAdd
+                addLabel='Quick Wizard'
+                onAdd={wizard}
+                reloadSignal={reload}
+                emptyText='Build a package with the Quick Wizard: pick the destinations and day plans, and it is ready to quote.'
+                extraActions={
+                    <>
+                        <BackToCampaigns />
                         <UiAccessGuard type='create'>
-                            <Stack direction='row' spacing={1}>
-                                <CustomButton variant='clickable' onClick={handleWizardAdd}>
-                                    Quick Wizard <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
-                                </CustomButton>
-                                <CustomButton variant='outlined' onClick={handleAdd}>
-                                    Classic Add
-                                </CustomButton>
-                            </Stack>
+                            <CustomButton
+                                variant='outlined'
+                                onClick={() => navigate('/master/packages/add', { state: { campaignId } })}
+                            >
+                                Classic Add
+                            </CustomButton>
                         </UiAccessGuard>
-
-                        {/* render action column can be made dynamic based on user authorization  */}
-                        <ToggleColumns columns={columns} handler={handleCheckToggle} />
-                    </Stack>
-                </Box>
-                <DataTable
-                    isCheckbox
-                    data={users || []}
-                    columns={enhancedColumns}
-                    queryHandler={queryHandler}
-                    reqKey='getLocationMasterLKey'
-                    refetch={refetch}
-                    globalSearch={search}
-                    globalFilters={filters}
-                    clearFilters={clearFilters}
-                    addExcelQuery={excelHandler}
-                    totalRecords={recordsCount}
-                    renderAction={row => (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                            {/* NEW: Add Activity Button */}
+                    </>
+                }
+                renderAction={row => (
+                    <CatalogRowActions
+                        label={row.name}
+                        onEdit={() => navigate(`/master/packages/edit/${row.id}`)}
+                        onDelete={() => ask(row)}
+                        before={
                             <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'info.main' }}
-                                    size='small'
-                                    aria-label='add activity'
-                                    onClick={() => addActivityHandler(row)}
-                                >
-                                    <Tooltip title='Add Activity'>
-                                        {/* Assuming you have the 'Add' icon imported from @mui/icons-material or similar */}
-                                        <Add fontSize='small' sx={{ fill: '#60498a' }} />
-                                    </Tooltip>
-                                </IconButton>
+                                <Tooltip title='Day-by-day plan'>
+                                    <IconButton
+                                        size='small'
+                                        aria-label={`Day-by-day plan of ${row.name}`}
+                                        onClick={() => openPlan(row)}
+                                    >
+                                        <EventNote fontSize='small' sx={{ fill: '#60498a' }} />
+                                    </IconButton>
+                                </Tooltip>
                             </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'success.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => editHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Edit'>
-                                        <Edit fontSize='small' sx={{ fill: '#60498a' }} />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => deleteHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Delete'>
-                                        <Delete fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                        </Box>
-                    )}
-                    setIsShowClearButton={setIsShowClearButton}
-                    clearAllFilters={clearAllFilters}
-                    isLoading={getLocationMasterLKey}
-                    enableContextMenu
-                />
-                <PopperContextMenu options={menuOptions} />
-                <ConfirmModal
-                    title='Delete Package'
-                    message={
-                        <>
-                            Are you sure you want to delete this package:{' '}
-                            <strong>{users?.find(user => user?.id === removeId)?.name || 'Unknown'}</strong>?
-                        </>
-                    }
-                    icon='warning'
-                    confirmText='Yes, Delete'
-                    customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={deleteActionHandler}
-                    isLoading={deletePackageClientLKey}
-                />
-            </MainCard>
-        </ContextMenuProvider>
+                        }
+                    />
+                )}
+            />
+            <DeleteConfirm flow={confirmProps} />
+        </>
     )
 }
 

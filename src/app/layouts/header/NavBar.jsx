@@ -145,7 +145,15 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                         <NavigateBreadcrumbs breadcrumbData={breadcrumbData} />
                         <AnimatePresence>{showFloatingTab && <FloatingTab activeTab={activeTab} />}</AnimatePresence>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexShrink: 0, alignItems: 'center' }}>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                            flexShrink: 0,
+                            alignItems: 'center'
+                        }}
+                    >
                         <NotificationMenu notifications={notifications} onDelete={handleDeleteNotification} />
 
                         <GeneralNotification
@@ -164,8 +172,21 @@ function NavBar({ sidebarOffset = 0, onOpenSidebar }) {
                             aria-label='Account'
                             onClick={() => handleMenuOpen('profile', profileButtonRef)}
                         >
-                            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
-                                {user?.name ? user.name.charAt(0).toUpperCase() : <AccountCircleIcon fontSize='small' />}
+                            <Avatar
+                                sx={{
+                                    width: 32,
+                                    height: 32,
+                                    bgcolor: 'primary.light',
+                                    color: '#fff',
+                                    fontSize: '14px',
+                                    fontWeight: 600
+                                }}
+                            >
+                                {user?.name ? (
+                                    user.name.charAt(0).toUpperCase()
+                                ) : (
+                                    <AccountCircleIcon fontSize='small' />
+                                )}
                             </Avatar>
                         </IconButton>
                     </Box>

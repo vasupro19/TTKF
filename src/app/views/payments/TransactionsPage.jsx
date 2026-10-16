@@ -38,6 +38,9 @@ function TransactionsPage() {
         <MainCard content={false} sx={{ py: '2px' }}>
             <Box sx={{ px: 2, pt: 2 }}>
                 <Typography variant='h3'>Transactions</Typography>
+                <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                    Guest payments to verify, payments made to suppliers, and what each supplier is still owed.
+                </Typography>
                 <Tabs
                     value={tab}
                     onChange={(event, value) => setParams(value === 'guest' ? {} : { tab: value }, { replace: true })}

@@ -34,7 +34,8 @@ export const isValidDateString = str => {
     // - YYYY-MM-DD
     // - YYYY-MM-DDTHH:mm
     // - YYYY-MM-DDTHH:mm:ss
-    const isoRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/
+    // - the same with milliseconds and a Z or +05:30 (what the API sends: 2026-10-14T08:09:48.848Z)
+    const isoRegex = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})?)?$/
 
     if (!isoRegex.test(isoStr)) return false
 

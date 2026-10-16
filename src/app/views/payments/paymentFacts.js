@@ -107,13 +107,14 @@ export const toFormData = payload => {
 }
 
 /** @description the list's query string: only the filters that are set */
-export const paymentsQuery = ({ status, from, to, method, type, q, page = 1, pageSize = 25 } = {}) => {
+export const paymentsQuery = ({ status, from, to, method, type, recordedBy, q, page = 1, pageSize = 25 } = {}) => {
     const params = new URLSearchParams()
     if (status && status !== 'ALL') params.set('status', status)
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     if (method) params.set('method', method)
     if (type) params.set('type', type)
+    if (recordedBy) params.set('recordedBy', String(recordedBy))
     if (q && String(q).trim()) params.set('q', String(q).trim())
     params.set('page', String(page))
     params.set('pageSize', String(pageSize))

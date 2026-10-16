@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     CAMPAIGN_EVENT,
     activeKeyFor,
+    agencyLogoFor,
     agencyNameFor,
     buildSections,
     campaignIdFromPath,
@@ -202,5 +203,14 @@ describe('agencyNameFor', () => {
         expect(agencyNameFor({ clientId: 5, clientName: 'Acme Tours' })).toBe('Acme Tours')
         expect(agencyNameFor({ clientId: null })).toBe('Platform admin')
         expect(agencyNameFor(null)).toBe('')
+    })
+})
+
+describe('agencyLogoFor', () => {
+    it('is the agency’s logo for an agency user, and nothing for the platform admin or a user without one', () => {
+        expect(agencyLogoFor({ clientId: 5, clientLogo: 'http://x.test/l.png' })).toBe('http://x.test/l.png')
+        expect(agencyLogoFor({ clientId: 5 })).toBe('')
+        expect(agencyLogoFor({ clientLogo: 'http://x.test/l.png' })).toBe('')
+        expect(agencyLogoFor(null)).toBe('')
     })
 })

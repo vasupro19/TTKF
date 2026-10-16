@@ -15,8 +15,11 @@ import {
 import { useDispatch } from 'react-redux'
 import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 import { openSnackbar } from '@app/store/slices/snackbar'
-import { HOTEL_TIERS, formatRupees } from './quote/quoteDays'
+import useQuoteGst from '@views/gst/useQuoteGst'
+import QuoteGstControl from '@views/gst/QuoteGstControl'
+import { computeTax, money } from '@views/gst/gstFacts'
 import { PER_PERSON, TOTAL, groupPrice, guestsLabel, priceBasisOf } from './quote/pricing'
+import { HOTEL_TIERS, formatRupees } from './quote/quoteDays'
 
 // ? the API stores Decimals; "12500.00" reads better as "12500" in a box the agent types into
 const asInput = value => {
@@ -34,7 +37,10 @@ const fromPriceData = data =>
  */
 function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = '', people = 0 }) {
     const dispatch = useDispatch()
-    const [savePrices, { isLoading: saving }] = useUpsertGuestTourPriceMutation()
+    const [savePrices, { isLoading: savingPrices }] = useUpsertGuestTourPriceMutation()
+    // ? how this quote charges GST: saved with the prices, shown in each box
+    const gst = useQuoteGst(tourId, quotationNo, { skip: activeTab !== 1 })
+    const saving = savingPrices || gst.saving
     const { data: price, isFetching } = useGetGuestTourPriceQuery(
         { leadId: tourId, quotationNo },
         { skip: activeTab !== 1 || !tourId || !quotationNo }
@@ -55,11 +61,25 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
 
     const hasAny = HOTEL_TIERS.some(tier => prices[tier.priceKey])
     const unsaved =
-        basis !== savedBasis || HOTEL_TIERS.some(tier => prices[tier.priceKey] !== savedPrices[tier.priceKey])
+        gst.unsaved ||
+        basis !== savedBasis ||
+        HOTEL_TIERS.some(tier => prices[tier.priceKey] !== savedPrices[tier.priceKey])
 
-    // ? under each box: what the guest pays, and what that comes to for the group
+    // ? under each box: what the guest pays — with the GST when the quote charges it — and what that comes to for the group
     const helperFor = amount => {
         const shown = formatRupees(amount)
+        const { rate } = gst.tax
+        if (rate > 0 && Number(amount) > 0) {
+            // ? the group's GST is worked out on the group's price, as the quotation does
+            const unit = computeTax({ amount, ...gst.tax })
+            const group = computeTax({ amount: basis === TOTAL ? amount : Number(amount) * people, ...gst.tax })
+            const note =
+                gst.tax.mode === 'exclusive'
+                    ? `${money(unit.total)} with ${rate}% GST`
+                    : `GST ${money(unit.gst)} included`
+            if (basis === TOTAL) return `${note} · for the group`
+            return people > 1 ? `${note} per person · ${money(group.total)} for ${people}` : `${note} per person`
+        }
         if (basis === TOTAL) return shown ? `${shown} for the group` : 'for the whole group'
         if (!shown) return 'per person'
         return people > 1
@@ -68,6 +88,8 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
     }
 
     const handleSave = async () => {
+        // ? the GST first: the prices the quote is then saved with are the ones it will be shown with
+        if (!(await gst.save())) return
         try {
             const saved = await savePrices({ leadId: tourId, quotationNo, priceBasis: basis, ...prices }).unwrap()
             setSavedPrices(prices)
@@ -126,6 +148,7 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
                         : 'Add the guests in trip details to see group totals'}
                 </Typography>
             </Stack>
+            <QuoteGstControl gst={gst} quotationNo={quotationNo} />
             <Grid container spacing={2}>
                 {HOTEL_TIERS.map(tier => (
                     <Grid item xs={6} md={3} key={tier.priceKey}>

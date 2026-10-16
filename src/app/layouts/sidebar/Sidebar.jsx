@@ -3,7 +3,6 @@ import PropTypes from 'prop-types'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
-    Avatar,
     Box,
     Collapse,
     Divider,
@@ -39,12 +38,14 @@ import {
     SIDEBAR_RAIL_WIDTH,
     SIDEBAR_WIDTH,
     activeKeyFor,
+    agencyLogoFor,
     agencyNameFor,
     buildSections,
     campaignSubItemUrl,
     isCampaignSubKey
 } from './navModel'
 import useCampaignChoice from './useCampaignChoice'
+import BrandMark from '../../views/company/BrandMark'
 
 const itemSx = (theme, { active, nested, collapsed }) => ({
     minHeight: 40,
@@ -369,6 +370,7 @@ export function SidebarContent({ collapsed = false, onToggleCollapsed, onNavigat
     const sections = useMemo(() => buildSections(menuItems), [menuItems])
     const activeKey = activeKeyFor(pathname, sections)
     const agencyName = agencyNameFor(user)
+    const agencyLogo = agencyLogoFor(user)
 
     return (
         <Box
@@ -403,25 +405,29 @@ export function SidebarContent({ collapsed = false, onToggleCollapsed, onNavigat
                             color: 'text.primary'
                         }}
                     >
-                        <Avatar
-                            variant='rounded'
-                            sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '15px', fontWeight: 600 }}
-                        >
-                            {(agencyName || 'T').trim().charAt(0).toUpperCase()}
-                        </Avatar>
+                        <BrandMark name={agencyName} logo={agencyLogo} size={collapsed ? 36 : 40} />
                         {!collapsed && (
-                            <Typography
-                                data-testid='sidebar-agency'
-                                sx={{
-                                    fontSize: '15px',
-                                    fontWeight: 600,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                }}
-                            >
-                                {agencyName}
-                            </Typography>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                    data-testid='sidebar-agency'
+                                    sx={{
+                                        fontSize: '15px',
+                                        fontWeight: 600,
+                                        lineHeight: 1.25,
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}
+                                >
+                                    {agencyName}
+                                </Typography>
+                                <Typography
+                                    color='text.secondary'
+                                    sx={{ fontSize: '11.5px', lineHeight: 1.3, letterSpacing: '0.02em' }}
+                                >
+                                    Travel CRM
+                                </Typography>
+                            </Box>
                         )}
                     </Box>
                 </RailTooltip>

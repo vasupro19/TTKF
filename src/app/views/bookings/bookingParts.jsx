@@ -36,7 +36,20 @@ const visuallyHidden = {
 
 export function Section({ id, title, action = null, children }) {
     return (
-        <Box component='section' id={id} aria-labelledby={`${id}-title`} sx={{ mb: 5, scrollMarginTop: 88 }}>
+        <Box
+            component='section'
+            id={id}
+            aria-labelledby={`${id}-title`}
+            sx={{
+                mb: 2.5,
+                scrollMarginTop: 88,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 2,
+                p: { xs: 2, sm: 2.5 },
+                bgcolor: 'background.paper'
+            }}
+        >
             <Stack
                 direction='row'
                 justifyContent='space-between'
@@ -73,21 +86,42 @@ export function StepsBar({ progress }) {
             aria-label='Booking progress'
         >
             {STEPS.map(step => (
-                <Stack component='li' key={step.key} direction='row' spacing={0.75} alignItems='center'>
-                    {progress[step.key] ? (
-                        <CheckCircle sx={{ fontSize: 18, color: 'success.main' }} />
-                    ) : (
-                        <RadioButtonUnchecked sx={{ fontSize: 18, color: 'text.disabled' }} />
-                    )}
-                    <Typography
-                        sx={{ fontSize: '0.875rem', color: progress[step.key] ? 'text.primary' : 'text.secondary' }}
+                <Box component='li' key={step.key}>
+                    {/* ? a step is a shortcut to the part of the page where it gets done */}
+                    <Box
+                        component='a'
+                        href={`#${step.section}`}
+                        onClick={event => {
+                            event.preventDefault()
+                            document.getElementById(step.section)?.scrollIntoView?.({ behavior: 'smooth' })
+                        }}
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.75,
+                            px: 1.25,
+                            py: 0.5,
+                            borderRadius: 5,
+                            textDecoration: 'none',
+                            bgcolor: progress[step.key] ? 'success.lighter' : 'action.hover',
+                            '&:hover': { bgcolor: 'action.selected' }
+                        }}
                     >
-                        {step.label}
-                        <Box component='span' sx={visuallyHidden}>
-                            {progress[step.key] ? ' — done' : ' — to do'}
-                        </Box>
-                    </Typography>
-                </Stack>
+                        {progress[step.key] ? (
+                            <CheckCircle sx={{ fontSize: 18, color: 'success.main' }} />
+                        ) : (
+                            <RadioButtonUnchecked sx={{ fontSize: 18, color: 'text.disabled' }} />
+                        )}
+                        <Typography
+                            sx={{ fontSize: '0.875rem', color: progress[step.key] ? 'text.primary' : 'text.secondary' }}
+                        >
+                            {step.label}
+                            <Box component='span' sx={visuallyHidden}>
+                                {progress[step.key] ? ' — done' : ' — to do'}
+                            </Box>
+                        </Typography>
+                    </Box>
+                </Box>
             ))}
         </Stack>
     )

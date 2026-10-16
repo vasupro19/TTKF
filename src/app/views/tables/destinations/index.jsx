@@ -1,383 +1,151 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-
-import { Box, Button, IconButton, Tooltip, Menu, MenuItem, Typography } from '@mui/material'
-import Stack from '@mui/material/Stack'
-// import Box from '@mui/material/Box'
-// import Tooltip from '@mui/material/Tooltip'
-// import IconButton from '@mui/material/IconButton'
-// import TextField from '@mui/material/TextField'
-import { Add, Edit, Delete, FilterAltOff, MoreVert } from '@mui/icons-material'
+import { useCallback, useState } from 'react'
+import { Button } from '@mui/material'
 import * as XLSX from 'xlsx'
-
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useLocation, useParams } from 'react-router-dom'
-// project imports
-import MainCard from '@core/components/extended/MainCard'
-import DataTable from '@core/components/extended/table/Table'
-import CustomButton from '@core/components/extended/CustomButton'
-import { CSVExport } from '@/core/components/extended/CreateCSV'
-import CustomSearchTextField from '@/core/components/extended/CustomSearchTextField'
-import CustomSearchDateField from '@/core/components/extended/CustomSearchDateField'
+import { useNavigate, useParams } from 'react-router-dom'
+import ListPage from '@core/listing/ListPage'
 import { openSnackbar } from '@app/store/slices/snackbar'
-
-import { getCampaigns, removeLocationMaster } from '@/app/store/slices/api/campaignSlice'
 import {
     getDestinationClients,
     useDeleteDestinationClientMutation,
     useUploadDestinationsMutation
 } from '@/app/store/slices/api/destinationSlice'
-
-import { ContextMenuProvider, PopperContextMenu } from '@/core/components/RowContextMenu'
-
-// import { getObjectKeys, toCapitalizedWords } from '@/utilities'
-// import { Typography } from '@mui/material'
-import ToggleColumns from '@/core/components/ToggleColumns'
-
-import { TOGGLE_ALL, isExcelQuery } from '@/constants'
 import UiAccessGuard from '@/app/guards/UiPermissionGuard'
-import ConfirmModal from '@/core/components/modals/ConfirmModal'
-import { closeModal, openModal } from '@/app/store/slices/modalSlice'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
+import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
+import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
-// const slimTextFieldStyle = {
-//     '& .MuiInputBase-input': {
-//         fontSize: 12,
-//         height: 8,
-//         padding: 1
-//     }
-// }
 
+const FILTERS = [
+    STATUS_FILTER,
+    {
+        key: 'hotels',
+        label: 'Hotels',
+        width: 170,
+        options: [
+            { value: 'complete', label: 'All 4 categories named' },
+            { value: 'incomplete', label: 'Some category empty' }
+        ]
+    },
+    {
+        key: 'usage',
+        label: 'Used in packages',
+        width: 170,
+        options: [
+            { value: 'used', label: 'Used in a package' },
+            { value: 'unused', label: 'Not used yet' }
+        ]
+    }
+]
+
+// ? the places a campaign visits, with the hotel the agency uses in each category
 function MasterDestinationTable() {
-    const [anchorEl, setAnchorEl] = useState(null)
-    const open = Boolean(anchorEl)
-    const params = useParams()
-    // State to track which row ID the menu was opened for
-    const [currentRowId, setCurrentRowId] = useState(null)
+    const { id: campaignId } = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
-    const location = useLocation()
     const hasCreateAccess = useUiAccess('create')
-    const hasEditAccess = useUiAccess('edit')
-    const { getLocationMasterLKey, deleteDestinationClientLKey } = useSelector(state => state.loading)
+    const campaignName = useCampaignName(campaignId)
+    const removing = Boolean(useSelector(state => state.loading?.deleteDestinationClientLKey))
+    const [uploadDestinations, { isLoading: uploading }] = useUploadDestinationsMutation()
+    const [deleteDestination] = useDeleteDestinationClientMutation()
+    const [reload, setReload] = useState(0)
 
-    const [columns, setColumns] = useState([...headers])
-    const [users, setUsers] = useState([])
-    const [recordsCount, setRecordsCount] = useState(0)
-    const [excelHandler, setExcelHandler] = useState(false)
-    const [removeId, setRemoveId] = useState(null)
-
-    const [isShowClearButton, setIsShowClearButton] = useState(false)
-    const [clearAllFilters, setClearAllFilters] = useState(false)
-    const [refetch, setRefetch] = useState(false)
-    const [uploadDestinations, { isLoading }] = useUploadDestinationsMutation()
-    const [deleteDestinationClient] = useDeleteDestinationClientMutation()
-    // const [getDestinationClient] = useGetDestinationClientsQuery()
-
-    const [search, setSearch] = useState({
-        // value: '',
-        // regex: false
+    const add = useCallback(
+        () => navigate('/master/destinations/add', { state: { campaignId } }),
+        [navigate, campaignId]
+    )
+    useKeyboardShortcut('Alt+A', () => {
+        if (hasCreateAccess) add()
     })
-    const [filters, setFilters] = useState({
-        created_at: { from: '', to: '' },
-        campaignId: params.id
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const editHandler = useCallback(async id => navigate(`/master/destinations/edit/${id}`), [])
 
-    const handleExcelClick = () => {
-        setExcelHandler(true)
-        setTimeout(() => setExcelHandler(false), 1000)
-    }
-    const queryHandler = async queryString => {
-        const { data: response } = await dispatch(getDestinationClients.initiate(queryString, false))
-        if (isExcelQuery(queryString)) {
-            return true
-        }
-        setUsers(response?.data || [])
-        setRecordsCount(response?.count || 0)
-        return true
-    }
-
-    const clearFilters = () => {
-        setSearch({
-            value: '',
-            regex: false
-        })
-        setFilters({ created_at: { from: '', to: '' } })
-    }
-
-    const deleteHandler = useCallback(async id => {
-        setRemoveId(id)
+    const tell = (message, color) =>
         dispatch(
-            openModal({
-                type: 'confirm_modal'
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
         )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
-    const deleteActionHandler = async () => {
-        try {
-            await deleteDestinationClient(removeId).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: 'Destination deleted successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            setRefetch(true)
-            setTimeout(() => setRefetch(false), 500)
-        } catch (reqError) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: reqError?.data?.message || 'Unable to delete destination!',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-        } finally {
-            dispatch(closeModal())
-        }
-    }
-
-    // column toggler
-    const handleCheckToggle = key => {
-        setColumns([
-            ...columns.map(item => {
-                if (key === TOGGLE_ALL) return { ...item, visible: true }
-                if (key === item.key) return { ...item, visible: !item.visible }
-                return item
-            })
-        ])
-    }
-
-    const handleAdd = () => {
-        navigate('/master/destinations/add', {
-            state: { campaignId: params.id }
-        })
-    }
-
-    const menuOptions = useMemo(
-        () => [
-            {
-                label: 'Edit',
-                icon: <Edit fontSize='small' sx={{ fill: '#60498a' }} />,
-                onClick: row => editHandler(row.id, row),
-                condition: row => hasEditAccess
-            },
-            {
-                label: 'Delete',
-                icon: <Delete fontSize='small' sx={{ color: 'error.main' }} />,
-                onClick: row => deleteHandler(row.id, row),
-                condition: row => hasEditAccess
-            }
-        ],
-        [editHandler, deleteHandler, hasEditAccess]
-    )
-
-    useEffect(() => {
-        setRefetch(true)
-        setTimeout(() => setRefetch(false), 500)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname])
-
-    // use keyboard shortcut
-    useKeyboardShortcut('Alt+A', () => {
-        if (hasCreateAccess) {
-            handleAdd()
-        }
+    const { ask, confirmProps } = useDeleteFlow({
+        noun: 'Destination',
+        nameOf: row => row?.name,
+        loading: removing,
+        remove: id => deleteDestination(id).unwrap(),
+        done: () => setReload(count => count + 1)
     })
-    const handleFileUpload = e => {
-        const file = e.target.files[0]
+
+    const handleFileUpload = event => {
+        const file = event.target.files[0]
+        if (!file) return
         const reader = new FileReader()
-
-        reader.onload = async event => {
-            const workbook = XLSX.read(event.target.result, { type: 'binary' })
-            const sheetName = workbook.SheetNames[0]
-            const sheet = workbook.Sheets[sheetName]
-            const parsedData = XLSX.utils.sheet_to_json(sheet)
-
-            // Map Excel headers to Database columns
-            const formattedData = parsedData.map(row => ({
+        reader.onload = async loaded => {
+            const workbook = XLSX.read(loaded.target.result, { type: 'binary' })
+            const parsed = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]])
+            const formatted = parsed.map(row => ({
                 name: row['Destination Name'] || row.name,
                 delux_hotel: row['Deluxe Hotel'] || row.delux_hotel,
                 super_delux_hotel: row['Super Deluxe Hotel'] || row.super_delux_hotel,
                 luxury_hotel: row['Luxury Hotel'] || row.luxury_hotel,
                 premium_hotel: row['Premium Hotel'] || row.premium_hotel
             }))
-
             try {
-                await uploadDestinations({
-                    destinations: formattedData,
-                    campaignId: params.id
-                }).unwrap()
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: 'Destinations uploaded successfully!',
-                        variant: 'alert',
-                        alert: { color: 'success' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
-                )
-            } catch (err) {
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: err?.data?.message || 'Upload failed. Please check the file and try again.',
-                        variant: 'alert',
-                        alert: { color: 'error' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
-                )
+                await uploadDestinations({ destinations: formatted, campaignId }).unwrap()
+                tell('Destinations uploaded successfully!', 'success')
+                setReload(count => count + 1)
+            } catch (error) {
+                tell(error?.data?.message || 'Upload failed. Please check the file and try again.', 'error')
             }
         }
-
         reader.readAsBinaryString(file)
+        event.target.value = ''
     }
+
     return (
-        <ContextMenuProvider>
-            <MainCard content={false} sx={{ py: '2px' }}>
-                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                        <Typography variant='h3'>Destinations</Typography>
-                    </Box>
-                    <Stack direction='row' spacing={2} alignItems='center' paddingY='12px'>
-                        {/* add your custom filters here */}
-                        {isShowClearButton && (
-                            <CustomButton
-                                variant='text'
-                                customStyles={{
-                                    color: 'error.main',
-                                    '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.1)' }
-                                }}
-                                startIcon={<FilterAltOff />}
-                                onClick={() => {
-                                    setClearAllFilters(prev => !prev)
-                                }}
-                            >
-                                Clear All Filters
-                            </CustomButton>
-                        )}
-                        {/* <CustomSearchTextField
-                            search={search}
-                            setSearch={setSearch}
-                            placeholder='Search locations...'
-                        /> */}
-                        {/* // Example for "From" date */}
-                        {/* <CustomSearchDateField
-                            type='from'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='From date'
-                            label='From'
-                        />
-                        {/* </Box> */}
-
-                        {/* // Example for "To" date */}
-                        {/* <CustomSearchDateField
-                            type='to'
-                            filters={filters}
-                            setFilters={setFilters}
-                            placeholder='To date'
-                            label='To'
-                        /> */}
-
-                        {/* <UiAccessGuard>
-                            <CSVExport handleExcelClick={handleExcelClick} />
-                        </UiAccessGuard> */}
-                        <Box>
-                            <input
-                                accept='.xlsx, .xls'
-                                style={{ display: 'none' }}
-                                id='excel-upload'
-                                type='file'
-                                onChange={handleFileUpload}
-                            />
-                            <label htmlFor='excel-upload'>
-                                <Button variant='contained' component='span' disabled={isLoading}>
-                                    {isLoading ? 'Uploading...' : 'Upload Excel'}
-                                </Button>
-                            </label>
-                        </Box>
+        <>
+            <ListPage
+                title='Destinations'
+                subtitle={scopedSubtitle(
+                    'The places this trip visits, with the hotel used in each category.',
+                    campaignName
+                )}
+                noun='destinations'
+                searchPlaceholder='Search destination, campaign or hotel'
+                headers={headers}
+                endpoint={getDestinationClients}
+                baseParams={{ campaignId }}
+                reqKey='getDestinationsListKey'
+                filters={FILTERS}
+                csvName='destinations'
+                canAdd
+                addLabel='Add Destination'
+                onAdd={add}
+                reloadSignal={reload}
+                emptyText='Add the places this campaign visits and the hotels you use there, then pick them when you build packages.'
+                extraActions={
+                    <>
+                        <BackToCampaigns />
                         <UiAccessGuard type='create'>
-                            <CustomButton variant='clickable' onClick={handleAdd}>
-                                Add New <Add sx={{ marginLeft: '0.2rem', fontSize: '18px' }} />
-                            </CustomButton>
+                            <Button size='small' variant='outlined' component='label' disabled={uploading}>
+                                {uploading ? 'Uploading...' : 'Upload Excel'}
+                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                            </Button>
                         </UiAccessGuard>
-
-                        {/* render action column can be made dynamic based on user authorization  */}
-                        <ToggleColumns columns={columns} handler={handleCheckToggle} />
-                    </Stack>
-                </Box>
-                <DataTable
-                    isCheckbox
-                    data={users || []}
-                    columns={columns}
-                    queryHandler={queryHandler}
-                    reqKey='getLocationMasterLKey'
-                    refetch={refetch}
-                    globalSearch={search}
-                    globalFilters={filters}
-                    clearFilters={clearFilters}
-                    addExcelQuery={excelHandler}
-                    totalRecords={recordsCount}
-                    renderAction={row => (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'success.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => editHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Edit'>
-                                        <Edit fontSize='small' sx={{ fill: '#60498a' }} />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                            <UiAccessGuard type='edit'>
-                                <IconButton
-                                    sx={{ color: 'error.main' }}
-                                    size='small'
-                                    aria-label='edit row'
-                                    onClick={() => deleteHandler(row.id, row)}
-                                >
-                                    <Tooltip title='Delete'>
-                                        <Delete fontSize='small' />
-                                    </Tooltip>
-                                </IconButton>
-                            </UiAccessGuard>
-                        </Box>
-                    )}
-                    setIsShowClearButton={setIsShowClearButton}
-                    clearAllFilters={clearAllFilters}
-                    isLoading={getLocationMasterLKey}
-                    enableContextMenu
-                />
-                <PopperContextMenu options={menuOptions} />
-                <ConfirmModal
-                    title='Delete Destination'
-                    message={
-                        <>
-                            Are you sure you want to delete this destination:{' '}
-                            <strong>{users?.find(user => user?.id === removeId)?.name || 'Unknown'}</strong>?
-                        </>
-                    }
-                    icon='warning'
-                    confirmText='Yes, Delete'
-                    customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                    onConfirm={deleteActionHandler}
-                    isLoading={deleteDestinationClientLKey}
-                />
-            </MainCard>
-        </ContextMenuProvider>
+                    </>
+                }
+                renderAction={row => (
+                    <CatalogRowActions
+                        label={row.name}
+                        onEdit={() => navigate(`/master/destinations/edit/${row.id}`)}
+                        onDelete={() => ask(row)}
+                    />
+                )}
+            />
+            <DeleteConfirm flow={confirmProps} />
+        </>
     )
 }
 

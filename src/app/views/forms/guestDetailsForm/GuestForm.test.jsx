@@ -50,6 +50,11 @@ vi.mock('@/app/store/slices/api/guestTourSlice', () => ({
     useCreateSingleGuestTourItenaryMutation: mutation((...args) => api.createSingleTour(...args)),
     getGuestTourById: { initiate: () => thunk(() => ({ data: { data: api.tourRows } })) }
 }))
+vi.mock('@/app/store/slices/api/gstSlice', () => ({
+    useGetQuoteTaxesQuery: () => ({ data: null, isFetching: false }),
+    useGetTaxProfileQuery: () => ({ data: null, isFetching: false }),
+    useSetQuoteTaxMutation: () => [() => ({ unwrap: () => Promise.resolve({}) }), { isLoading: false }]
+}))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useGetPackageByLeadIdQuery: () => ({ data: undefined }),
     useConvertPackageMutation: idle
@@ -219,7 +224,7 @@ describe('Quotation for a verified lead', () => {
         renderPage()
 
         expect(await screen.findByText('2 days · 2 nights · Shimla 2N')).toBeInTheDocument()
-        const days = screen.getAllByRole('listitem')
+        const days = within(screen.getByRole('list', { name: 'Days of the quote' })).getAllByRole('listitem')
         expect(within(days[0]).getByText('Arrive Shimla')).toBeInTheDocument()
         expect(within(days[0]).getByText(/5 Oct/)).toBeInTheDocument()
         expect(within(days[1]).getByText('Mall Road walk')).toBeInTheDocument()
@@ -241,10 +246,14 @@ describe('Quotation for a verified lead', () => {
             { id: 1, order: 2 }
         ])
         await waitFor(() =>
-            expect(within(screen.getAllByRole('listitem')[0]).getByText('Mall Road walk')).toBeInTheDocument()
+            expect(
+                within(
+                    within(screen.getByRole('list', { name: 'Days of the quote' })).getAllByRole('listitem')[0]
+                ).getByText('Mall Road walk')
+            ).toBeInTheDocument()
         )
 
-        const first = screen.getAllByRole('listitem')[0]
+        const first = within(screen.getByRole('list', { name: 'Days of the quote' })).getAllByRole('listitem')[0]
         fireEvent.click(within(first).getByRole('button', { name: 'Delete' }))
         expect(within(first).getByText('Delete day 1?')).toBeInTheDocument()
         expect(api.removeTour).not.toHaveBeenCalled()

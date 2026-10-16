@@ -134,6 +134,10 @@ const GuestForm = lazy(() => import('@views/forms/guestDetailsForm'))
 const FinalPackageTable = lazy(() => import('@views/masters/finalPackage'))
 const BookingWorkspace = lazy(() => import('@views/bookings/BookingWorkspace'))
 const ServiceLedgerTable = lazy(() => import('@views/masters/transactions'))
+const InvoicesTable = lazy(() => import('@views/masters/invoices'))
+const IncentivesPage = lazy(() => import('@views/masters/incentives'))
+const GstSettingsPage = lazy(() => import('@views/masters/gst'))
+const CompanyPage = lazy(() => import('@views/masters/company'))
 
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
 const JobCandidates = lazy(() => import('@views/masters/JobCandidates/JobCandidates'))
@@ -503,6 +507,38 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <JobCandidates />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/invoices',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <InvoicesTable />
+                </Suspense>
+            )
+        },
+        {
+            path: '/process/incentives',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <IncentivesPage />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/company',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <CompanyPage />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/gst',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <GstSettingsPage />
                 </Suspense>
             )
         }

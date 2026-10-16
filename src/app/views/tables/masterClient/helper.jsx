@@ -1,3 +1,15 @@
+import StatusBadge from '@core/components/StatusBadge'
+
+// ? an agency's row for the table: the status as a badge, the sign-up date as a day
+export const clientRows = rows =>
+    (rows || []).map(item => ({
+        ...item,
+        status: (
+            <StatusBadge type={item.isActive ? 'success' : 'error'} label={item.isActive ? 'Active' : 'Inactive'} />
+        ),
+        created: item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : ''
+    }))
+
 export const headers = [
     {
         id: 2,
@@ -34,7 +46,6 @@ export const headers = [
         minWidth: 8,
         maxWidth: 8
     },
-
     {
         id: 3,
         label: 'Code',
@@ -64,6 +75,29 @@ export const headers = [
         sort: false,
         stick: false,
         key: 'address',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
+    },
+    {
+        id: 6,
+        label: 'Status',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'status',
+        csv: row => (row.isActive ? 'Active' : 'Inactive'),
+        visible: true,
+        minWidth: 6,
+        maxWidth: 6
+    },
+    {
+        id: 7,
+        label: 'Created',
+        search: false,
+        sort: false,
+        stick: false,
+        key: 'created',
         visible: true,
         minWidth: 8,
         maxWidth: 8

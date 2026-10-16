@@ -170,4 +170,26 @@ describe('sidebar', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Expand menu' }))
         expect(toggle).toHaveBeenCalledTimes(2)
     })
+    test('shows the agency’s logo in the header, or its initials without one', () => {
+        state.auth = {
+            user: {
+                id: 1,
+                clientId: 5,
+                clientName: 'Acme Tours',
+                clientLogo: 'http://api.test/v1/File/logos/acme.png'
+            },
+            menuItems: AGENCY_MENU
+        }
+        const { unmount } = renderAt('/dashboard')
+        expect(screen.getByRole('img', { name: 'Acme Tours logo' })).toHaveAttribute(
+            'src',
+            'http://api.test/v1/File/logos/acme.png'
+        )
+        unmount()
+
+        state.auth = { user: { id: 1, clientId: 5, clientName: 'Acme Tours' }, menuItems: AGENCY_MENU }
+        renderAt('/dashboard')
+        expect(screen.queryByRole('img', { name: /logo/ })).toBeNull()
+        expect(screen.getByTestId('brand-mark')).toHaveTextContent('AT')
+    })
 })

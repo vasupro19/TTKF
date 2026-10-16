@@ -47,6 +47,8 @@ import { objectLength } from '@/utilities'
 import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
 import ItinerarySection from './itenarySection'
+import QuoteJourney from './quote/QuoteJourney'
+import { quoteStageKey } from './quote/quoteStatus'
 import TripDetailsStep from './TripDetailsStep'
 import DayEditor from './quote/DayEditor'
 import { emptyTripDetails, fromGuestDetail, toGuestPayload, tripSummary } from './tripDetails'
@@ -1002,7 +1004,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         >
             <Box
                 sx={{
-                    maxWidth: 1040,
+                    maxWidth: 1240,
                     '& .MuiButton-root': { textTransform: 'none' },
                     // ? 16px inputs: easier to read, and iOS does not zoom the page when a field is tapped
                     '& .MuiInputBase-input': { fontSize: '1rem' }
@@ -1010,11 +1012,29 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
             >
                 <Typography
                     color='text.secondary'
-                    sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600, mb: 2 }}
+                    sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600 }}
                 >
-                    {guestName ? `QUOTATION · ${guestName.toUpperCase()}` : 'QUOTATION'}
+                    {['QUOTATION', leadData?.data?.leadNo].filter(Boolean).join(' · ')}
                 </Typography>
-                <Box sx={{ maxWidth: 520, mb: 4 }}>
+                <Typography component='h1' sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 600, mt: 0.5 }}>
+                    {guestName || 'Quotation'}
+                </Typography>
+                <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: 0.5, mb: 2.5 }}>
+                    {[leadData?.data?.phone, leadData?.data?.senderEmail].filter(Boolean).join(' · ') ||
+                        'No contact details'}
+                </Typography>
+                <Box sx={{ mb: 3 }}>
+                    <QuoteJourney
+                        stage={quoteStageKey({
+                            confirmedPackage: confirmedPackage?.data || null,
+                            lastSharedQuoteNo: leadData?.data?.lastSharedQuoteNo || null,
+                            lastShareStatus: leadData?.data?.lastShareStatus || null,
+                            days: currentDays,
+                            priceData: price?.data || null
+                        })}
+                    />
+                </Box>
+                <Box sx={{ maxWidth: 520, mb: 3 }}>
                     <MyTabs
                         activeTab={activeTab}
                         handleTabChange={handleTabChange}
@@ -1082,6 +1102,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                         lastSharedAt={leadData?.data?.lastSharedAt || null}
                         lastShareStatus={leadData?.data?.lastShareStatus || null}
                         lastShareError={leadData?.data?.lastShareError || null}
+                        quoteViews={leadData?.data?.quoteViews || []}
+                        guestEmail={leadData?.data?.senderEmail || ''}
                         onPreview={handlePreview}
                         onDownloadPdf={handleDownloadPdf}
                         onWhatsApp={handleShareQuotation}

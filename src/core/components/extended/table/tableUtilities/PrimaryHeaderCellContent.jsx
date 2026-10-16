@@ -14,8 +14,19 @@ function PrimaryHeaderCellContent({ column, handleSort, searchTerms }) {
             }}
             className='regular-height'
         >
-            <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', justifyContent: 'center', color: 'text.primary' }}>
-                <Typography sx={{ fontWeight: 600, fontSize: '0.8125rem', color: 'text.primary', textAlign: 'center' }} noWrap>
+            <Box
+                sx={{
+                    display: 'flex',
+                    gap: 0.75,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'text.primary'
+                }}
+            >
+                <Typography
+                    sx={{ fontWeight: 600, fontSize: '0.8125rem', color: 'text.primary', textAlign: 'center' }}
+                    noWrap
+                >
                     {column.label}
                 </Typography>
                 {searchTerms?.[column.id] && (

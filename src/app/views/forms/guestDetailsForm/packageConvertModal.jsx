@@ -4,6 +4,7 @@ import { Box, Button, Grid, TextField, Autocomplete, Typography, CircularProgres
 import { useNavigate } from 'react-router-dom'
 import { useConvertPackageMutation } from '@/app/store/slices/api/packageConvert'
 
+import { computeTax, money } from '@views/gst/gstFacts'
 import GlobalModal from '../../../../core/components/modals/GlobalModal'
 import { formatRupees } from './quote/quoteDays'
 import { TOTAL, groupPrice, guestsLabel, priceBasisOf } from './quote/pricing'
@@ -18,7 +19,9 @@ const CATEGORY_LABELS = {
 
 /**
  * Books one quote. A per-person price is multiplied by the guests (adults and children) to give what the client
- * pays; a total price is used as it is. The agent can still change the final amount.
+ * pays; a total price is used as it is. When the quote charges GST the client pays it too — added on top, or already in
+ * the price — so the booking is made at the price with GST, and the booking keeps how much of it is GST. The agent can
+ * still change the final amount.
  */
 function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData = null, people = 0 }) {
     const navigate = useNavigate()
@@ -39,14 +42,29 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
     // ? only the categories this quote was priced in; all four when none is priced yet
     const priced = CATEGORIES.filter(key => priceOf(key) > 0)
     const options = priced.length ? priced : CATEGORIES
+    // ? how the quote charges GST (mode, rate, whether the supply crosses states); none for a quote set up before GST
+    const gst = priceData?.summary?.gst || null
+    const charging = Boolean(gst && gst.mode !== 'none' && Number(gst.rate) > 0)
     const optionLabel = key => {
         const shown = formatRupees(priceOf(key) || '')
         if (!priceOf(key)) return CATEGORY_LABELS[key] || key
-        return `${CATEGORY_LABELS[key]} · ${shown}${basis === TOTAL ? ' for the group' : ' per person'}`
+        let gstNote = ''
+        if (charging) gstNote = gst.mode === 'exclusive' ? ' + GST' : ', GST included'
+        return `${CATEGORY_LABELS[key]} · ${shown}${basis === TOTAL ? ' for the group' : ' per person'}${gstNote}`
     }
 
+    // ? the group's price and its GST, worked out on the group's price as the quotation does
+    const groupFigures = key => {
+        const amount = priceOf(key)
+        const base = basis === TOTAL || !people ? amount : amount * people
+        return charging
+            ? computeTax({ amount: base, mode: gst.mode, rate: gst.rate, interState: gst.interState })
+            : null
+    }
+    const groupTotal = key => (charging ? groupFigures(key).total : groupPrice(priceOf(key), basis, people))
+
     const handlePackageSelect = value => {
-        const total = value ? groupPrice(priceOf(value), basis, people) : 0
+        const total = value ? groupTotal(value) : 0
         setFormData(prev => ({
             ...prev,
             selectedPackage: value ?? null,
@@ -62,6 +80,14 @@ function PackageConversion({ isOpen, setIsOpen, leadId, quotationNo, priceData =
         working = `${formatRupees(chosen)} per person × ${guestsLabel(people)} = ${formatRupees(chosen * people)}`
     } else if (chosen) {
         working = `${formatRupees(chosen)} per person. Add the guests in trip details to multiply by them.`
+    }
+    if (chosen && charging) {
+        const figures = groupFigures(formData.selectedPackage)
+        const gstText = `${gst.rate}% GST ${money(figures.gst)}`
+        working =
+            gst.mode === 'exclusive'
+                ? `${working} + ${gstText} = ${money(figures.total)}`
+                : `${working}, which includes ${gstText}`
     }
 
     const handleSaveAction = async () => {
@@ -155,7 +181,12 @@ PackageConversion.propTypes = {
     setIsOpen: PropTypes.func.isRequired,
     leadId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     quotationNo: PropTypes.number.isRequired,
-    priceData: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
+    priceData: PropTypes.shape({
+        priceBasis: PropTypes.string,
+        summary: PropTypes.shape({
+            gst: PropTypes.shape({ mode: PropTypes.string, rate: PropTypes.number, interState: PropTypes.bool })
+        })
+    }),
     people: PropTypes.number
 }
 

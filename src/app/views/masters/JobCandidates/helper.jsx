@@ -59,6 +59,7 @@ export const headers = [
         search: false,
         sort: false,
         key: 'statusLabel',
+        csv: row => row.status,
         visible: true,
         minWidth: 8,
         maxWidth: 8

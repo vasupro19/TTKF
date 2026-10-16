@@ -27,9 +27,10 @@ import {
     useMediaQuery
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
-import { Add, Close, OpenInFull, PictureAsPdf, Visibility } from '@mui/icons-material'
-import WhatsAppIcon from '@mui/icons-material/WhatsApp'
+import { Add, Close, OpenInFull } from '@mui/icons-material'
 import DayCard from './quote/DayCard'
+import QuoteRail from './quote/QuoteRail'
+import { sendChecklist, sentLine, viewLine } from './quote/quoteStatus'
 import { HOTEL_TIERS, daysSummary, entryTypeLabel, formatRupees, hotelList } from './quote/quoteDays'
 import { confirmedShape, priceShape, quoteDayShape } from './quote/shapes'
 
@@ -269,23 +270,17 @@ function BookingNote({ confirmed = null, currentQuoteNo }) {
 
 BookingNote.propTypes = { confirmed: confirmedShape, currentQuoteNo: PropTypes.number.isRequired }
 
-function sharedNote(lastSharedQuoteNo, lastSharedAt, currentQuoteNo, status = null, error = null) {
-    if (!lastSharedQuoteNo) return 'Not sent to the guest yet.'
-    if (status === 'Failed') {
-        return `The last email of Quote ${lastSharedQuoteNo} did not go${error ? ` (${error})` : ''}. Check the guest’s email and send again.`
-    }
-    if (lastSharedQuoteNo !== currentQuoteNo) {
-        return `The guest last got Quote ${lastSharedQuoteNo}. Sending this one sends a different version.`
-    }
-    const when = lastSharedAt
-        ? ` on ${new Date(lastSharedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
-        : ''
-    return `Emailed to the guest${when}.`
+const card = {
+    border: '1px solid',
+    borderColor: 'divider',
+    borderRadius: 2,
+    p: { xs: 2, sm: 2.5 },
+    bgcolor: 'background.paper'
 }
 
 /**
- * Step 2 of a quotation: the days, the price per person, sending it, and booking it — one calm column, in
- * the order an agent works.
+ * Step 2 of a quotation: the days and the price per person on the left, and on the right what to do with the
+ * quote — send it, then book it. On a phone the right-hand column comes first, so sending is never buried.
  */
 export default function ItinerarySection({
     quotes,
@@ -320,6 +315,8 @@ export default function ItinerarySection({
     lastSharedAt = null,
     lastShareStatus = null,
     lastShareError = null,
+    quoteViews = [],
+    guestEmail = '',
     onPreview,
     onDownloadPdf,
     onWhatsApp,
@@ -342,188 +339,196 @@ export default function ItinerarySection({
 
     return (
         <Box sx={{ width: '100%', '& .MuiButton-root, & .MuiToggleButton-root': { textTransform: 'none' } }}>
-            <Stack spacing={2} sx={{ mb: 5 }}>
-                <QuoteBar
-                    quotes={quotes}
-                    current={currentQuoteNo}
-                    onSelect={onSelectQuote}
-                    onNew={onNewQuote}
-                    campaigns={campaigns}
-                    labels={
-                        // ? campaign names only say something when the quotes are for different trips
-                        new Set(Object.values(quoteCampaigns).filter(Boolean)).size > 1 ||
-                        (currentCampaignId && leadCampaignId && currentCampaignId !== leadCampaignId)
-                            ? quoteCampaigns
-                            : {}
-                    }
-                    defaultCampaignId={currentCampaignId}
-                />
-                <Stack direction='row' spacing={1} alignItems='baseline' flexWrap='wrap' useFlexGap>
-                    <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
-                        {tripLine || 'Trip details not added yet'}
-                    </Typography>
-                    <Button size='small' onClick={onEditTrip} sx={{ minWidth: 0, px: 0.75 }}>
-                        Edit trip details
-                    </Button>
-                </Stack>
-                {campaigns.length > 1 ? (
-                    <Stack
-                        direction={{ xs: 'column', sm: 'row' }}
-                        spacing={{ xs: 1, sm: 1.5 }}
-                        alignItems={{ sm: 'center' }}
-                    >
-                        <TextField
-                            select
-                            size='small'
-                            label={`Trip for Quote ${currentQuoteNo}`}
-                            value={campaigns.some(item => item.id === currentCampaignId) ? currentCampaignId : ''}
-                            onChange={event => onChangeQuoteCampaign(event.target.value)}
-                            disabled={savingQuoteCampaign}
-                            sx={{ minWidth: 220 }}
-                        >
-                            {campaigns.map(campaign => (
-                                <MenuItem key={campaign.id} value={campaign.id}>
-                                    {campaign.title}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                        <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }}>
-                            This trip’s inclusions, exclusions, notes and bank details go on Quote {currentQuoteNo}.
-                        </Typography>
-                    </Stack>
-                ) : null}
-            </Stack>
-
-            <Box component='section' aria-labelledby='quote-days' sx={{ mb: 6 }}>
-                <SectionTitle
-                    aside={
-                        hasDays ? (
-                            <Stack direction='row' spacing={1} alignItems='center'>
-                                <ToggleButtonGroup
-                                    size='small'
-                                    exclusive
-                                    value={view}
-                                    onChange={(event, next) => next && setView(next)}
-                                    aria-label='How to show the days'
-                                >
-                                    <ToggleButton value='list'>List</ToggleButton>
-                                    <ToggleButton value='table'>Hotels table</ToggleButton>
-                                </ToggleButtonGroup>
-                                <Button size='small' startIcon={<OpenInFull />} onClick={() => setFullView(true)}>
-                                    Full view
-                                </Button>
-                            </Stack>
-                        ) : null
-                    }
-                >
-                    <span id='quote-days'>Days</span>
-                </SectionTitle>
-
-                {hasDays ? (
-                    <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: -1, mb: 2.5 }}>
-                        {daysSummary(days, stays)}
-                    </Typography>
-                ) : (
-                    <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: -1, mb: 2.5 }}>
-                        {loadingDays
-                            ? 'Loading the days…'
-                            : `Quote ${currentQuoteNo} has no days yet. Start from one of your packages, or add days one at a time.`}
-                    </Typography>
-                )}
-
-                <Box sx={{ mb: 2.5 }}>
-                    <PackagePicker
-                        campaignId={currentCampaignId}
-                        packages={packages}
-                        loading={loadingPackages}
-                        replacing={hasDays}
-                        busy={applyingPackage}
-                        onPick={pickPackage}
-                    />
-                </Box>
-
-                {hasDays && view === 'list' ? (
-                    <Box component='ol' sx={{ m: 0, p: 0 }}>
-                        {days.map((day, index) => (
-                            <DayCard
-                                key={day.fullItem?.id || index}
-                                day={day}
-                                index={index}
-                                total={days.length}
-                                startDate={startDate}
-                                guestCategory={guestCategory}
-                                onEdit={onEditDay}
-                                onDelete={onDeleteDay}
-                                onMove={onMoveDay}
-                            />
-                        ))}
-                    </Box>
-                ) : null}
-                {hasDays && view === 'table' ? <DaysTable days={days} onEdit={onEditDay} /> : null}
-
-                <Box
-                    sx={{ borderTop: hasDays && view === 'list' ? '1px solid' : 'none', borderColor: 'divider', pt: 2 }}
-                >
-                    <Button variant={hasDays ? 'text' : 'outlined'} startIcon={<Add />} onClick={onAddDay}>
-                        Add a day
-                    </Button>
-                </Box>
-            </Box>
-
-            {hasDays ? (
-                <>
-                    <Box component='section' aria-labelledby='quote-prices' sx={{ mb: 6 }}>
-                        <SectionTitle>
-                            <span id='quote-prices'>Price per person</span>
-                        </SectionTitle>
-                        {priceForm}
-                    </Box>
-
-                    <Box component='section' aria-labelledby='quote-send' sx={{ mb: 6 }}>
-                        <SectionTitle>
-                            <span id='quote-send'>Send to the guest</span>
-                        </SectionTitle>
-                        <Stack
-                            direction={{ xs: 'column', sm: 'row' }}
-                            spacing={1.5}
-                            alignItems={{ xs: 'stretch', sm: 'center' }}
-                        >
-                            <Button variant='contained' startIcon={<Visibility />} onClick={onPreview}>
-                                Preview and email
-                            </Button>
-                            <Button variant='outlined' startIcon={<PictureAsPdf />} onClick={onDownloadPdf}>
-                                Download PDF
-                            </Button>
-                            <Button
-                                variant='outlined'
-                                startIcon={<WhatsAppIcon sx={{ color: '#25D366' }} />}
-                                onClick={onWhatsApp}
-                            >
-                                WhatsApp
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 340px' },
+                    gap: { xs: 2.5, lg: 3 },
+                    alignItems: 'start'
+                }}
+            >
+                <Box sx={{ minWidth: 0, order: { xs: 2, lg: 1 } }}>
+                    <Stack spacing={2} sx={{ ...card, mb: 2.5 }}>
+                        <QuoteBar
+                            quotes={quotes}
+                            current={currentQuoteNo}
+                            onSelect={onSelectQuote}
+                            onNew={onNewQuote}
+                            campaigns={campaigns}
+                            labels={
+                                // ? campaign names only say something when the quotes are for different trips
+                                new Set(Object.values(quoteCampaigns).filter(Boolean)).size > 1 ||
+                                (currentCampaignId && leadCampaignId && currentCampaignId !== leadCampaignId)
+                                    ? quoteCampaigns
+                                    : {}
+                            }
+                            defaultCampaignId={currentCampaignId}
+                        />
+                        <Stack direction='row' spacing={1} alignItems='baseline' flexWrap='wrap' useFlexGap>
+                            <Typography color='text.secondary' sx={{ fontSize: '0.9375rem' }}>
+                                {tripLine || 'Trip details not added yet'}
+                            </Typography>
+                            <Button size='small' onClick={onEditTrip} sx={{ minWidth: 0, px: 0.75 }}>
+                                Edit trip details
                             </Button>
                         </Stack>
-                        <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: 1.5 }}>
-                            {sharedNote(
-                                lastSharedQuoteNo,
-                                lastSharedAt,
-                                currentQuoteNo,
-                                lastShareStatus,
-                                lastShareError
-                            )}
-                        </Typography>
+                        {campaigns.length > 1 ? (
+                            <Stack
+                                direction={{ xs: 'column', sm: 'row' }}
+                                spacing={{ xs: 1, sm: 1.5 }}
+                                alignItems={{ sm: 'center' }}
+                            >
+                                <TextField
+                                    select
+                                    size='small'
+                                    label={`Trip for Quote ${currentQuoteNo}`}
+                                    value={
+                                        campaigns.some(item => item.id === currentCampaignId) ? currentCampaignId : ''
+                                    }
+                                    onChange={event => onChangeQuoteCampaign(event.target.value)}
+                                    disabled={savingQuoteCampaign}
+                                    sx={{ minWidth: 220 }}
+                                >
+                                    {campaigns.map(campaign => (
+                                        <MenuItem key={campaign.id} value={campaign.id}>
+                                            {campaign.title}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }}>
+                                    This trip’s inclusions, exclusions, notes and bank details go on Quote{' '}
+                                    {currentQuoteNo}.
+                                </Typography>
+                            </Stack>
+                        ) : null}
+                    </Stack>
+
+                    <Box component='section' aria-labelledby='quote-days' sx={{ ...card, mb: 2.5 }}>
+                        <SectionTitle
+                            aside={
+                                hasDays ? (
+                                    <Stack direction='row' spacing={1} alignItems='center'>
+                                        <ToggleButtonGroup
+                                            size='small'
+                                            exclusive
+                                            value={view}
+                                            onChange={(event, next) => next && setView(next)}
+                                            aria-label='How to show the days'
+                                        >
+                                            <ToggleButton value='list'>List</ToggleButton>
+                                            <ToggleButton value='table'>Hotels table</ToggleButton>
+                                        </ToggleButtonGroup>
+                                        <Button
+                                            size='small'
+                                            startIcon={<OpenInFull />}
+                                            onClick={() => setFullView(true)}
+                                        >
+                                            Full view
+                                        </Button>
+                                    </Stack>
+                                ) : null
+                            }
+                        >
+                            <span id='quote-days'>Days</span>
+                        </SectionTitle>
+
+                        {hasDays ? (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: -1, mb: 2.5 }}>
+                                {daysSummary(days, stays)}
+                            </Typography>
+                        ) : (
+                            <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: -1, mb: 2.5 }}>
+                                {loadingDays
+                                    ? 'Loading the days…'
+                                    : `Quote ${currentQuoteNo} has no days yet. Start from one of your packages, or add days one at a time.`}
+                            </Typography>
+                        )}
+
+                        <Box sx={{ mb: 2.5 }}>
+                            <PackagePicker
+                                campaignId={currentCampaignId}
+                                packages={packages}
+                                loading={loadingPackages}
+                                replacing={hasDays}
+                                busy={applyingPackage}
+                                onPick={pickPackage}
+                            />
+                        </Box>
+
+                        {hasDays && view === 'list' ? (
+                            <Box component='ol' aria-label='Days of the quote' sx={{ m: 0, p: 0 }}>
+                                {days.map((day, index) => (
+                                    <DayCard
+                                        key={day.fullItem?.id || index}
+                                        day={day}
+                                        index={index}
+                                        total={days.length}
+                                        startDate={startDate}
+                                        guestCategory={guestCategory}
+                                        onEdit={onEditDay}
+                                        onDelete={onDeleteDay}
+                                        onMove={onMoveDay}
+                                    />
+                                ))}
+                            </Box>
+                        ) : null}
+                        {hasDays && view === 'table' ? <DaysTable days={days} onEdit={onEditDay} /> : null}
+
+                        <Box
+                            sx={{
+                                borderTop: hasDays && view === 'list' ? '1px solid' : 'none',
+                                borderColor: 'divider',
+                                pt: 2
+                            }}
+                        >
+                            <Button variant={hasDays ? 'text' : 'outlined'} startIcon={<Add />} onClick={onAddDay}>
+                                Add a day
+                            </Button>
+                        </Box>
                     </Box>
 
-                    <Box component='section' aria-labelledby='quote-booking'>
-                        <SectionTitle>
-                            <span id='quote-booking'>Booking</span>
-                        </SectionTitle>
-                        <BookingNote confirmed={confirmedPackage} currentQuoteNo={currentQuoteNo} />
-                        <Button variant='outlined' onClick={onConvert} sx={{ mt: 2 }}>
-                            {convertLabel}
-                        </Button>
-                    </Box>
-                </>
-            ) : null}
+                    {hasDays ? (
+                        <Box component='section' aria-labelledby='quote-prices' sx={card}>
+                            <SectionTitle>
+                                <span id='quote-prices'>Price per person</span>
+                            </SectionTitle>
+                            {priceForm}
+                        </Box>
+                    ) : null}
+                </Box>
+                <Box
+                    sx={{
+                        order: { xs: 1, lg: 2 },
+                        position: { lg: 'sticky' },
+                        top: { lg: 80 }
+                    }}
+                >
+                    <QuoteRail
+                        quoteNo={currentQuoteNo}
+                        checklist={sendChecklist({ tripLine, days, priceData, guestEmail })}
+                        sentText={sentLine({
+                            lastSharedQuoteNo,
+                            lastSharedAt,
+                            currentQuoteNo,
+                            status: lastShareStatus,
+                            error: lastShareError
+                        })}
+                        openedNote={viewLine({
+                            quoteViews,
+                            currentQuoteNo,
+                            lastSharedQuoteNo,
+                            status: lastShareStatus
+                        })}
+                        canSend={hasDays}
+                        onPreview={onPreview}
+                        onDownloadPdf={onDownloadPdf}
+                        onWhatsApp={onWhatsApp}
+                        bookingNote={<BookingNote confirmed={confirmedPackage} currentQuoteNo={currentQuoteNo} />}
+                        convertLabel={convertLabel}
+                        onConvert={onConvert}
+                    />
+                </Box>
+            </Box>
 
             <Dialog open={Boolean(pendingPackage)} onClose={() => setPendingPackage(null)} maxWidth='xs' fullWidth>
                 <DialogTitle>Replace the days in Quote {currentQuoteNo}?</DialogTitle>
@@ -633,6 +638,10 @@ ItinerarySection.propTypes = {
     lastSharedQuoteNo: PropTypes.number,
     lastShareStatus: PropTypes.string,
     lastShareError: PropTypes.string,
+    quoteViews: PropTypes.arrayOf(
+        PropTypes.shape({ quoteNo: PropTypes.number, viewCount: PropTypes.number, lastViewedAt: PropTypes.string })
+    ),
+    guestEmail: PropTypes.string,
     lastSharedAt: PropTypes.string,
     onPreview: PropTypes.func.isRequired,
     onDownloadPdf: PropTypes.func.isRequired,

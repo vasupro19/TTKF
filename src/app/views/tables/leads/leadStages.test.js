@@ -7,6 +7,7 @@ import {
     fullDateTime,
     leadsCsv,
     nextAction,
+    quoteOpened,
     relativeTime,
     searchWithFilters,
     shortDate,
@@ -183,5 +184,23 @@ describe('csv', () => {
         expect(line).toContain("'=cmd")
         expect(line).toContain("'+SUM(A1)")
         expect(line).toContain('Quote sent')
+    })
+
+    test('a sent quote the guest opened says so, so the team knows when to call', () => {
+        const now = new Date(2026, 9, 11, 12, 0)
+        const sent = new Date(2026, 9, 2, 10, 0)
+        const opened = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+        expect(stageDetail({ stage: 'sent', quoteSentAt: sent, quoteViewedAt: opened, quoteViews: 1 }, now)).toBe(
+            'Quote opened 2 hours ago'
+        )
+        expect(stageDetail({ stage: 'sent', quoteSentAt: sent, quoteViewedAt: opened, quoteViews: 3 }, now)).toBe(
+            'Quote opened 2 hours ago · 3 times'
+        )
+        // ? a booked lead shows its booking, and a booked call still comes first
+        expect(stageDetail({ stage: 'booked', quoteSentAt: sent, quoteViewedAt: opened, quoteViews: 3 }, now)).toBe(
+            'Quote sent 2 Oct'
+        )
+        expect(quoteOpened({ quoteViewedAt: opened, quoteViews: 2 })).toBe(true)
+        expect(quoteOpened({ quoteViewedAt: null, quoteViews: 0 })).toBe(false)
     })
 })

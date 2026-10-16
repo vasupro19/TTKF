@@ -213,7 +213,6 @@ function DataTable({
         setSelected(newSelected)
         setSelectedRow(newSelected)
     }
-    console.log(queryFilters, 'quer  ')
 
     // make query and fire parent handleQuery function
     function makeQuery(excel = false) {
@@ -240,9 +239,6 @@ function DataTable({
         setLength(parseInt(event?.target?.value, 10))
         setPage(0)
     }
-
-    // eslint-disable-next-line no-console
-    console.log('re-rendered table component !!!!!!! 🥶')
 
     const handleSort = id => {
         setOrder(prevOrder => {
@@ -420,7 +416,6 @@ function DataTable({
                 return col
             }
         )
-        console.log(updatedQueryColumns)
         setQueryColumns(updatedQueryColumns)
     }
 

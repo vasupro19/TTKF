@@ -144,7 +144,7 @@ export const kpiCards = (kpis = {}) => {
                 key: 'profit',
                 label: 'Profit',
                 value: rupees(kpis.profit),
-                caption: 'Booked value minus supplier costs',
+                caption: 'Booked value minus GST and supplier costs',
                 money: true
             },
             {
@@ -155,6 +155,16 @@ export const kpiCards = (kpis = {}) => {
                 money: true
             }
         )
+        // ? GST that is in the booked value; it belongs to the government, so profit leaves it out
+        if (amount(kpis.gst) > 0) {
+            cards.push({
+                key: 'gst',
+                label: 'GST in bookings',
+                value: rupees(kpis.gst),
+                caption: 'Part of the booked value; not profit',
+                money: true
+            })
+        }
     }
     const waiting = kpis.awaitingVerification
     if (amount(waiting?.count) > 0) {

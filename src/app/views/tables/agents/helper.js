@@ -56,6 +56,16 @@ export const headers = [
         visible: true,
         minWidth: 8,
         maxWidth: 8
+    },
+    {
+        id: 6,
+        label: 'State',
+        search: true,
+        sort: false,
+        key: 'state',
+        visible: true,
+        minWidth: 8,
+        maxWidth: 8
     }
 ]
 
