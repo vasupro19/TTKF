@@ -116,12 +116,12 @@ function ListPage({
         navigate({ pathname: location.pathname, search: next }, { replace: true })
     }
 
-    const hasFilters = Boolean(
-        search.value ||
-        dateFilters.created_at?.from ||
-        dateFilters.created_at?.to ||
+    const hasFilters = [
+        search.value,
+        dateFilters.created_at?.from,
+        dateFilters.created_at?.to,
         Object.values(values).some(Boolean)
-    )
+    ].some(Boolean)
 
     const clearFilters = () => {
         setSearchText('')

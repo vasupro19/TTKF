@@ -72,16 +72,16 @@ export const invoiceQuery = (filters, { page = 0, pageSize = 25 } = {}) => ({
 
 /** @description anything beyond this month's invoices is a filter */
 export const hasInvoiceFilters = (filters, now = new Date()) =>
-    Boolean(
-        filters.from ||
-        filters.to ||
-        filters.status ||
-        filters.kind ||
-        filters.gst ||
-        filters.issuedBy ||
-        filters.q ||
+    [
+        filters.from,
+        filters.to,
+        filters.status,
+        filters.kind,
+        filters.gst,
+        filters.issuedBy,
+        filters.q,
         filters.month !== thisMonth(now)
-    )
+    ].some(Boolean)
 
 /** @description what an empty invoice list says */
 export const emptyInvoices = ({ loaded, count, hasFilters, filters }) => {
