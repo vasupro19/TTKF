@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button, CircularProgress } from '@mui/material'
 import { CloudUpload } from '@mui/icons-material'
 import * as XLSX from 'xlsx'
@@ -15,7 +15,13 @@ import UiAccessGuard from '@/app/guards/UiPermissionGuard'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
-import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
+import {
+    STATUS_FILTER,
+    columnsForCampaign,
+    scopedSubtitle,
+    useCampaignName,
+    useDeleteFlow
+} from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
 
 const FILTERS = [
@@ -42,6 +48,7 @@ function MasterItenaryTable() {
     const [uploadTrigger, { isLoading: uploading }] = useUploadItinerariesMutation()
     const [deleteItenary] = useDeleteItenaryClientMutation()
     const [reload, setReload] = useState(0)
+    const columns = useMemo(() => columnsForCampaign(headers, campaignId), [campaignId])
 
     const add = useCallback(() => navigate('/master/itenary/add', { state: { campaignId } }), [navigate, campaignId])
     useKeyboardShortcut('Alt+A', () => {
@@ -95,9 +102,10 @@ function MasterItenaryTable() {
             <ListPage
                 title='Itineraries'
                 subtitle={scopedSubtitle('The day plans packages are built from.', campaignName)}
+                eyebrow={<BackToCampaigns />}
                 noun='itineraries'
                 searchPlaceholder='Search itinerary title or description'
-                headers={headers}
+                headers={columns}
                 endpoint={getItenaryClients}
                 baseParams={{ campaignId }}
                 reqKey='getItinerariesListKey'
@@ -109,21 +117,17 @@ function MasterItenaryTable() {
                 reloadSignal={reload}
                 emptyText='Add the day plans for this campaign (arrival, sightseeing, departure), then use them to build packages.'
                 extraActions={
-                    <>
-                        <BackToCampaigns />
-                        <UiAccessGuard type='create'>
-                            <Button
-                                size='small'
-                                variant='outlined'
-                                component='label'
-                                disabled={uploading}
-                                startIcon={uploading ? <CircularProgress size={16} color='inherit' /> : <CloudUpload />}
-                            >
-                                {uploading ? 'Uploading...' : 'Upload Excel'}
-                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
-                            </Button>
-                        </UiAccessGuard>
-                    </>
+                    <UiAccessGuard type='create'>
+                        <Button
+                            variant='outlined'
+                            component='label'
+                            disabled={uploading}
+                            startIcon={uploading ? <CircularProgress size={16} color='inherit' /> : <CloudUpload />}
+                        >
+                            {uploading ? 'Uploading...' : 'Upload Excel'}
+                            <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                        </Button>
+                    </UiAccessGuard>
                 }
                 renderAction={row => (
                     <CatalogRowActions

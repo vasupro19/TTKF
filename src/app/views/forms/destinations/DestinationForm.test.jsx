@@ -3,15 +3,18 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import DestinationForm from './index'
 
-const assistAi = vi.fn()
-const dispatch = vi.fn()
+const { assistAi, dispatch, createDestination } = vi.hoisted(() => ({
+    assistAi: vi.fn(),
+    dispatch: vi.fn(),
+    createDestination: vi.fn()
+}))
 
 vi.mock('react-redux', () => ({ useDispatch: () => dispatch, useSelector: select => select({ loading: {} }) }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
 vi.mock('@/app/store/slices/api/aiSlice', () => ({ useAssistAiMutation: () => [assistAi] }))
 vi.mock('@/app/store/slices/api/campaignSlice', () => ({ getCampaigns: { initiate: () => ({ type: 'campaigns' }) } }))
 vi.mock('@/app/store/slices/api/destinationSlice', () => ({
-    useCreateDestinationClientMutation: () => [vi.fn()],
+    useCreateDestinationClientMutation: () => [createDestination],
     useUpdateDestinationClientMutation: () => [vi.fn()],
     getDestinationClientById: { initiate: () => ({ type: 'destination' }) }
 }))
@@ -38,6 +41,7 @@ const field = name => document.querySelector(`[name="${name}"]`)
 
 beforeEach(() => {
     assistAi.mockReset()
+    createDestination.mockReset()
     dispatch.mockReset()
     dispatch.mockImplementation(() => Promise.resolve({ data: { data: [{ id: 1, title: 'Summer' }] } }))
     assistAi.mockImplementation(({ messages }) => {
@@ -101,5 +105,40 @@ describe('Add destination — hotel suggestions', () => {
         })
         fireEvent.click(screen.getByRole('button', { name: 'Suggest again' }))
         await waitFor(() => expect(field('premium_hotel')).toHaveValue('Wildflower Hall'), { timeout: 5000 })
+    })
+})
+
+describe('Add destination — the form', () => {
+    test('an empty form says what is missing', async () => {
+        renderForm()
+        fireEvent.click(screen.getByRole('button', { name: 'Add destination' }))
+        expect(await screen.findByText(/Destination Name must be at least 3 characters/)).toBeInTheDocument()
+        expect(screen.getByText('Campaign is required')).toBeInTheDocument()
+        expect(createDestination).not.toHaveBeenCalled()
+    })
+
+    test('saves the name, the campaign as a number, and the hotel lists as typed', async () => {
+        createDestination.mockReturnValue({ unwrap: () => Promise.resolve({ success: true, message: 'Saved' }) })
+        assistAi.mockImplementation(() => ({ unwrap: () => Promise.resolve({ content: [{ text: '{}' }] }) }))
+        renderForm()
+        await waitFor(() => expect(dispatch).toHaveBeenCalled())
+
+        fireEvent.change(field('name'), { target: { name: 'name', value: 'Manali' } })
+        fireEvent.change(field('luxury_hotel'), {
+            target: { name: 'luxury_hotel', value: 'Span Resort | The Himalayan' }
+        })
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Campaign/ }))
+        fireEvent.click(await screen.findByRole('option', { name: 'Summer' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add destination' }))
+
+        await waitFor(() => expect(createDestination).toHaveBeenCalledTimes(1))
+        expect(createDestination).toHaveBeenCalledWith({
+            name: 'Manali',
+            campaignId: 1,
+            delux_hotel: '',
+            super_delux_hotel: '',
+            luxury_hotel: 'Span Resort | The Himalayan',
+            premium_hotel: ''
+        })
     })
 })

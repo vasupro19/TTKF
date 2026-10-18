@@ -45,6 +45,7 @@ const BOX_SX = { '& .MuiInputBase-root': { height: 34 } }
 function ListPage({
     title,
     subtitle,
+    eyebrow = null,
     noun,
     searchPlaceholder,
     headers,
@@ -203,10 +204,12 @@ function ListPage({
                         gap: 2,
                         justifyContent: 'space-between',
                         alignItems: { xs: 'flex-start', md: 'center' },
-                        flexDirection: { xs: 'column', md: 'row' }
+                        flexWrap: 'wrap'
                     }}
                 >
-                    <Box>
+                    {/* ? the words take what is left, so the buttons stay in one row beside them; on a narrow screen the buttons drop below */}
+                    <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
+                        {eyebrow}
                         <Typography variant='h3'>{title}</Typography>
                         {subtitle && (
                             <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
@@ -214,7 +217,14 @@ function ListPage({
                             </Typography>
                         )}
                     </Box>
-                    <Stack direction='row' spacing={1.5} alignItems='center' flexWrap='wrap' useFlexGap>
+                    <Stack
+                        direction='row'
+                        spacing={1.5}
+                        alignItems='center'
+                        justifyContent='flex-end'
+                        flexWrap='wrap'
+                        useFlexGap
+                    >
                         {extraActions}
                         <ToggleColumns columns={columns} handler={handleCheckToggle} />
                         <UiAccessGuard>
@@ -375,6 +385,7 @@ function ListPage({
 ListPage.propTypes = {
     title: PropTypes.string.isRequired,
     subtitle: PropTypes.string,
+    eyebrow: PropTypes.node,
     noun: PropTypes.string.isRequired,
     searchPlaceholder: PropTypes.string.isRequired,
     headers: PropTypes.arrayOf(PropTypes.shape({ key: PropTypes.string, label: PropTypes.string })).isRequired,

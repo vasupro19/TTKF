@@ -1,807 +1,288 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { z } from 'zod'
-import { useFormik } from 'formik'
-
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Box, Divider, Grid, Skeleton, Typography, Card, CardContent, IconButton, Tooltip } from '@mui/material'
-import { CheckCircle, Delete, Edit } from '@mui/icons-material'
-import FormComponent from '@core/components/forms/FormComponent'
-import MainCard from '@core/components/extended/MainCard'
-import CustomButton from '@core/components/extended/CustomButton'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Box, Button, Chip, Skeleton, Stack, Typography } from '@mui/material'
+import { Add, LocationOn, NightsStay } from '@mui/icons-material'
 import { useDispatch, useSelector } from 'react-redux'
-import { getItenaryClients, useUpdateItenaryClientMutation } from '@/app/store/slices/api/itenarySlice'
-import { getDestinationClients } from '@/app/store/slices/api/destinationSlice'
-import { getTravelImages } from '@/app/store/slices/api/aiSlice'
-import {
-    useCreatePackageItenaryClientMutation,
-    useUpdatePackageItenaryClientMutation,
-    useDeletePackageItenaryClientMutation,
-    getPackageClientItenaryById
-} from '@/app/store/slices/api/packageItenarySlice'
-import { getCampaigns } from '@/app/store/slices/api/campaignSlice'
-import { openSnackbar } from '@app/store/slices/snackbar'
-import IdentityCard from '@/core/components/IdentityCard'
+import MainCard from '@core/components/extended/MainCard'
 import ConfirmModal from '@/core/components/modals/ConfirmModal'
 import { closeModal, openModal } from '@/app/store/slices/modalSlice'
+import { openSnackbar } from '@app/store/slices/snackbar'
+import { getPackageClientById } from '@/app/store/slices/api/packageSlice'
+import {
+    getPackageClientItenaryById,
+    useDeletePackageItenaryClientMutation,
+    useReorderPackageDaysMutation
+} from '@/app/store/slices/api/packageItenarySlice'
+import PackageDayForm from './PackageDayForm'
+import PackageDayList from './PackageDayList'
+import { dayTitle, moveItem, nightsOf, staysOf } from './packageDayFacts'
 
+/**
+ * A package's days: see them in order, drag or use the arrows to move one, add a day anywhere, edit or delete one.
+ * The route is /package/activities/:campaignId/:packageId.
+ */
 function PackagesItenary() {
     const navigate = useNavigate()
     const location = useLocation()
     const dispatch = useDispatch()
     const params = useParams()
+    const formRef = useRef(null)
 
-    const [createPackageItenaryClient] = useCreatePackageItenaryClientMutation()
-    const [updatePackageItenaryClient] = useUpdatePackageItenaryClientMutation()
-    const [deletePackageItenaryClient] = useDeletePackageItenaryClientMutation()
-    const [updateItenaryClient] = useUpdateItenaryClientMutation()
+    const [reorderDays] = useReorderPackageDaysMutation()
+    const [deleteDay] = useDeletePackageItenaryClientMutation()
+    const { deletePackageItenaryClientLKey } = useSelector(state => state.loading || {})
 
-    const [itenaryData, setItenaryData] = useState([])
-    const [destinationData, setDestinationData] = useState([])
-    const [packageActivities, setPackageActivities] = useState([])
-    const [imageOptions, setImageOptions] = useState([])
-    const [loadingImages, setLoadingImages] = useState(false)
-    const [editingActivity, setEditingActivity] = useState(null)
-    const [deleteId, setDeleteId] = useState(null)
-    const [itenarySearch, setItenarySearch] = useState('')
-    const [destinationSearch, setDestinationSearch] = useState('')
-    const [debouncedItenarySearch, setDebouncedItenarySearch] = useState('')
-    const [debouncedDestinationSearch, setDebouncedDestinationSearch] = useState('')
-    const [loadingItenaries, setLoadingItenaries] = useState(false)
-    const [loadingDestinations, setLoadingDestinations] = useState(false)
+    const [days, setDays] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [busy, setBusy] = useState(false)
+    const [pack, setPack] = useState(null)
+    const [editingDay, setEditingDay] = useState(null)
+    const [insertIndex, setInsertIndex] = useState(null)
+    const [toDelete, setToDelete] = useState(null)
 
-    async function fetchActivities() {
-        const { data, error } = await dispatch(getPackageClientItenaryById.initiate(params.packageId))
-        if (error) return
-        setPackageActivities(data?.data || [])
-    }
-
-    const focusActivityId = location.state?.focusActivityId
-
-    const getItenaryAndDestination = useCallback(
-        async ({ itenaryKeyword = '', destinationKeyword = '' } = {}) => {
-            const itenaryParams = new URLSearchParams()
-            const destinationParams = new URLSearchParams()
-
-            if (params.campaignId) {
-                itenaryParams.set('campaignId', params.campaignId)
-                destinationParams.set('campaignId', params.campaignId)
-            }
-
-            if (itenaryKeyword.trim()) {
-                itenaryParams.set('search', itenaryKeyword.trim())
-            }
-
-            if (destinationKeyword.trim()) {
-                destinationParams.set('search', destinationKeyword.trim())
-            }
-
-            setLoadingItenaries(true)
-            setLoadingDestinations(true)
-
-            try {
-                const [itenaryRes, destinationRes] = await Promise.all([
-                    dispatch(getItenaryClients.initiate(`?${itenaryParams.toString()}`, false)),
-                    dispatch(getDestinationClients.initiate(`?${destinationParams.toString()}`, false))
-                ])
-
-                setItenaryData(itenaryRes?.data?.data || [])
-                setDestinationData(destinationRes?.data?.data || [])
-            } finally {
-                setLoadingItenaries(false)
-                setLoadingDestinations(false)
-            }
-        },
-        [dispatch, params.campaignId]
+    const say = useCallback(
+        (message, isError = false) =>
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message,
+                    variant: 'alert',
+                    alert: { color: isError ? 'error' : 'success' },
+                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                })
+            ),
+        [dispatch]
     )
 
-    const [campaignsData, setcampaignsData] = useState([])
-
-    const { createPackageItenaryClientLKey, updatePackageItenaryClientLKey, deletePackageItenaryClientLKey } =
-        useSelector(state => state.loading || {})
-
-    const entryTypeOptions = [
-        { label: 'Stay', value: 'Stay' },
-        { label: 'Transit', value: 'Transit' },
-        { label: 'Transit + Stay', value: 'TransitStay' },
-        { label: 'Fresh Up', value: 'FreshUp' }
-    ]
-
-    const initialValues = {
-        packageId: params.packageId,
-        campaignId: params.campaignId || '',
-        itenaryId: '',
-        destinationId: '',
-        description: '',
-        image: '',
-        entryType: 'Stay'
-    }
-
-    const validationSchema = z.object({
-        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive(),
-        itenaryId: z.number({ invalid_type_error: 'Itenary is required' }).int().positive(),
-        destinationId: z.number().optional().nullable(),
-        description: z.string().optional(),
-        image: z.string().optional(),
-        entryType: z.string().min(1, 'Entry type is required')
-    })
-
-    const validate = values => {
-        try {
-            const parsedValues = {
-                ...values,
-                campaignId: values.campaignId ? parseInt(values?.campaignId, 10) : '',
-                itenaryId: values.itenaryId ? parseInt(values?.itenaryId, 10) : '',
-                destinationId: values.destinationId ? parseInt(values?.destinationId, 10) : null
-            }
-            validationSchema.parse(parsedValues)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
-            })
-            return formikErrors
-        }
-    }
-
-    const formik = useFormik({
-        initialValues,
-        validate,
-        onSubmit: async values => {
-            try {
-                const { description, ...restValues } = values
-                const payload = {
-                    ...restValues,
-                    campaignId: parseInt(restValues.campaignId, 10),
-                    itenaryId: parseInt(restValues.itenaryId, 10),
-                    destinationId: restValues.destinationId ? parseInt(restValues.destinationId, 10) : null
-                }
-                const selectedItenaryRecord =
-                    itenaryData.find(item => item.id.toString() === payload.itenaryId?.toString?.()) ||
-                    editingActivity?.itenary
-                const nextDescription = description?.trim?.() || ''
-
-                if (selectedItenaryRecord && nextDescription !== (selectedItenaryRecord.description?.trim?.() || '')) {
-                    await updateItenaryClient({
-                        id: selectedItenaryRecord.id,
-                        title: selectedItenaryRecord.title,
-                        description: nextDescription,
-                        campaignId: selectedItenaryRecord.campaignId || payload.campaignId
-                    }).unwrap()
-                }
-
-                let response
-                if (editingActivity?.id) {
-                    response = await updatePackageItenaryClient({ id: editingActivity.id, ...payload }).unwrap()
-                } else {
-                    response = await createPackageItenaryClient(payload).unwrap()
-                }
-
-                if (response.success || response.status_code === 200) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message:
-                                response.message ||
-                                `Package activity ${editingActivity?.id ? 'updated' : 'created'} successfully!`,
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                    setEditingActivity(null)
-                    formik.resetForm({
-                        values: {
-                            packageId: params.packageId,
-                            campaignId: params.campaignId || '',
-                            itenaryId: '',
-                            destinationId: '',
-                            description: '',
-                            image: '',
-                            entryType: 'Stay'
-                        }
-                    })
-                    fetchActivities()
-                }
-            } catch (error) {
-                if (error.data?.data?.errors) {
-                    const backendErrors = error.data.data.errors
-                    const formikErrors = {}
-
-                    Object.entries(backendErrors).forEach(([field, messages]) => {
-                        formikErrors[field] = messages.join(', ')
-                    })
-                    formik.setErrors(formikErrors)
-                } else {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: error.data?.data?.message || 'An error occurred, please try again',
-                            variant: 'alert',
-                            alert: { color: 'error' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                }
-            }
-        },
-        validateOnBlur: true,
-        validateOnChange: true
-    })
-
-    function resetFormState() {
-        setEditingActivity(null)
-        formik.resetForm({
-            values: {
-                packageId: params.packageId,
-                campaignId: params.campaignId || '',
-                itenaryId: '',
-                destinationId: '',
-                description: '',
-                image: '',
-                entryType: 'Stay'
-            }
-        })
-    }
+    const fetchDays = useCallback(async () => {
+        const { data, error } = await dispatch(
+            getPackageClientItenaryById.initiate(params.packageId, { forceRefetch: true })
+        )
+        if (!error) setDays(Array.isArray(data?.data) ? data.data : [])
+        setLoading(false)
+    }, [dispatch, params.packageId])
 
     useEffect(() => {
-        fetchActivities()
-    }, [params.packageId])
+        setLoading(true)
+        fetchDays()
+        dispatch(getPackageClientById.initiate(params.packageId)).then(({ data }) => setPack(data?.data || null))
+    }, [fetchDays, dispatch, params.packageId])
 
+    // ? the trip is in the address, else it is the package's own
+    const campaignId = params.campaignId || (pack?.campaignId ? String(pack.campaignId) : '')
+
+    // ? "Edit" on the read-only days page lands here with the day to open
+    const focusDayId = location.state?.focusActivityId
     useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            const nextValue = itenarySearch.trim()
-            setDebouncedItenarySearch(nextValue.length >= 2 || nextValue.length === 0 ? nextValue : '')
-        }, 700)
-
-        return () => clearTimeout(timeoutId)
-    }, [itenarySearch])
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            const nextValue = destinationSearch.trim()
-            setDebouncedDestinationSearch(nextValue.length >= 2 || nextValue.length === 0 ? nextValue : '')
-        }, 700)
-
-        return () => clearTimeout(timeoutId)
-    }, [destinationSearch])
-
-    useEffect(() => {
-        getItenaryAndDestination({
-            itenaryKeyword: debouncedItenarySearch,
-            destinationKeyword: debouncedDestinationSearch
-        })
-    }, [getItenaryAndDestination, debouncedItenarySearch, debouncedDestinationSearch])
-
-    const customSx = {
-        '& input, & textarea': {
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px'
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white'
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray'
-        },
-        flexGrow: 1
-    }
-
-    const campaignOptions = campaignsData?.map(camp => ({
-        label: camp.title,
-        value: camp.id.toString()
-    }))
-
-    const itenaryOptions = itenaryData?.map(item => ({
-        label: item.title,
-        value: item.id
-    }))
-
-    const destinationOptions = destinationData?.map(item => ({
-        label: item.name,
-        value: item.id
-    }))
-
-    const selectedItenaryOption =
-        itenaryOptions.find(item => item.value.toString() === formik.values.itenaryId?.toString?.()) || null
-    const selectedDestinationOption =
-        destinationOptions.find(item => item.value.toString() === formik.values.destinationId?.toString?.()) || null
-    const isStayEntryType = formik.values.entryType === 'Stay' || formik.values.entryType === 'TransitStay'
-    let destinationHelperText = ''
-
-    if (!isStayEntryType) {
-        destinationHelperText = 'Destination is optional for transit and fresh up entries'
-    } else if (destinationSearch.trim().length === 1) {
-        destinationHelperText = 'Type at least 2 characters to search destination'
-    }
-
-    const handleCustomChange = e => {
-        const { name, value } = e.target
-
-        if (name === 'entryType') {
-            const nextValue = value?.value || value || 'Stay'
-            formik.setFieldValue('entryType', nextValue)
-            if (nextValue !== 'Stay' && nextValue !== 'TransitStay') {
-                formik.setFieldValue('destinationId', '')
-            }
-            return
-        }
-
-        if (['campaignId', 'itenaryId', 'destinationId'].includes(name)) {
-            const nextValue = value?.value?.toString?.() || value?.value || value || ''
-            formik.setFieldValue(name, nextValue)
-
-            if (name === 'itenaryId') {
-                const matchedItenary = itenaryData.find(item => item.id.toString() === nextValue?.toString?.())
-                formik.setFieldValue('description', matchedItenary?.description || '')
-            }
-            return
-        }
-
-        formik.handleChange(e)
-    }
-
-    const tabsFields = [
-        {
-            label: 'Package Information',
-            fields: [
-                {
-                    name: 'campaignId',
-                    label: 'Associated Campaign',
-                    type: 'select',
-                    options: campaignOptions,
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'itenaryId',
-                    label: 'Itenary',
-                    type: 'CustomAutocomplete',
-                    options: itenaryOptions,
-                    value: selectedItenaryOption,
-                    loading: loadingItenaries,
-                    onInputChange: ({ value }) => setItenarySearch(value || ''),
-                    helperText:
-                        itenarySearch.trim().length === 1 ? 'Type at least 2 characters to search itinerary' : '',
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx,
-                    isOptionEqualToValue: (option, selectedValue) =>
-                        option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
-                },
-                {
-                    name: 'destinationId',
-                    label: 'Destination',
-                    type: 'CustomAutocomplete',
-                    options: destinationOptions,
-                    value: selectedDestinationOption,
-                    loading: loadingDestinations,
-                    onInputChange: ({ value }) => setDestinationSearch(value || ''),
-                    helperText: destinationHelperText,
-                    required: isStayEntryType,
-                    isDisabled: !isStayEntryType,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx,
-                    isOptionEqualToValue: (option, selectedValue) =>
-                        option?.value?.toString() === (selectedValue?.value || selectedValue)?.toString()
-                },
-                {
-                    name: 'description',
-                    label: 'Itinerary Description',
-                    type: 'textarea',
-                    minRows: 4,
-                    required: false,
-                    helperText: 'This updates the itinerary master description everywhere it is reused.',
-                    grid: { xs: 12, sm: 12, md: 12 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'entryType',
-                    label: 'Entry Type',
-                    type: 'select',
-                    options: entryTypeOptions,
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'image',
-                    label: 'Image URL',
-                    type: 'text',
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                }
-            ]
-        }
-    ]
-
-    const identityCardData = [
-        {
-            label: 'Package',
-            value: packageActivities?.[0]?.package?.name || params.packageId || 'N/A'
-        },
-        {
-            label: 'Campaign',
-            value: campaignsData?.find(item => item.id.toString() === formik.values?.campaignId)?.title || 'N/A'
-        },
-        { label: 'Activities', value: packageActivities.length || 0 }
-    ]
-
-    const getCampaignsFunc = async () => {
-        const { data: response } = await dispatch(getCampaigns.initiate())
-        setcampaignsData(response.data)
-    }
-
-    useEffect(() => {
-        getCampaignsFunc()
-    }, [])
-
-    const selectedItenary = itenaryData.find(i => i.id.toString() === formik.values.itenaryId?.toString?.())
-    const selectedDestination = destinationData.find(d => d.id.toString() === formik.values.destinationId?.toString?.())
-
-    useEffect(() => {
-        const keyword = selectedDestination?.name || selectedItenary?.title
-        if (!keyword) return
-
-        setLoadingImages(true)
-        dispatch(getTravelImages.initiate(keyword))
-            .then(res => {
-                setImageOptions(res.data?.urls || [])
-            })
-            .catch(() => setImageOptions([]))
-            .finally(() => setLoadingImages(false))
-    }, [formik.values.destinationId, formik.values.itenaryId])
-
-    const handleEditActivity = activity => {
-        setEditingActivity(activity)
-        formik.setValues({
-            packageId: activity.packageId?.toString() || params.packageId,
-            campaignId: params.campaignId || '',
-            itenaryId: activity.itenaryId?.toString() || '',
-            destinationId: activity.destinationId?.toString() || '',
-            description: activity.itenary?.description || '',
-            image: activity.image || '',
-            entryType: activity.entryType || 'Stay'
-        })
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-
-    useEffect(() => {
-        if (!focusActivityId || packageActivities.length === 0) return
-
-        const matchedActivity = packageActivities.find(item => item.id === Number(focusActivityId))
-        if (!matchedActivity) return
-
-        handleEditActivity(matchedActivity)
+        if (!focusDayId || days.length === 0) return
+        const match = days.find(day => day.id === Number(focusDayId))
+        if (!match) return
+        setEditingDay(match)
         navigate(location.pathname, { replace: true, state: null })
-    }, [focusActivityId, packageActivities])
+    }, [focusDayId, days]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleAskDelete = id => {
-        setDeleteId(id)
+    const showForm = () => formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+
+    const handleMove = async (from, to) => {
+        if (busy) return
+        const next = moveItem(days, from, to)
+        if (next === days) return
+        const before = days
+        setDays(next)
+        setEditingDay(null)
+        setBusy(true)
+        try {
+            await reorderDays({ packageId: params.packageId, order: next.map(day => day.id) }).unwrap()
+            // ? the server writes the new order into the rows: read them back
+            await fetchDays()
+        } catch (error) {
+            setDays(before)
+            say(error?.data?.message || 'Couldn’t move the day. Please try again.', true)
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const handleInsert = index => {
+        setEditingDay(null)
+        setInsertIndex(index)
+        showForm()
+    }
+
+    const handleAddAtEnd = () => {
+        setEditingDay(null)
+        setInsertIndex(null)
+        showForm()
+    }
+
+    const handleEdit = day => {
+        setEditingDay(day)
+        showForm()
+    }
+
+    const handleAskDelete = day => {
+        setToDelete(day)
         dispatch(openModal({ type: 'confirm_modal' }))
     }
 
-    const handleDeleteActivity = async () => {
+    const handleDelete = async () => {
         try {
-            const response = await deletePackageItenaryClient(deleteId).unwrap()
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: response?.message || 'Package activity deleted successfully!',
-                    variant: 'alert',
-                    alert: { color: 'success' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            if (editingActivity?.id === deleteId) {
-                resetFormState()
-            }
-            fetchActivities()
+            const response = await deleteDay(toDelete.id).unwrap()
+            say(response?.message || 'Day deleted')
+            if (editingDay?.id === toDelete.id) setEditingDay(null)
+            await fetchDays()
         } catch (error) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.message || 'Unable to delete package activity',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
+            say(error?.data?.message || 'Couldn’t delete the day', true)
         } finally {
             dispatch(closeModal())
+            setToDelete(null)
         }
     }
 
+    const handleSaved = async () => {
+        setEditingDay(null)
+        setInsertIndex(null)
+        await fetchDays()
+    }
+
+    const stays = staysOf(days)
+    const nights = nightsOf(days)
+
     return (
-        <MainCard
-            sx={{ py: '1px' }}
-            contentSX={{ px: '2px', py: 1.5 }}
-            title={editingActivity ? 'Edit Package Activity' : 'Add Package Activity'}
-        >
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid>
-
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        <Box sx={{ padding: 2 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant='h4'>
-                                    {editingActivity ? 'Update existing activity' : 'Create new activity'}
-                                </Typography>
-                                {editingActivity ? (
-                                    // eslint-disable-next-line react/jsx-no-bind
-                                    <CustomButton variant='outlined' color='secondary' onClick={resetFormState}>
-                                        Cancel Edit
-                                    </CustomButton>
-                                ) : null}
-                            </Box>
-                            <FormComponent
-                                fields={tabsFields[0].fields}
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                submitting={createPackageItenaryClientLKey || updatePackageItenaryClientLKey}
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={editingActivity ? 'Update Activity' : 'Create Activity'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                        {(loadingImages || imageOptions.length > 0) && (
-                            <Box sx={{ mt: 2 }}>
-                                <Typography
-                                    variant='caption'
-                                    sx={{ color: 'text.secondary', mb: 1, display: 'block', fontWeight: 600 }}
-                                >
-                                    SUGGESTED IMAGES — click to select
-                                </Typography>
-
-                                {loadingImages ? (
-                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                        {[1, 2, 3, 4, 5, 6].map(i => (
-                                            <Skeleton
-                                                key={i}
-                                                variant='rectangular'
-                                                width={150}
-                                                height={100}
-                                                sx={{ borderRadius: '8px', flexShrink: 0 }}
-                                            />
-                                        ))}
-                                    </Box>
-                                ) : (
-                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                        {imageOptions.map((img, i) => (
-                                            <Box
-                                                key={img.name}
-                                                onClick={() => formik.setFieldValue('image', img.url)}
-                                                sx={{
-                                                    cursor: 'pointer',
-                                                    borderRadius: '8px',
-                                                    overflow: 'hidden',
-                                                    border: '3px solid',
-                                                    borderColor:
-                                                        formik.values.image === img.url
-                                                            ? 'primary.main'
-                                                            : 'transparent',
-                                                    transition: 'all 0.2s',
-                                                    position: 'relative',
-                                                    '&:hover': {
-                                                        borderColor: 'primary.light',
-                                                        transform: 'scale(1.02)'
-                                                    }
-                                                }}
-                                            >
-                                                <img
-                                                    src={img.thumb}
-                                                    alt={`travel-${i}`}
-                                                    style={{
-                                                        width: '150px',
-                                                        height: '100px',
-                                                        objectFit: 'cover',
-                                                        display: 'block'
-                                                    }}
-                                                />
-                                                {/* ✅ Checkmark on selected */}
-                                                {formik.values.image === img.url && (
-                                                    <Box
-                                                        sx={{
-                                                            position: 'absolute',
-                                                            top: 4,
-                                                            right: 4,
-                                                            backgroundColor: 'primary.main',
-                                                            borderRadius: '50%',
-                                                            width: 20,
-                                                            height: 20,
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center'
-                                                        }}
-                                                    >
-                                                        <CheckCircle sx={{ fontSize: 16, color: '#fff' }} />
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        ))}
-                                    </Box>
-                                )}
-
-                                {/* ✅ Preview selected image */}
-                                {formik.values.image && (
-                                    <Box sx={{ mt: 1.5 }}>
-                                        <Typography variant='caption' color='text.secondary'>
-                                            Selected Image Preview:
-                                        </Typography>
-                                        <Box
-                                            component='img'
-                                            src={formik.values.image}
-                                            sx={{
-                                                mt: 0.5,
-                                                width: '100%',
-                                                maxHeight: '200px',
-                                                objectFit: 'cover',
-                                                borderRadius: '8px'
-                                            }}
-                                            onError={e => {
-                                                e.target.style.display = 'none'
-                                            }}
-                                        />
-                                    </Box>
-                                )}
-                            </Box>
-                        )}
+        <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
+            <Box sx={{ '& .MuiButton-root': { textTransform: 'none' } }}>
+                <Stack
+                    direction='row'
+                    justifyContent='space-between'
+                    alignItems='flex-start'
+                    spacing={2}
+                    sx={{ flexWrap: 'wrap', rowGap: 1.5 }}
+                >
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                            color='text.secondary'
+                            sx={{ fontSize: '0.8125rem', letterSpacing: '0.08em', fontWeight: 600 }}
+                        >
+                            PACKAGE DAYS
+                        </Typography>
+                        <Typography
+                            component='h1'
+                            sx={{ fontSize: { xs: '1.5rem', md: '1.75rem' }, fontWeight: 600, mt: 0.5 }}
+                        >
+                            {pack?.name || days[0]?.package?.name || 'Package'}
+                        </Typography>
+                        <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: 0.5 }}>
+                            Put the days in order. Drag a day, or use its arrows, and add a day anywhere in the trip.
+                        </Typography>
                     </Box>
-                </Grid>
-
-                <Grid item xs={12} md={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-1rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
-                    />
-                </Grid>
-
-                <Grid item xs={12}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant='h4'>Existing Activities</Typography>
-                        <CustomButton variant='outlined' color='secondary' onClick={() => navigate(-1)}>
+                    <Stack direction='row' spacing={1.5}>
+                        <Button variant='outlined' onClick={() => navigate(-1)}>
                             Back
-                        </CustomButton>
+                        </Button>
+                        <Button variant='contained' startIcon={<Add />} onClick={handleAddAtEnd}>
+                            Add a day
+                        </Button>
+                    </Stack>
+                </Stack>
+
+                {days.length > 0 ? (
+                    <Box
+                        sx={{
+                            mt: 2.5,
+                            p: 2,
+                            borderRadius: 2,
+                            bgcolor: 'success.lighter',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            flexWrap: 'wrap'
+                        }}
+                    >
+                        <NightsStay sx={{ color: 'success.dark', fontSize: 20 }} />
+                        <Typography sx={{ fontWeight: 700, color: 'success.dark' }}>
+                            {days.length} {days.length === 1 ? 'day' : 'days'}, {nights}{' '}
+                            {nights === 1 ? 'night' : 'nights'}
+                        </Typography>
+                        {stays.map(stay => (
+                            <Chip
+                                key={`${stay.destination}-${stay.from}`}
+                                size='small'
+                                icon={<LocationOn sx={{ fontSize: '14px !important' }} />}
+                                label={`${stay.destination} ${stay.nights}N`}
+                                sx={{ bgcolor: 'background.paper', fontWeight: 600 }}
+                            />
+                        ))}
+                    </Box>
+                ) : null}
+
+                <Box
+                    sx={{
+                        mt: 3,
+                        display: 'grid',
+                        gap: 3,
+                        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 420px' },
+                        alignItems: 'start'
+                    }}
+                >
+                    <Box>
+                        {loading ? (
+                            <Stack spacing={1.5}>
+                                {[1, 2, 3].map(key => (
+                                    <Skeleton key={key} variant='rounded' height={84} />
+                                ))}
+                            </Stack>
+                        ) : null}
+                        {!loading && days.length === 0 ? (
+                            <Box
+                                sx={{
+                                    p: 4,
+                                    textAlign: 'center',
+                                    border: '1px dashed',
+                                    borderColor: 'divider',
+                                    borderRadius: 2
+                                }}
+                            >
+                                <Typography sx={{ fontWeight: 600 }}>No days in this package yet</Typography>
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: 0.5 }}>
+                                    Add the first day with the form.
+                                </Typography>
+                            </Box>
+                        ) : null}
+                        {!loading && days.length > 0 ? (
+                            <PackageDayList
+                                days={days}
+                                editingId={editingDay?.id}
+                                busy={busy}
+                                onMove={handleMove}
+                                onEdit={handleEdit}
+                                onDelete={handleAskDelete}
+                                onInsert={handleInsert}
+                            />
+                        ) : null}
                     </Box>
 
-                    {packageActivities.length === 0 ? (
-                        <Typography color='text.secondary'>No activities added for this package yet.</Typography>
-                    ) : (
-                        <Grid container spacing={2}>
-                            {packageActivities.map(activity => (
-                                <Grid item xs={12} md={6} key={activity.id}>
-                                    <Card
-                                        sx={{
-                                            borderRadius: 3,
-                                            border: '1px solid',
-                                            borderColor:
-                                                editingActivity?.id === activity.id ? 'primary.main' : 'divider',
-                                            boxShadow: editingActivity?.id === activity.id ? 4 : 1
-                                        }}
-                                    >
-                                        <CardContent>
-                                            <Box
-                                                sx={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'flex-start',
-                                                    gap: 2
-                                                }}
-                                            >
-                                                <Box>
-                                                    <Typography variant='h5' sx={{ fontWeight: 700 }}>
-                                                        {activity.title ||
-                                                            activity.itenary?.title ||
-                                                            'Untitled Activity'}
-                                                    </Typography>
-                                                    <Typography variant='body2' color='text.secondary'>
-                                                        Destination: {activity.destination?.name || 'Not selected'}
-                                                    </Typography>
-                                                    <Typography variant='body2' color='text.secondary'>
-                                                        Itinerary: {activity.itenary?.title || 'Not selected'}
-                                                    </Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                                    <Tooltip title='Edit activity'>
-                                                        <IconButton
-                                                            color='primary'
-                                                            onClick={() => handleEditActivity(activity)}
-                                                        >
-                                                            <Edit />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title='Delete activity'>
-                                                        <IconButton
-                                                            color='error'
-                                                            onClick={() => handleAskDelete(activity.id)}
-                                                        >
-                                                            <Delete />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </Box>
-                                            </Box>
-
-                                            {activity.image ? (
-                                                <Box
-                                                    component='img'
-                                                    src={activity.image}
-                                                    alt={activity.title || activity.itenary?.title || 'activity'}
-                                                    sx={{
-                                                        mt: 2,
-                                                        width: '100%',
-                                                        height: 220,
-                                                        objectFit: 'cover',
-                                                        borderRadius: 2,
-                                                        border: '1px solid',
-                                                        borderColor: 'divider'
-                                                    }}
-                                                />
-                                            ) : (
-                                                <Box
-                                                    sx={{
-                                                        mt: 2,
-                                                        height: 220,
-                                                        borderRadius: 2,
-                                                        border: '1px dashed',
-                                                        borderColor: 'divider',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        color: 'text.secondary'
-                                                    }}
-                                                >
-                                                    No image selected
-                                                </Box>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                            ))}
-                        </Grid>
-                    )}
-                </Grid>
-            </Grid>
+                    <Box ref={formRef} sx={{ position: { lg: 'sticky' }, top: { lg: 80 }, scrollMarginTop: 80 }}>
+                        <PackageDayForm
+                            packageId={params.packageId}
+                            campaignId={campaignId}
+                            days={days}
+                            editingDay={editingDay}
+                            insertIndex={insertIndex ?? undefined}
+                            onSaved={handleSaved}
+                            onCancelEdit={() => setEditingDay(null)}
+                            say={say}
+                        />
+                    </Box>
+                </Box>
+            </Box>
 
             <ConfirmModal
-                title='Delete Activity'
-                message='Are you sure you want to delete this package activity?'
+                title='Delete this day'
+                message={`Delete Day ${days.findIndex(day => day.id === toDelete?.id) + 1}${toDelete ? ` (${dayTitle(toDelete)})` : ''}? The days after it move up.`}
                 icon='warning'
-                confirmText='Yes, Delete'
+                confirmText='Yes, delete'
                 customStyle={{ width: { xs: '300px', sm: '456px' } }}
-                onConfirm={handleDeleteActivity}
+                onConfirm={handleDelete}
                 isLoading={deletePackageItenaryClientLKey}
             />
         </MainCard>

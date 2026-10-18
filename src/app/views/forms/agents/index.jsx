@@ -1,532 +1,157 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import { z } from 'zod'
+import { useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Box, MenuItem } from '@mui/material'
 import { useFormik } from 'formik'
-
-// router
-import { useParams, useNavigate } from 'react-router-dom'
-
-// theme components
-import { Box, Divider, Grid } from '@mui/material'
-
-// components
-import FormComponent from '@core/components/forms/FormComponent'
-import MainCard from '@core/components/extended/MainCard'
-// import DynamicLayout from '@core/components/forms/DynamicLayout'
-
-// redux imports
 import { useDispatch, useSelector } from 'react-redux'
-import {
-    useCreateAgentMutation,
-    useUpdateAgentMutation,
-    getAgents,
-    getAgentById
-} from '@/app/store/slices/api/agentSlice'
-import { useFetchPincodeDetailsMutation } from '@app/store/slices/api/clientSlice'
+
+import FormPage from '@core/components/FormPage'
+import FormField from '@core/components/FormField'
+import FormSection, { formColumns } from '@core/components/FormSection'
 import { openSnackbar } from '@app/store/slices/snackbar'
-
+import { useCreateAgentMutation, useUpdateAgentMutation, getAgentById } from '@/app/store/slices/api/agentSlice'
 import { objectLength } from '@/utilities'
+import { EMPTY_AGENT, agentFormProblems, agentPayload, agentToForm, stateOptions } from './agentFormFacts'
 
-import { expressions } from '@/constants'
-import IdentityCard from '@/core/components/IdentityCard'
-import NotesInstructions from '@/core/components/NotesInstructions'
-import MyTabs from '@/core/components/CapsuleTabs'
-
-// constants
-
+/**
+ * Add a travel agent (another agency you work with), or change one.
+ */
 function AgentForm() {
     const { id: formId } = useParams()
+    const editing = Boolean(formId)
     const navigate = useNavigate()
-    const [editData, setEditData] = useState({})
-    const { createLocationMasterLKey, updateLocationMasterLKey } = useSelector(state => state.loading)
-
-    const [activeTab, setActiveTab] = useState(0)
-    const [tabsEnabled, setTabsEnabled] = useState([true, false, false])
-    const [clientId, setClientId] = useState(null)
-    const [createAgentMaster] = useCreateAgentMutation()
-    const [updateAgentMaster] = useUpdateAgentMutation()
-    const [fetchPincodeDetails] = useFetchPincodeDetailsMutation()
     const dispatch = useDispatch()
-    const tabLabels = ['basicInformation', 'addressInformation', 'otherDetails']
+    const { createAgentMasterLKey, updateAgentMasterLKey } = useSelector(state => state.loading)
 
-    // Initial form values
-    const initialValues = {
-        name: '',
-        phone: '',
-        email: '',
-        state: '',
-        city: '',
-        address: '',
-        remarks: ''
-        // tabId: 'basicInformation',
-        // title: '',
-        // description: ''
-    }
+    const [createAgent] = useCreateAgentMutation()
+    const [updateAgent] = useUpdateAgentMutation()
 
-    // Validation schema
-    const validationSchema = [
-        z.object({
-            title: z.string().superRefine((val, ctx) => {
-                const input = val.trim()
-                if (!input) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Name is required'
-                    })
-                } else if (input.length < 3) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Must be at least 3 characters'
-                    })
-                }
-            }),
-            description: z.string().superRefine((val, ctx) => {
-                const input = val.trim()
-                if (!input) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Code is required'
-                    })
-                } else if (input.length < 3) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Must be at least 3 characters'
-                    })
-                }
+    const say = (message, isError) =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color: isError ? 'error' : 'success' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
-        })
-    ]
-
-    const enableTabsAfterValidation = upToIndex => {
-        const updatedTabs = tabsEnabled.map((enabled, index) => index <= upToIndex)
-        setTabsEnabled(updatedTabs)
-    }
-
-    const validate = values => {
-        try {
-            validationSchema[activeTab].parse(values)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
-            })
-            return formikErrors
-        }
-    }
+        )
 
     const formik = useFormik({
-        initialValues,
-        enableReinitialize: true,
-        // validate,
-        onSubmit: async values => {
+        initialValues: EMPTY_AGENT,
+        validate: agentFormProblems,
+        onSubmit: async (values, { setErrors }) => {
             try {
-                let response
-                if (activeTab === 0 && !clientId) {
-                    response = await createAgentMaster(values).unwrap()
-                    navigate(-1)
-                    setClientId(response.data.id)
-                    // formik.setFieldValue('tabId', tabLabels[1])
-                    // enableTabsAfterValidation(1)
-                    // setActiveTab(1)
-                }
-                // } else if (clientId) {
-                //     if (activeTab < tabLabels.length - 1) {
-                //         response = await updateAgentMaster({ id: clientId, ...values }).unwrap()
-                //         const nextTab = activeTab + 1
-                //         formik.setFieldValue('tabId', tabLabels[nextTab])
-                //         enableTabsAfterValidation(nextTab)
-                //         setActiveTab(nextTab)
-                //     }
-                else {
-                    response = await updateAgentMaster({ ...values }).unwrap()
-                    formik.resetForm()
-                    setActiveTab(0)
-                    setTabsEnabled([true, false, false])
-                    navigate(-1)
-                }
-                // }
-                if (response.success && response.status_code === 200) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: response.message || 'Operation successful!',
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                }
+                const payload = agentPayload(values)
+                const response = editing
+                    ? await updateAgent({ id: formId, ...payload }).unwrap()
+                    : await createAgent(payload).unwrap()
+                say(response?.message || (editing ? 'Agent saved' : 'Agent added'), false)
+                navigate(-1)
             } catch (error) {
-                if (error.data?.data?.errors) {
-                    const backendErrors = error.data.data.errors
-                    const formikErrors = {}
-
-                    // Map backend errors to Formik's error structure
-                    Object.entries(backendErrors).forEach(([field, messages]) => {
-                        formikErrors[field] = messages.join(', ') // Join multiple messages with a comma
-                    })
-
-                    formik.setErrors(formikErrors) // Update Formik's error state
+                const fieldErrors = error?.data?.data?.errors
+                if (fieldErrors && typeof fieldErrors === 'object') {
+                    // ? the server's field errors go on the fields they belong to
+                    setErrors(
+                        Object.fromEntries(
+                            Object.entries(fieldErrors).map(([field, messages]) => [
+                                field,
+                                [].concat(messages).join(', ')
+                            ])
+                        )
+                    )
                 } else {
-                    // Display general error in Snackbar if no specific validation errors
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: error.data?.data?.message || 'An error occurred, please try again',
-                            variant: 'alert',
-                            alert: { color: 'error' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
+                    say(
+                        error?.data?.message ||
+                            error?.data?.data?.message ||
+                            (editing
+                                ? 'Couldn’t save the agent. Please try again.'
+                                : 'Couldn’t add the agent. Please try again.'),
+                        true
                     )
                 }
             }
-        },
-        validateOnBlur: true,
-        validateOnChange: true
+        }
     })
 
-    const handleTabChange = (event, newValue) => {
-        if (tabsEnabled[newValue]) {
-            setActiveTab(newValue)
-            formik.setFieldValue('tabId', tabLabels[newValue])
-        }
-    }
-
-    const getLocation = async id => {
-        const { data, error } = await dispatch(getAgentById.initiate(id))
-        if (error) return true
-        if (!data || !data?.data || !objectLength(data.data)) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.data?.message || 'Unable to find location data for given id',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            // navigate(-1)
-        }
-        setEditData(data.data)
-        return true
-    }
-
-    const handlePincodeChange = useCallback(
-        // eslint-disable-next-line no-shadow
-        async (pincode, formik) => {
-            formik.setFieldValue('postcode', pincode)
-
-            if (pincode.length >= 6) {
-                try {
-                    const response = await fetchPincodeDetails(pincode).unwrap()
-
-                    if (response?.data) {
-                        const { country, state, city } = response.data
-
-                        formik.setValues({
-                            ...formik.values,
-                            postcode: pincode,
-                            country: country || '',
-                            state: state || '',
-                            city: city || ''
-                        })
-
-                        formik.setTouched(
-                            {
-                                ...formik.touched,
-                                country: true,
-                                state: true,
-                                city: true
-                            },
-                            false
-                        )
-
-                        setTimeout(() => {
-                            formik.setFieldValue('postcode', pincode)
-                            formik.validateForm()
-                        }, 100)
-                    } else {
-                        formik.setFieldValue('country', '')
-                        formik.setFieldValue('state', '')
-                        formik.setFieldValue('city', '')
-                    }
-                } catch (error) {
-                    formik.setFieldValue('country', '')
-                    formik.setFieldValue('state', '')
-                    formik.setFieldValue('city', '')
-                }
+    // ? editing: load the agent into the form
+    useEffect(() => {
+        if (!editing) return undefined
+        let cancelled = false
+        dispatch(getAgentById.initiate(formId)).then(({ data, error }) => {
+            if (cancelled) return
+            if (error || !data?.data || !objectLength(data.data)) {
+                say(error?.data?.message || 'Unable to find this agent', true)
+                return
             }
-        },
-        [fetchPincodeDetails]
-    )
-
-    // eslint-disable-next-line no-shadow
-    const handleCustomChange = (e, formik) => {
-        const { name, value } = e.target
-        if (name === 'postcode') {
-            handlePincodeChange(value, formik)
-        } else {
-            formik.handleChange(e)
-        }
-    }
-
-    const customSx = {
-        '& input': {
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px' // Decrease input height
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white' // Apply the white background to the root element
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray' // Optional: change border color if needed
-        },
-        flexGrow: 1
-    }
-    const tabsFields = [
-        {
-            label: 'Add New Agent',
-            fields: [
-                {
-                    name: 'name',
-                    label: 'Name',
-                    type: 'text',
-                    placeholder: 'Enter Full Name',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-
-                {
-                    name: 'address',
-                    label: 'Address',
-                    type: 'text',
-                    placeholder: 'Enter Address',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'city',
-                    label: 'City',
-                    type: 'text',
-                    placeholder: 'Enter City',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'state',
-                    label: 'State',
-                    type: 'select',
-                    options: [
-                        { value: 'AP', label: 'Andhra Pradesh' },
-                        { value: 'AR', label: 'Arunachal Pradesh' },
-                        { value: 'AS', label: 'Assam' },
-                        { value: 'BR', label: 'Bihar' },
-                        { value: 'CG', label: 'Chhattisgarh' },
-                        { value: 'GA', label: 'Goa' },
-                        { value: 'GJ', label: 'Gujarat' },
-                        { value: 'HR', label: 'Haryana' },
-                        { value: 'HP', label: 'Himachal Pradesh' },
-                        { value: 'JH', label: 'Jharkhand' },
-                        { value: 'KA', label: 'Karnataka' },
-                        { value: 'KL', label: 'Kerala' },
-                        { value: 'MP', label: 'Madhya Pradesh' },
-                        { value: 'MH', label: 'Maharashtra' },
-                        { value: 'MN', label: 'Manipur' },
-                        { value: 'ML', label: 'Meghalaya' },
-                        { value: 'MZ', label: 'Mizoram' },
-                        { value: 'NL', label: 'Nagaland' },
-                        { value: 'OR', label: 'Odisha' },
-                        { value: 'PB', label: 'Punjab' },
-                        { value: 'RJ', label: 'Rajasthan' },
-                        { value: 'SK', label: 'Sikkim' },
-                        { value: 'TN', label: 'Tamil Nadu' },
-                        { value: 'TS', label: 'Telangana' },
-                        { value: 'TR', label: 'Tripura' },
-                        { value: 'UP', label: 'Uttar Pradesh' },
-                        { value: 'UK', label: 'Uttarakhand' },
-                        { value: 'WB', label: 'West Bengal' },
-
-                        { value: 'AN', label: 'Andaman and Nicobar Islands' },
-                        { value: 'CH', label: 'Chandigarh' },
-                        { value: 'DNHDD', label: 'Dadra and Nagar Haveli and Daman and Diu' },
-                        { value: 'DL', label: 'Delhi' },
-                        { value: 'JK', label: 'Jammu and Kashmir' },
-                        { value: 'LA', label: 'Ladakh' },
-                        { value: 'LD', label: 'Lakshadweep' },
-                        { value: 'PY', label: 'Puducherry' }
-                    ],
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-
-                {
-                    name: 'remarks',
-                    label: 'Remarks',
-                    type: 'text',
-                    placeholder: 'Enter Remarks',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx: {
-                        textAlign: 'right'
-                    }
-                },
-                {
-                    name: 'email',
-                    label: 'Enter email',
-                    type: 'email',
-                    placeholder: 'Enter email',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'phone',
-                    label: 'Enter phone number',
-                    type: 'number',
-                    placeholder: 'Enter phone number',
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                }
-            ]
-        }
-    ]
-
-    const editHandler = async (id, row) => {
-        const newRow = {}
-        if ('id' in row) setClientId(row.id)
-        if ('postcode' in row && row.postcode) await handlePincodeChange(row.postcode.toString(), formik, 'b')
-        // if ('spostcode' in row) await handlePincodeChange(row.spostcode.toString(), formik, 's')
-        console.log(row, 'row')
-        Object.keys(row).map(rowKey => {
-            if (row[rowKey]) {
-                newRow[rowKey] = row[rowKey].toString()
-            } else newRow[rowKey] = row[rowKey] || ''
-            return rowKey
+            formik.setValues(agentToForm(data.data))
         })
-        formik.setValues({ ...newRow })
-
-        // TODO:
-        // ? scroll the page to top
-
-        const updatedTabs = tabsFields.map(field => {
-            const tabArrays = field.fields.filter(fieldItem => fieldItem?.required && row[fieldItem.name])
-            return !!tabArrays.length
-        })
-        setTabsEnabled(updatedTabs)
-    }
-
-    // this useEffect handles edit data
-    useEffect(() => {
-        const path = window.location.pathname
-        if (editData && objectLength(editData)) editHandler(formId, editData)
-        // if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
+        return () => {
+            cancelled = true
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editData])
-
-    useEffect(() => {
-        if (formId) getLocation(formId)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formId])
-
-    const identityCardData = [
-        { label: 'Location Name', value: formik.values?.name ?? 'N/A' },
-        { label: 'Code', value: formik.values?.code ?? 'N/A' },
-        { label: 'Cost Center', value: formik.values?.cost_center || 'N/A' },
-        { label: 'WH Manager Name', value: formik.values?.Wh_manager_name || 'N/A' },
-        { label: 'Address', value: formik.values?.address || 'N/A' }
-    ]
-
-    const notes = [
-        { id: 'n1', text: 'Enter the Location Name (minimum 3 characters required).' },
-        { id: 'n2', text: 'Enter the Code (minimum 3 characters required).' },
-        { id: 'n3', text: 'Optionally, provide the Cost Center and WH Manager Name.' },
-        { id: 'n4', text: 'Enter the Address (minimum 5 characters required).' },
-        { id: 'n5', text: 'Country, Zone, State, City, and Postcode are required fields.' },
-        { id: 'n6', text: 'Enter a valid Phone number (required).' },
-        { id: 'n7', text: 'Optionally, provide an Email Address (if provided, it must be in a valid format).' },
-        { id: 'n8', text: 'Enter the Latitude and Longitude in valid formats (e.g., 37.7749, -122.4194).' },
-        { id: 'n9', text: 'Enter a valid GST Number (e.g., 22ABCDE1234F1Z5).' },
-        { id: 'n10', text: 'Enter a valid TIN Number (e.g., 12345678901234).' },
-        { id: 'n11', text: 'Enter a valid CIN Number (e.g., L12345MH1990PLC123456).' },
-        { id: 'n12', text: 'Enter a valid PAN Number (e.g., ABCDE1234F).' }
-    ]
+    }, [formId, editing, dispatch])
 
     return (
-        <MainCard sx={{ py: '1px' }} contentSX={{ px: '2px', py: 1.5 }}>
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                {/* <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid> */}
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        {/* <Tabs
-                            value={activeTab}
-                            onChange={handleTabChange}
-                            indicatorColor='primary'
-                            textColor='primary'
-                            variant='fullWidth'
-                        >
-                            {tabsFields.map(tab => (
-                                <Tab key={tab.label} label={tab.label} />
-                            ))}
-                        </Tabs> */}
-                        <MyTabs
-                            activeTab={activeTab}
-                            handleTabChange={handleTabChange}
-                            tabsFields={tabsFields}
-                            tabsEnabled={tabsEnabled}
-                        />
-
-                        <Box sx={{ padding: 2 }}>
-                            <FormComponent
-                                fields={tabsFields[activeTab].fields}
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                submitting={createLocationMasterLKey || updateLocationMasterLKey}
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={activeTab < 2 ? 'Save & Next' : 'Submit'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                    </Box>
-                </Grid>
-
-                <Grid item xs={12} md={6} lg={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
+        <FormPage
+            eyebrow={editing ? 'EDIT AGENT' : 'NEW AGENT'}
+            title={editing ? 'Edit agent' : 'Add an agent'}
+            subtitle={
+                editing
+                    ? 'Change the agent’s details, then save.'
+                    : 'Add a travel agent you work with. Only the name is needed. You can pick them when you create a booking.'
+            }
+            onSubmit={formik.handleSubmit}
+            onCancel={() => navigate('/master/agent')}
+            submitLabel={editing ? 'Save changes' : 'Add agent'}
+            saving={formik.isSubmitting || Boolean(createAgentMasterLKey || updateAgentMasterLKey)}
+        >
+            <FormSection title='Who is the agent?' hint='The agency or person, and how to reach them.'>
+                <Box sx={formColumns}>
+                    <FormField formik={formik} name='name' label='Agent or agency name' required wide />
+                    <FormField
+                        formik={formik}
+                        name='phone'
+                        label='Phone number (optional)'
+                        type='tel'
+                        placeholder='98765 43210'
                     />
-                    {/* <NotesInstructions notes={notes} customFontSize='14px' /> */}
-                </Grid>
-            </Grid>
-        </MainCard>
+                    <FormField
+                        formik={formik}
+                        name='email'
+                        label='Email (optional)'
+                        type='email'
+                        placeholder='name@agency.com'
+                    />
+                </Box>
+            </FormSection>
+
+            <FormSection
+                title='Where are they based?'
+                hint='Helps you find the right agent later, and filter the list.'
+            >
+                <Box sx={formColumns}>
+                    <FormField formik={formik} name='city' label='City' />
+                    <FormField formik={formik} name='state' label='State' select>
+                        <MenuItem value=''>Not set</MenuItem>
+                        {stateOptions(formik.values.state).map(state => (
+                            <MenuItem key={state.value} value={state.value}>
+                                {state.label}
+                            </MenuItem>
+                        ))}
+                    </FormField>
+                    <FormField formik={formik} name='address' label='Address' multiline wide />
+                </Box>
+            </FormSection>
+
+            <FormSection
+                title='Notes'
+                hint='Anything worth remembering: commission, the destinations they send guests to.'
+            >
+                <Box sx={formColumns}>
+                    <FormField formik={formik} name='remarks' label='Remarks' multiline wide />
+                </Box>
+            </FormSection>
+        </FormPage>
     )
 }
 

@@ -44,8 +44,8 @@ export const headers = [
         stick: false,
         key: 'delux_hotel',
         visible: true,
-        minWidth: 12,
-        maxWidth: 20
+        minWidth: 9,
+        maxWidth: 13
     },
     {
         id: 4,
@@ -55,8 +55,8 @@ export const headers = [
         stick: false,
         key: 'super_delux_hotel',
         visible: true,
-        minWidth: 12,
-        maxWidth: 20
+        minWidth: 9,
+        maxWidth: 13
     },
     {
         id: 5,
@@ -66,8 +66,8 @@ export const headers = [
         stick: false,
         key: 'luxury_hotel',
         visible: true,
-        minWidth: 12,
-        maxWidth: 20
+        minWidth: 9,
+        maxWidth: 13
     },
     {
         id: 6,
@@ -77,8 +77,8 @@ export const headers = [
         stick: false,
         key: 'premium_hotel',
         visible: true,
-        minWidth: 12,
-        maxWidth: 20
+        minWidth: 9,
+        maxWidth: 13
     },
     statusColumn,
     createdColumn('created_at')

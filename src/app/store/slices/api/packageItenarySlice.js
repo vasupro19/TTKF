@@ -48,6 +48,16 @@ export const packageItenarySlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['PackageItenaryClient', 'PackageItenaryClientById']
         }),
+        // ? the package's days in a new order: { packageId, order: [dayId, ...] }, first day first
+        reorderPackageDays: build.mutation({
+            query: ({ packageId, order }) => ({
+                url: `/campaign/package/${packageId}/days-order`,
+                method: 'PUT',
+                body: { order },
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            invalidatesTags: ['PackageItenaryClient', 'PackageItenaryClientById']
+        }),
         deletePackageItenaryClient: build.mutation({
             query: id => {
                 const KEY = 'deletePackageItenaryClientLKey'
@@ -77,6 +87,7 @@ export const {
     useCreatePackageItenaryClientMutation,
     useUpdatePackageItenaryClientMutation,
     useDeletePackageItenaryClientMutation,
+    useReorderPackageDaysMutation,
 
     endpoints: { getPackageClientItenaryById, getPackageItenaryClients }
 } = packageItenarySlice

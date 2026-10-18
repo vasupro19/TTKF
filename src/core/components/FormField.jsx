@@ -2,10 +2,10 @@ import PropTypes from 'prop-types'
 import { TextField } from '@mui/material'
 
 /**
- * One field of the lead form: its value, change handler and error come from the form, so every field looks
+ * One field of a form (leads, users): its value, change handler and error come from the form, so every field looks
  * and reports a problem the same way.
  */
-export default function LeadField({
+export default function FormField({
     formik,
     name,
     label,
@@ -16,6 +16,9 @@ export default function LeadField({
     select = false,
     multiline = false,
     wide = false,
+    disabled = false,
+    minRows = 2,
+    endAdornment = null,
     children = null
 }) {
     const problem = formik.touched[name] && formik.errors[name]
@@ -34,11 +37,13 @@ export default function LeadField({
             required={required}
             select={select}
             multiline={multiline}
-            minRows={multiline ? 2 : undefined}
+            minRows={multiline ? minRows : undefined}
+            disabled={disabled}
             fullWidth
             size='small'
             autoComplete='off'
             InputLabelProps={type === 'datetime-local' ? { shrink: true } : undefined}
+            InputProps={endAdornment ? { endAdornment } : undefined}
             sx={wide ? { gridColumn: { sm: '1 / -1' } } : undefined}
         >
             {children}
@@ -46,7 +51,7 @@ export default function LeadField({
     )
 }
 
-LeadField.propTypes = {
+FormField.propTypes = {
     formik: PropTypes.shape({
         values: PropTypes.objectOf(PropTypes.string).isRequired,
         errors: PropTypes.objectOf(PropTypes.string).isRequired,
@@ -63,5 +68,8 @@ LeadField.propTypes = {
     select: PropTypes.bool,
     multiline: PropTypes.bool,
     wide: PropTypes.bool,
+    disabled: PropTypes.bool,
+    minRows: PropTypes.number,
+    endAdornment: PropTypes.node,
     children: PropTypes.node
 }

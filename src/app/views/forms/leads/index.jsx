@@ -22,7 +22,8 @@ import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
-import LeadField from './LeadField'
+import FormField from '@core/components/FormField'
+import FormSection, { formColumns } from '@core/components/FormSection'
 
 const LEAD_SOURCES = [
     { label: 'Added by hand', value: 'Manual' },
@@ -206,21 +207,12 @@ function LeadsForm() {
     const saving = Boolean(createLeadLKey || updateLeadLKey)
 
     const section = (title, hint, children) => (
-        <Box
-            component='section'
-            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: { xs: 2, sm: 2.5 }, mb: 2.5 }}
-        >
-            <Typography component='h2' sx={{ fontSize: '1.0625rem', fontWeight: 600 }}>
-                {title}
-            </Typography>
-            <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 2 }}>
-                {hint}
-            </Typography>
+        <FormSection title={title} hint={hint}>
             {children}
-        </Box>
+        </FormSection>
     )
 
-    const columns = { display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 2 }
+    const columns = formColumns
 
     return (
         <MainCard sx={{ py: 2 }} contentSX={{ px: { xs: 2, sm: 3 }, py: 2 }}>
@@ -243,8 +235,8 @@ function LeadsForm() {
                         'Who is it?',
                         'The guest who enquired.',
                         <Box sx={columns}>
-                            <LeadField formik={formik} name='fullName' label='Full name' required />
-                            <LeadField
+                            <FormField formik={formik} name='fullName' label='Full name' required />
+                            <FormField
                                 formik={formik}
                                 name='phone'
                                 label='Phone number'
@@ -253,7 +245,7 @@ function LeadsForm() {
                                 placeholder='98765 43210 or +44 7911 123456'
                                 helperText='10 digits for India, or the full number with country code'
                             />
-                            <LeadField
+                            <FormField
                                 formik={formik}
                                 name='senderEmail'
                                 label='Email (optional)'
@@ -268,22 +260,22 @@ function LeadsForm() {
                         'What are they asking about?',
                         'All optional — it helps the quotation later.',
                         <Box sx={columns}>
-                            <LeadField formik={formik} name='campaignId' label='Campaign' select>
+                            <FormField formik={formik} name='campaignId' label='Campaign' select>
                                 <MenuItem value=''>None</MenuItem>
                                 {campaignOptions.map(option => (
                                     <MenuItem key={option.value} value={String(option.value)}>
                                         {option.label}
                                     </MenuItem>
                                 ))}
-                            </LeadField>
-                            <LeadField formik={formik} name='leadSource' label='How did they reach you?' select>
+                            </FormField>
+                            <FormField formik={formik} name='leadSource' label='How did they reach you?' select>
                                 {LEAD_SOURCES.map(source => (
                                     <MenuItem key={source.value} value={source.value}>
                                         {source.label}
                                     </MenuItem>
                                 ))}
-                            </LeadField>
-                            <LeadField
+                            </FormField>
+                            <FormField
                                 formik={formik}
                                 name='remarks'
                                 label='Notes'
@@ -298,7 +290,7 @@ function LeadsForm() {
                         'Who follows up?',
                         'The lead goes to the person you choose, and can have a call reminder.',
                         <Box sx={columns}>
-                            <LeadField
+                            <FormField
                                 formik={formik}
                                 name='assignedTo'
                                 label='Assigned to'
@@ -311,14 +303,14 @@ function LeadsForm() {
                                         {option.label}
                                     </MenuItem>
                                 ))}
-                            </LeadField>
-                            <LeadField
+                            </FormField>
+                            <FormField
                                 formik={formik}
                                 name='followupdate'
                                 label='Schedule a call (optional)'
                                 type='datetime-local'
                             />
-                            <LeadField
+                            <FormField
                                 formik={formik}
                                 name='followupremarks'
                                 label='What to discuss on the call'

@@ -95,3 +95,12 @@ export function useDeleteFlow({ remove, noun, nameOf, done, loading = false }) {
     }
     return { ask, confirmProps }
 }
+
+/**
+ * @description the list's columns for a screen showing ONE campaign: its Campaign column would repeat the same name
+ *              on every row, so it starts hidden (the column picker brings it back)
+ */
+export const columnsForCampaign = (columns, campaignId) =>
+    campaignId
+        ? columns.map(column => (column.key === 'campaignTitle' ? { ...column, visible: false } : column))
+        : columns

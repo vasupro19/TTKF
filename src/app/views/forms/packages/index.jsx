@@ -1,309 +1,135 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import { z } from 'zod'
+import { useEffect } from 'react'
 import { useFormik } from 'formik'
-
-// router
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Box, MenuItem } from '@mui/material'
+import { useDispatch } from 'react-redux'
 
-// theme components
-import { Box, Divider, Grid } from '@mui/material'
-
-// components
-import FormComponent from '@core/components/forms/FormComponent'
-import MainCard from '@core/components/extended/MainCard'
-
-// redux imports
-import { useDispatch, useSelector } from 'react-redux'
-
-// 🚨 -----------------------------------------------------------
-// 🚨 NEW/UPDATED IMPORTS FOR PACKAGES
-// 🚨 Adjust the file paths as necessary for your project structure
-// 🚨 -----------------------------------------------------------
+import FormField from '@core/components/FormField'
+import FormPage from '@core/components/FormPage'
+import FormSection, { formColumns } from '@core/components/FormSection'
 import {
     useCreatePackageClientMutation,
     useUpdatePackageClientMutation,
     getPackageClientById
-} from '@/app/store/slices/api/packageSlice' // 👈 **NEW Package Slice**
-
-import {
-    getCampaigns // Hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/campaignSlice' // Existing Campaign Slice
+} from '@/app/store/slices/api/packageSlice'
+import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
+import packageFormProblems from './packageFormFacts'
 
-import { objectLength } from '@/utilities'
-import IdentityCard from '@/core/components/IdentityCard'
-
-// CONSTANTS - assuming you have a way to import Select component data
-
+/**
+ * Add a package (a ready-made itinerary a guest's quote can start from) to a trip, or rename one.
+ */
 function PackagesClientForm() {
-    // 👈 **Renamed Component**
-    // Note: Assuming `id` in useParams is the PackageClients ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
     const location = useLocation()
+    const dispatch = useDispatch()
+    // ? opened from a trip's own page: the trip is already chosen
     const campaignContextId = location.state?.campaignId
 
-    // 👈 Hooks for creating/updating Packages
     const [createPackageClient] = useCreatePackageClientMutation()
     const [updatePackageClient] = useUpdatePackageClientMutation()
+    // ? lists are paged at 25 by default: the 26th trip could not be chosen
+    const { data: campaignsReply } = useGetCampaignsQuery('?length=200')
+    const campaigns = Array.isArray(campaignsReply?.data) ? campaignsReply.data : []
 
-    const [editData, setEditData] = useState({})
-    const [campaignsData, setcampaignsData] = useState([])
-
-    // 👈 Assuming you will use appropriate loading keys for package operations
-    const { createPackageLKey, updatePackageLKey } = useSelector(state => state.loading || {})
-
-    const dispatch = useDispatch()
-
-    // --- Initial Values and Validation Schema ---
-
-    const initialValues = {
-        name: '', // Package name
-        campaignId: campaignContextId?.toString() || '' // Foreign key to CampaignClient
-    }
-
-    // 👈 Validation schema for PackageClient fields
-    const validationSchema = z.object({
-        name: z.string().min(3, 'Package Name must be at least 3 characters'), // 👈 Updated text
-        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive()
-    })
-
-    const validate = values => {
-        try {
-            // Convert campaignId to number for Zod validation
-            const parsedValues = {
-                ...values,
-                campaignId: values.campaignId ? parseInt(values?.campaignId, 10) : ''
-            }
-            validationSchema.parse(parsedValues)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
+    const say = (message, isError) =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color: isError ? 'error' : 'success' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
-            return formikErrors
-        }
-    }
-
-    // --- Formik Setup ---
+        )
 
     const formik = useFormik({
-        initialValues,
-        validate,
+        initialValues: { name: '', campaignId: campaignContextId ? String(campaignContextId) : '' },
+        validate: packageFormProblems,
         onSubmit: async values => {
+            // ? only the two fields: the server keeps the rest (including whether the package is active)
+            const payload = { name: values.name.trim(), campaignId: parseInt(values.campaignId, 10) }
             try {
-                // Ensure campaignId is an integer before sending
-                const payload = {
-                    ...values,
-                    campaignId: parseInt(values.campaignId, 10)
-                }
-
-                let response
-                if (formId) {
-                    // 👈 Update existing package
-                    response = await updatePackageClient({ id: formId, ...payload }).unwrap()
-                } else {
-                    // 👈 Create new package
-                    response = await createPackageClient(payload).unwrap()
-                }
-                console.log(response)
-                if (response.success || response.status_code === 200) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: response.message || 'Package saved successfully!', // 👈 Updated text
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                    // 👈 Navigate to the list view after submission
-                    navigate(-1) // 👈 Updated navigation path
+                const response = formId
+                    ? await updatePackageClient({ id: formId, ...payload }).unwrap()
+                    : await createPackageClient(payload).unwrap()
+                if (response?.success || response?.status_code === 200) {
+                    say(response.message || 'Package saved', false)
+                    navigate(-1)
                 }
             } catch (error) {
-                // ... (Error handling remains similar to your original code)
-                if (error.data?.data?.errors) {
-                    const backendErrors = error.data.data.errors
-                    const formikErrors = {}
-
-                    Object.entries(backendErrors).forEach(([field, messages]) => {
-                        formikErrors[field] = messages.join(', ')
-                    })
-                    formik.setErrors(formikErrors)
+                const fieldErrors = error?.data?.data?.errors
+                if (fieldErrors && typeof fieldErrors === 'object') {
+                    formik.setErrors(
+                        Object.fromEntries(
+                            Object.entries(fieldErrors).map(([field, messages]) => [
+                                field,
+                                [].concat(messages).join(', ')
+                            ])
+                        )
+                    )
                 } else {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: error.data?.data?.message || 'An error occurred, please try again',
-                            variant: 'alert',
-                            alert: { color: 'error' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
+                    say(
+                        error?.data?.data?.message ||
+                            error?.data?.message ||
+                            'Couldn’t save the package. Please try again.',
+                        true
                     )
                 }
             }
-        },
-        validateOnBlur: true,
-        validateOnChange: true
+        }
     })
 
-    // --- Data Fetching and Edit Logic ---
-
-    const getPackageData = async id => {
-        // 👈 Updated function name
-        const { data, error } = await dispatch(getPackageClientById.initiate(id)) // 👈 Updated RTK query
-        if (error) return
-
-        if (data && data?.data && objectLength(data.data)) {
-            setEditData(data.data)
-
-            // Set form values for editing
-            const packageData = data.data // 👈 Updated variable name
-            formik.setValues({
-                ...packageData,
-                campaignId: packageData.campaignId.toString() // Convert number to string for Select component
-            })
-        }
-    }
-
+    // ? editing: load the package into the form
     useEffect(() => {
-        if (formId) getPackageData(formId) // 👈 Updated function call
-    }, [formId])
-
-    useEffect(() => {
-        if (formId || !campaignContextId) return
-        formik.setFieldValue('campaignId', campaignContextId.toString())
-    }, [formId, campaignContextId])
-
-    // --- Form Fields Definition ---
-
-    const customSx = {
-        '& input, & textarea': {
-            // Apply styles to both input and textarea
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px'
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white'
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray'
-        },
-        flexGrow: 1
-    }
-
-    // Transform campaigns data for the Select component
-    const campaignOptions = campaignsData?.map(camp => ({
-        label: camp.title, // Use campaign title for display
-        value: camp.id.toString() // Use campaign ID as value (must be string for Formik Select)
-    }))
-
-    const handleCustomChange = e => {
-        const { name, value } = e.target
-
-        formik.handleChange(e)
-    }
-    // 👈 Updated field label/name
-    const tabsFields = [
-        {
-            label: 'Package Information',
-            fields: [
-                {
-                    name: 'name',
-                    label: 'Package Name', // 👈 Updated label
-                    type: 'text',
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'campaignId',
-                    label: 'Associated Campaign',
-                    type: 'select',
-                    options: campaignOptions,
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx,
-                    isDisabled: Boolean(campaignContextId && !formId)
-                }
-            ]
-        }
-    ]
-
-    // 👈 Updated IdentityCard labels/values
-    const identityCardData = [
-        { label: 'Package Name', value: formik.values?.name ?? 'N/A' },
-        { label: 'Campaign ID', value: formik.values?.campaignId ?? 'N/A' },
-        { label: 'Hotel Type', value: formik.values?.delux_hotel ? 'Delux' : 'Standard' } // Example update
-    ]
-    const getCampaignsFunc = async () => {
-        const { data: response } = await dispatch(getCampaigns.initiate())
-        setcampaignsData(response.data)
-    }
-    useEffect(() => {
-        getCampaignsFunc()
-    }, [])
+        if (!formId) return
+        dispatch(getPackageClientById.initiate(formId)).then(({ data, error }) => {
+            const saved = data?.data
+            if (error || !saved) return
+            formik.setValues({ name: saved.name || '', campaignId: saved.campaignId ? String(saved.campaignId) : '' })
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formId, dispatch])
 
     return (
-        <MainCard
-            sx={{ py: '1px' }}
-            contentSX={{ px: '2px', py: 1.5 }}
-            title={formId ? 'Edit Package' : 'Create New Package'} // 👈 Updated title
+        <FormPage
+            eyebrow={formId ? 'EDIT PACKAGE' : 'NEW PACKAGE'}
+            title={formId ? 'Edit package' : 'Add a package'}
+            subtitle='A package is a ready-made itinerary for a trip. After saving, add its days from the packages list.'
+            onSubmit={formik.handleSubmit}
+            onCancel={() => navigate(-1)}
+            submitLabel={formId ? 'Save changes' : 'Add package'}
+            saving={formik.isSubmitting}
         >
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid>
-
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        <Box sx={{ padding: 2 }}>
-                            <FormComponent
-                                fields={tabsFields[0].fields}
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                submitting={createPackageLKey || updatePackageLKey} // 👈 Updated loading keys
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={formId ? 'Update' : 'Create'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                    </Box>
-                </Grid>
-
-                <Grid item xs={12} md={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
+            <FormSection title='Which package is it?' hint='Its name, and the trip it belongs to.'>
+                <Box sx={formColumns}>
+                    <FormField
+                        formik={formik}
+                        name='name'
+                        label='Package name'
+                        required
+                        placeholder='e.g. Shimla – Manali 6D/5N'
+                        helperText='Guests see this name when you pick the package for a quote'
                     />
-                </Grid>
-            </Grid>
-        </MainCard>
+                    <FormField
+                        formik={formik}
+                        name='campaignId'
+                        label='Trip'
+                        select
+                        required
+                        disabled={Boolean(campaignContextId && !formId)}
+                        helperText={campaignContextId && !formId ? 'Chosen from the trip you came from' : ''}
+                    >
+                        {campaigns.map(campaign => (
+                            <MenuItem key={campaign.id} value={String(campaign.id)}>
+                                {campaign.title}
+                            </MenuItem>
+                        ))}
+                    </FormField>
+                </Box>
+            </FormSection>
+        </FormPage>
     )
 }
 

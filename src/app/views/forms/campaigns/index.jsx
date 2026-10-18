@@ -1,627 +1,232 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import { z } from 'zod'
+import { useEffect, useMemo, useState } from 'react'
 import { useFormik } from 'formik'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Box, Typography } from '@mui/material'
+import { useDispatch } from 'react-redux'
 
-// router
-import { useParams, useNavigate } from 'react-router-dom'
-
-// theme components
-import { Box, Divider, Grid } from '@mui/material'
-
-// components
-import FormComponent from '@core/components/forms/FormComponent'
-import MainCard from '@core/components/extended/MainCard'
-// import DynamicLayout from '@core/components/forms/DynamicLayout'
-
-// redux imports
-import { useDispatch, useSelector } from 'react-redux'
+import FormField from '@core/components/FormField'
+import FormPage from '@core/components/FormPage'
+import FormSection, { formColumns } from '@core/components/FormSection'
+import { openSnackbar } from '@app/store/slices/snackbar'
 import {
     useCreateCampaignMutation,
     useUpdateCampaignMutation,
     getCampaignById
 } from '@/app/store/slices/api/campaignSlice'
-import { useFetchPincodeDetailsMutation } from '@app/store/slices/api/clientSlice'
-import { openSnackbar } from '@app/store/slices/snackbar'
+import ListEditor from './ListEditor'
+import { BANK_FIELDS, campaignPayload, campaignProblems, emptyBank, formFromCampaign } from './campaignFormFacts'
 
-import { objectLength } from '@/utilities'
+const LIST_PLACEHOLDER = 'e.g. Breakfast and dinner at the hotel'
 
-import { expressions } from '@/constants'
-import IdentityCard from '@/core/components/IdentityCard'
-import NotesInstructions from '@/core/components/NotesInstructions'
-import MyTabs from '@/core/components/CapsuleTabs'
-
-// constants
-
+/**
+ * Add a campaign (a trip you sell), or change one. Its inclusions, notes and bank details are what every quotation
+ * for it carries, so they are kept in the exact text formats the quotation reads (campaignFormFacts.js).
+ */
 function CampaignsForm() {
     const { id: formId } = useParams()
+    const editing = Boolean(formId)
     const navigate = useNavigate()
-    const [editData, setEditData] = useState({})
-    const { createLocationMasterLKey, updateLocationMasterLKey } = useSelector(state => state.loading)
-
-    const [activeTab, setActiveTab] = useState(0)
-    const [tabsEnabled, setTabsEnabled] = useState([true, false, false])
-    const [clientId, setClientId] = useState(null)
-    const [createCampaignMaster] = useCreateCampaignMutation()
-    const [updateCampaign] = useUpdateCampaignMutation()
-    const [fetchPincodeDetails] = useFetchPincodeDetailsMutation()
     const dispatch = useDispatch()
-    const tabLabels = ['basicInformation', 'addressInformation', 'otherDetails']
+    const [createCampaign] = useCreateCampaignMutation()
+    const [updateCampaign] = useUpdateCampaignMutation()
 
-    // Initial form values
-    const initialValues = {
-        title: '',
-        description: '',
-        inclusions: '', // ✅
-        exclusions: '', // ✅
-        importantNote: '', // ✅
-        bankDetails: ''
-    }
+    // ? the lists and bank details are kept as lines and fields here, and become text only when sent
+    const [inclusions, setInclusions] = useState([''])
+    const [exclusions, setExclusions] = useState([''])
+    const [notes, setNotes] = useState([''])
+    const [bank, setBank] = useState(emptyBank())
+    // ? bank details saved in another layout stay as they are unless the fields below replace them
+    const [legacyBank, setLegacyBank] = useState('')
 
-    // Validation schema
-    const validationSchema = [
-        z.object({
-            title: z.string().superRefine((val, ctx) => {
-                const input = val.trim()
-                if (!input) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Name is required'
-                    })
-                } else if (input.length < 3) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Must be at least 3 characters'
-                    })
-                }
-            }),
-            description: z.string().superRefine((val, ctx) => {
-                const input = val.trim()
-                if (!input) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Code is required'
-                    })
-                } else if (input.length < 3) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: 'Must be at least 3 characters'
-                    })
-                }
+    const say = (message, isError) =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color: isError ? 'error' : 'success' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
-        })
-    ]
-
-    const enableTabsAfterValidation = upToIndex => {
-        const updatedTabs = tabsEnabled.map((enabled, index) => index <= upToIndex)
-        setTabsEnabled(updatedTabs)
-    }
-
-    const validate = values => {
-        try {
-            validationSchema[activeTab].parse(values)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
-            })
-            return formikErrors
-        }
-    }
+        )
 
     const formik = useFormik({
-        initialValues,
-        validate,
+        initialValues: { title: '', description: '' },
+        validate: campaignProblems,
         onSubmit: async values => {
+            const payload = campaignPayload({ values, inclusions, exclusions, notes, bank, legacyBank })
             try {
-                let response
-                if (activeTab === 0 && !clientId) {
-                    response = await createCampaignMaster(values).unwrap()
-                    setClientId(response.data.id)
-                    // formik.setFieldValue('tabId', tabLabels[1])
-                    // enableTabsAfterValidation(1)
-                    // setActiveTab(1)
-                } else if (clientId) {
-                    // if (activeTab < tabLabels.length - 1) {
-                    //     response = await updateLocationMaster({ id: clientId, ...values }).unwrap()
-                    //     const nextTab = activeTab + 1
-                    //     formik.setFieldValue('tabId', tabLabels[nextTab])
-                    //     enableTabsAfterValidation(nextTab)
-                    //     setActiveTab(nextTab)
-                    // } else {
-                    response = await updateCampaign({ id: clientId, ...values }).unwrap()
-                    formik.resetForm()
-                    setActiveTab(0)
-                    setTabsEnabled([true, false, false])
-                    navigate('/master/campaigns')
-                    // }
-                }
-                if (response.success) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: response.message || 'Operation successful!',
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                    navigate('/master/campaigns')
-                }
+                const response = editing
+                    ? await updateCampaign({ id: formId, ...payload }).unwrap()
+                    : await createCampaign(payload).unwrap()
+                say(response?.message || 'Operation successful!', false)
+                navigate('/master/campaigns')
             } catch (error) {
-                if (error.data?.data?.errors) {
-                    const backendErrors = error.data.data.errors
-                    const formikErrors = {}
-
-                    // Map backend errors to Formik's error structure
-                    Object.entries(backendErrors).forEach(([field, messages]) => {
-                        formikErrors[field] = messages.join(', ') // Join multiple messages with a comma
-                    })
-
-                    formik.setErrors(formikErrors) // Update Formik's error state
+                const fieldErrors = error?.data?.data?.errors
+                if (fieldErrors && typeof fieldErrors === 'object') {
+                    formik.setErrors(
+                        Object.fromEntries(
+                            Object.entries(fieldErrors).map(([field, messages]) => [
+                                field,
+                                [].concat(messages).join(', ')
+                            ])
+                        )
+                    )
                 } else {
-                    // Display general error in Snackbar if no specific validation errors
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: error.data?.data?.message || 'An error occurred, please try again',
-                            variant: 'alert',
-                            alert: { color: 'error' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
+                    say(
+                        error?.data?.data?.message || error?.data?.message || 'An error occurred, please try again',
+                        true
                     )
                 }
             }
-        },
-        validateOnBlur: true,
-        validateOnChange: true
+        }
     })
 
-    const handleTabChange = (event, newValue) => {
-        if (tabsEnabled[newValue]) {
-            setActiveTab(newValue)
-            // formik.setFieldValue('tabId', tabLabels[newValue])
-        }
-    }
-
-    const getLocation = async id => {
-        const { data, error } = await dispatch(getCampaignById.initiate(id))
-        if (error) return true
-        if (!data || !data?.data || !objectLength(data.data)) {
-            dispatch(
-                openSnackbar({
-                    open: true,
-                    message: error?.data?.data?.message || 'Unable to find location data for given id',
-                    variant: 'alert',
-                    alert: { color: 'error' },
-                    anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                })
-            )
-            // navigate(-1)
-        }
-        setEditData(data.data)
-        return true
-    }
-
-    const handlePincodeChange = useCallback(
-        // eslint-disable-next-line no-shadow
-        async (pincode, formik) => {
-            formik.setFieldValue('postcode', pincode)
-
-            if (pincode.length >= 6) {
-                try {
-                    const response = await fetchPincodeDetails(pincode).unwrap()
-
-                    if (response?.data) {
-                        const { country, state, city } = response.data
-
-                        formik.setValues({
-                            ...formik.values,
-                            postcode: pincode,
-                            country: country || '',
-                            state: state || '',
-                            city: city || ''
-                        })
-
-                        formik.setTouched(
-                            {
-                                ...formik.touched,
-                                country: true,
-                                state: true,
-                                city: true
-                            },
-                            false
-                        )
-
-                        setTimeout(() => {
-                            formik.setFieldValue('postcode', pincode)
-                            formik.validateForm()
-                        }, 100)
-                    } else {
-                        formik.setFieldValue('country', '')
-                        formik.setFieldValue('state', '')
-                        formik.setFieldValue('city', '')
-                    }
-                } catch (error) {
-                    formik.setFieldValue('country', '')
-                    formik.setFieldValue('state', '')
-                    formik.setFieldValue('city', '')
-                }
+    // ? editing: load the campaign into the form
+    useEffect(() => {
+        if (!editing) return undefined
+        let cancelled = false
+        dispatch(getCampaignById.initiate(formId)).then(({ data, error }) => {
+            if (cancelled) return
+            const row = data?.data
+            if (error || !row || !Object.keys(row).length) {
+                say(error?.data?.data?.message || 'Unable to find this campaign', true)
+                return
             }
-        },
-        [fetchPincodeDetails]
+            const loaded = formFromCampaign(row)
+            formik.setValues(loaded.values)
+            setInclusions(loaded.inclusions)
+            setExclusions(loaded.exclusions)
+            setNotes(loaded.notes)
+            setBank(loaded.bank)
+            setLegacyBank(loaded.legacyBank)
+        })
+        return () => {
+            cancelled = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formId, editing, dispatch])
+
+    // ? the bank fields look and behave like every other field; this hands them the same shape a form gives
+    const bankForm = useMemo(
+        () => ({
+            values: bank,
+            errors: {},
+            touched: {},
+            handleChange: event => {
+                setBank(current => ({ ...current, [event.target.name]: event.target.value }))
+                setLegacyBank('')
+            },
+            handleBlur: () => {}
+        }),
+        [bank]
     )
 
-    // eslint-disable-next-line no-shadow
-    const handleCustomChange = (e, formik) => {
-        const { name, value } = e.target
-        if (name === 'postcode') {
-            handlePincodeChange(value, formik)
-        } else {
-            formik.handleChange(e)
-        }
-    }
-
-    const customSx = {
-        '& input': {
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px' // Decrease input height
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white' // Apply the white background to the root element
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray' // Optional: change border color if needed
-        },
-        flexGrow: 1
-    }
-    const tabsFields = [
-        {
-            label: 'Basic Information',
-            fields: [
-                {
-                    name: 'title',
-                    label: 'Title',
-                    type: 'text',
-                    required: true,
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'description',
-                    label: 'Description',
-                    type: 'text',
-                    required: true,
-                    grid: { xs: 12, sm: 4, md: 4 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'inclusions',
-                    label: 'Inclusions',
-                    type: 'numberedList', // ✅ changed
-                    required: true,
-                    grid: { xs: 12, sm: 4, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'exclusions',
-                    label: 'Exclusions',
-                    type: 'numberedList', // ✅ changed
-                    required: true,
-                    grid: { xs: 12, sm: 4, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'importantNote',
-                    label: 'Important Note',
-                    type: 'numberedList', // ✅ changed
-                    required: false,
-                    grid: { xs: 12, md: 12 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'bankDetails',
-                    label: 'Bank Details',
-                    type: 'bankDetails', // ✅ changed
-                    required: false,
-                    grid: { xs: 12, md: 12 },
-                    size: 'small',
-                    customSx
-                }
-                // {
-                //     name: 'cost_center',
-                //     label: 'Cost Center',
-                //     type: 'text',
-                //     required: false,
-                //     grid: { xs: 12, sm: 4, md: 4 },
-                //     size: 'small',
-                //     customSx
-                // },
-                // {
-                //     name: 'Wh_manager_name',
-                //     label: 'WH Manager Name',
-                //     type: 'text',
-                //     required: false,
-                //     grid: { xs: 12, sm: 4, md: 4 },
-                //     size: 'small',
-                //     customSx
-                // }
-            ]
-        }
-        // {
-        //     label: 'Address Information',
-        //     fields: [
-        //         {
-        //             name: 'address',
-        //             label: 'Address',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'postcode',
-        //             label: 'Postcode',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'country',
-        //             label: 'Country',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'zone',
-        //             label: 'Zone',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'state',
-        //             label: 'State',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'city',
-        //             label: 'City',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'phone',
-        //             label: 'Phone',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'email',
-        //             label: 'Email',
-        //             type: 'email',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // },
-        // {
-        //     label: 'Other Details',
-        //     fields: [
-        //         {
-        //             name: 'latitude',
-        //             label: 'Latitude',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'longitude',
-        //             label: 'Longitude',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'gst_no',
-        //             label: 'GST No',
-        //             type: 'text',
-        //             required: true,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'tin_no',
-        //             label: 'TIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'cin_no',
-        //             label: 'CIN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         },
-        //         {
-        //             name: 'pan_no',
-        //             label: 'PAN No',
-        //             type: 'text',
-        //             required: false,
-        //             grid: { xs: 12, sm: 4, md: 4 },
-        //             size: 'small',
-        //             customSx
-        //         }
-        //     ]
-        // }
-    ]
-
-    const editHandler = async (id, row) => {
-        const newRow = {}
-        if ('id' in row) setClientId(row.id)
-        if ('postcode' in row && row.postcode) await handlePincodeChange(row.postcode.toString(), formik, 'b')
-        // if ('spostcode' in row) await handlePincodeChange(row.spostcode.toString(), formik, 's')
-
-        Object.keys(row).map(rowKey => {
-            if (row[rowKey]) {
-                newRow[rowKey] = row[rowKey].toString()
-            } else newRow[rowKey] = row[rowKey] || ''
-            return rowKey
-        })
-        formik.setValues({ ...newRow })
-
-        // TODO:
-        // ? scroll the page to top
-
-        const updatedTabs = tabsFields.map(field => {
-            const tabArrays = field.fields.filter(fieldItem => fieldItem?.required && row[fieldItem.name])
-            return !!tabArrays.length
-        })
-        setTabsEnabled(updatedTabs)
-    }
-
-    // this useEffect handles edit data
-    useEffect(() => {
-        const path = window.location.pathname
-        if (editData && objectLength(editData)) editHandler(formId, editData)
-        // if (!formId && !path.includes('create') && !objectLength(editData)) navigate(-1) // never happening
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editData])
-
-    useEffect(() => {
-        if (formId) getLocation(formId)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formId])
-
-    const identityCardData = [
-        { label: 'Location Name', value: formik.values?.name ?? 'N/A' },
-        { label: 'Code', value: formik.values?.code ?? 'N/A' },
-        { label: 'Cost Center', value: formik.values?.cost_center || 'N/A' },
-        { label: 'WH Manager Name', value: formik.values?.Wh_manager_name || 'N/A' },
-        { label: 'Address', value: formik.values?.address || 'N/A' }
-    ]
-
-    const notes = [
-        { id: 'n1', text: 'Enter the Location Name (minimum 3 characters required).' },
-        { id: 'n2', text: 'Enter the Code (minimum 3 characters required).' },
-        { id: 'n3', text: 'Optionally, provide the Cost Center and WH Manager Name.' },
-        { id: 'n4', text: 'Enter the Address (minimum 5 characters required).' },
-        { id: 'n5', text: 'Country, Zone, State, City, and Postcode are required fields.' },
-        { id: 'n6', text: 'Enter a valid Phone number (required).' },
-        { id: 'n7', text: 'Optionally, provide an Email Address (if provided, it must be in a valid format).' },
-        { id: 'n8', text: 'Enter the Latitude and Longitude in valid formats (e.g., 37.7749, -122.4194).' },
-        { id: 'n9', text: 'Enter a valid GST Number (e.g., 22ABCDE1234F1Z5).' },
-        { id: 'n10', text: 'Enter a valid TIN Number (e.g., 12345678901234).' },
-        { id: 'n11', text: 'Enter a valid CIN Number (e.g., L12345MH1990PLC123456).' },
-        { id: 'n12', text: 'Enter a valid PAN Number (e.g., ABCDE1234F).' }
-    ]
-
     return (
-        <MainCard sx={{ py: '1px' }} contentSX={{ px: '2px', py: 1.5 }}>
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                {/* <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid> */}
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        {/* <Tabs
-                            value={activeTab}
-                            onChange={handleTabChange}
-                            indicatorColor='primary'
-                            textColor='primary'
-                            variant='fullWidth'
-                        >
-                            {tabsFields.map(tab => (
-                                <Tab key={tab.label} label={tab.label} />
-                            ))}
-                        </Tabs> */}
-                        <MyTabs
-                            activeTab={activeTab}
-                            handleTabChange={handleTabChange}
-                            tabsFields={tabsFields}
-                            tabsEnabled={tabsEnabled}
-                        />
-
-                        <Box sx={{ padding: 2 }}>
-                            <FormComponent
-                                fields={tabsFields[activeTab].fields}
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                submitting={createLocationMasterLKey || updateLocationMasterLKey}
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={activeTab < 2 ? 'Save & Next' : 'Submit'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                    </Box>
-                </Grid>
-
-                <Grid item xs={12} md={6} lg={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
+        <FormPage
+            eyebrow={editing ? 'EDIT CAMPAIGN' : 'NEW CAMPAIGN'}
+            title={editing ? 'Edit campaign' : 'Add a campaign'}
+            subtitle='A campaign is a trip you sell, such as Himachal or Kashmir. What you enter here appears on every quotation for it.'
+            onSubmit={formik.handleSubmit}
+            onCancel={() => navigate('/master/campaigns')}
+            submitLabel={editing ? 'Save changes' : 'Create campaign'}
+            saving={formik.isSubmitting}
+        >
+            <FormSection title='Trip basics' hint='The name your team and your guests will see.'>
+                <Box sx={formColumns}>
+                    <FormField
+                        formik={formik}
+                        name='title'
+                        label='Title'
+                        required
+                        placeholder='e.g. Shimla and Manali'
+                        helperText='At least 3 characters'
                     />
-                    {/* <NotesInstructions notes={notes} customFontSize='14px' /> */}
-                </Grid>
-            </Grid>
-        </MainCard>
+                    <FormField
+                        formik={formik}
+                        name='description'
+                        label='Description'
+                        required
+                        placeholder='e.g. Honeymoon special'
+                        helperText='A short line about the trip'
+                    />
+                </Box>
+            </FormSection>
+
+            <FormSection
+                title='What the price covers'
+                hint='Shown on the quotation under "What the price covers". Add one thing per line.'
+            >
+                <Box sx={formColumns}>
+                    <Box>
+                        <ListEditor
+                            label='Inclusions'
+                            hint='What the guest gets for the price'
+                            items={inclusions}
+                            onChange={setInclusions}
+                            placeholder={LIST_PLACEHOLDER}
+                        />
+                    </Box>
+                    <Box>
+                        <ListEditor
+                            label='Exclusions'
+                            hint='What they pay for themselves'
+                            items={exclusions}
+                            onChange={setExclusions}
+                            placeholder='e.g. Airfare and train fare'
+                            showKeys={false}
+                        />
+                    </Box>
+                </Box>
+            </FormSection>
+
+            <FormSection
+                title='Good to know'
+                hint='Notes and policies the guest should read, such as cancellation terms.'
+            >
+                <ListEditor
+                    label='Important notes'
+                    items={notes}
+                    onChange={setNotes}
+                    placeholder='e.g. Check-in is at 12:00 noon'
+                />
+            </FormSection>
+
+            <FormSection
+                title='Payment details'
+                hint='Printed on the quotation so the guest knows where to send the advance. Leave it empty to leave it out.'
+            >
+                {legacyBank ? (
+                    <Typography
+                        color='text.secondary'
+                        sx={{
+                            fontSize: '0.8125rem',
+                            mb: 2,
+                            p: 1.25,
+                            borderRadius: 1.5,
+                            bgcolor: 'action.hover',
+                            whiteSpace: 'pre-line'
+                        }}
+                    >
+                        {`Saved as: ${legacyBank}\nThis is kept as it is. Fill in the fields below to replace it.`}
+                    </Typography>
+                ) : null}
+                <Box sx={formColumns}>
+                    {BANK_FIELDS.map(field => (
+                        <FormField
+                            key={field.key}
+                            formik={bankForm}
+                            name={field.key}
+                            label={field.label}
+                            placeholder={field.placeholder || ''}
+                        />
+                    ))}
+                </Box>
+                <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
+                    The quotation adds: &ldquo;Please deposit 50% advance in our company&apos;s account to confirm your
+                    trip.&rdquo;
+                </Typography>
+            </FormSection>
+        </FormPage>
     )
 }
 

@@ -10,7 +10,13 @@ import UiAccessGuard from '@/app/guards/UiPermissionGuard'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
-import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
+import {
+    STATUS_FILTER,
+    columnsForCampaign,
+    scopedSubtitle,
+    useCampaignName,
+    useDeleteFlow
+} from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
 
 const FILTERS = [
@@ -47,8 +53,11 @@ function MasterPackagesTable() {
     )
     // ? the package name is a link to its day-by-day plan
     const columns = useMemo(
-        () => headers.map(column => (column.key === 'name' ? { ...column, onClick: row => openPlan(row) } : column)),
-        [openPlan]
+        () =>
+            columnsForCampaign(headers, campaignId).map(column =>
+                column.key === 'name' ? { ...column, onClick: row => openPlan(row) } : column
+            ),
+        [openPlan, campaignId]
     )
 
     const wizard = useCallback(
@@ -75,6 +84,7 @@ function MasterPackagesTable() {
                     'The ready-made packages you quote from. Click a name to open its day-by-day plan.',
                     campaignName
                 )}
+                eyebrow={<BackToCampaigns />}
                 noun='packages'
                 searchPlaceholder='Search package or campaign name'
                 headers={columns}
@@ -89,17 +99,14 @@ function MasterPackagesTable() {
                 reloadSignal={reload}
                 emptyText='Build a package with the Quick Wizard: pick the destinations and day plans, and it is ready to quote.'
                 extraActions={
-                    <>
-                        <BackToCampaigns />
-                        <UiAccessGuard type='create'>
-                            <CustomButton
-                                variant='outlined'
-                                onClick={() => navigate('/master/packages/add', { state: { campaignId } })}
-                            >
-                                Classic Add
-                            </CustomButton>
-                        </UiAccessGuard>
-                    </>
+                    <UiAccessGuard type='create'>
+                        <CustomButton
+                            variant='outlined'
+                            onClick={() => navigate('/master/packages/add', { state: { campaignId } })}
+                        >
+                            Classic Add
+                        </CustomButton>
+                    </UiAccessGuard>
                 }
                 renderAction={row => (
                     <CatalogRowActions

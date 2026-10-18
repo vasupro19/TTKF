@@ -1,18 +1,22 @@
 import PropTypes from 'prop-types'
-import { Box, IconButton, Tooltip } from '@mui/material'
+import { Box, Button, IconButton, Tooltip } from '@mui/material'
 import { ArrowBack, Delete, Edit } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import CustomButton from '@core/components/extended/CustomButton'
 import ConfirmModal from '@/core/components/modals/ConfirmModal'
 import UiAccessGuard from '@/app/guards/UiPermissionGuard'
 
-/** @description "Campaigns" button that goes back to the campaign list */
+/** @description a small "All campaigns" link above a list's title that goes back to the campaign list */
 export function BackToCampaigns() {
     const navigate = useNavigate()
     return (
-        <CustomButton variant='text' startIcon={<ArrowBack />} onClick={() => navigate('/master/campaigns')}>
-            Campaigns
-        </CustomButton>
+        <Button
+            size='small'
+            startIcon={<ArrowBack fontSize='small' />}
+            onClick={() => navigate('/master/campaigns')}
+            sx={{ ml: -1, mb: 0.5, textTransform: 'none', color: 'text.secondary', fontWeight: 600 }}
+        >
+            All campaigns
+        </Button>
     )
 }
 

@@ -1,333 +1,166 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import { z } from 'zod'
+import { useEffect } from 'react'
 import { useFormik } from 'formik'
-
-// router
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Box, MenuItem } from '@mui/material'
+import { useDispatch } from 'react-redux'
 
-// theme components
-import { Box, Divider, Grid } from '@mui/material'
-
-// components
-import FormComponent from '@core/components/forms/FormComponent'
 import AiFormAssistant from '@core/components/forms/AiAssiastantForm'
-
-import MainCard from '@core/components/extended/MainCard'
-
-// redux imports
-import { useDispatch, useSelector } from 'react-redux'
+import FormField from '@core/components/FormField'
+import FormPage from '@core/components/FormPage'
+import FormSection, { formColumns } from '@core/components/FormSection'
 import {
-    // Assuming you will create these new hooks for DestinationClients
     useCreateItenaryClientMutation,
     useUpdateItenaryClientMutation,
     getItenaryClientById
-    // useGetAllCampaignsQuery // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/itenarySlice' // Adjust the slice name if needed
-
-import {
-    // Assuming you will create these new hooks for DestinationClients
-
-    getCampaigns // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/campaignSlice' // Adjust the slice name if needed
+} from '@/app/store/slices/api/itenarySlice'
+import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
+import itenaryFormProblems from './itenaryFormFacts'
 
-import { objectLength } from '@/utilities'
-import IdentityCard from '@/core/components/IdentityCard'
+// ? what the AI helper may fill (the same shape as a form's field list)
+const AI_FIELDS = [
+    { name: 'title', label: 'Itinerary title', type: 'text' },
+    { name: 'description', label: 'Itinerary description', type: 'textarea' }
+]
 
-// CONSTANTS - assuming you have a way to import Select component data
+const AI_CONTEXT =
+    'Travel itinerary form. User is adding one day at a time for a travel campaign. Each entry has a day number, title (e.g. "Chandigarh to Shimla Via Cab"), description (arrival/transfer/hotel check-in details), and location (state/city name).'
 
+const AI_SUGGESTIONS = [
+    'Chandigarh to Shimla via Cab 120kms',
+    'Delhi to Manali via Volvo overnight',
+    'Arrival at Manali, hotel check-in',
+    'Local sightseeing Hadimba Temple Mall Road',
+    'Chandigarh to Manali via Cab 300kms',
+    'Delhi to Amritsar via Cab 450kms',
+    'Solang Valley and Rohtang Pass excursion',
+    'Delhi to Dharamshala via Cab 500kms'
+]
+
+/**
+ * Add one day-plan (itinerary) to a trip, or change one.
+ */
 function ItenaryClientsForm() {
-    // Note: Assuming `id` in useParams is the Itinerary ID for editing
     const { id: formId } = useParams()
     const navigate = useNavigate()
     const location = useLocation()
     const dispatch = useDispatch()
+    // ? opened from a trip's own page: the trip is already chosen
     const campaignContextId = location.state?.campaignId
 
-    // Hooks for creating/updating itineraries (MOCKED)
-    const [createItenaryClient, { isLoading: isCreating }] = useCreateItenaryClientMutation()
-    const [updateItenaryClient, { isLoading: isUpdating }] = useUpdateItenaryClientMutation()
+    const [createItenaryClient] = useCreateItenaryClientMutation()
+    const [updateItenaryClient] = useUpdateItenaryClientMutation()
+    // ? lists are paged at 25 by default: the 26th trip could not be chosen
+    const { data: campaignsReply } = useGetCampaignsQuery('?length=200')
+    const campaigns = Array.isArray(campaignsReply?.data) ? campaignsReply.data : []
 
-    const [editData, setEditData] = useState({})
-    const [campaignsData, setcampaignsData] = useState([])
-    const campaignsLoading = false // Mock loading state
-
-    // Use mocked loading keys for Itinerary operations
-    const createItenaryLKey = isCreating
-    const updateItenaryLKey = isUpdating
-
-    // --- Initial Values and Validation Schema ---
-
-    // UPDATED initial values for Itinerary fields (title, description, campaignId)
-    const initialValues = {
-        title: '', // Itinerary title (matching headers)
-        description: '', // Itinerary description (matching headers)
-        campaignId: campaignContextId?.toString() || '' // Foreign key to CampaignClient
-    }
-
-    // UPDATED Validation schema for Itinerary fields
-    const validationSchema = z.object({
-        title: z.string().min(5, 'Title must be at least 5 characters'),
-        description: z.string().min(10, 'Description must be at least 10 characters').optional().or(z.literal('')),
-        campaignId: z.number({ invalid_type_error: 'Campaign is required' }).int().positive()
-    })
-
-    const validate = values => {
-        try {
-            // Convert campaignId to number for Zod validation
-            const parsedValues = {
-                ...values,
-                campaignId: values.campaignId ? parseInt(values?.campaignId, 10) : ''
-            }
-            validationSchema.parse(parsedValues)
-            return {}
-        } catch (error) {
-            const formikErrors = {}
-            error.errors.forEach(err => {
-                formikErrors[err.path[0]] = err.message
+    const say = (message, isError) =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color: isError ? 'error' : 'success' },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
             })
-            return formikErrors
-        }
-    }
-
-    // --- Formik Setup ---
+        )
 
     const formik = useFormik({
-        initialValues,
-        validate,
+        initialValues: { title: '', description: '', campaignId: campaignContextId ? String(campaignContextId) : '' },
+        validate: itenaryFormProblems,
         onSubmit: async values => {
+            // ? only what the form edits: the server saves whatever it is sent
+            const payload = {
+                title: values.title.trim(),
+                description: values.description.trim(),
+                campaignId: parseInt(values.campaignId, 10)
+            }
             try {
-                // Ensure campaignId is an integer before sending
-                const payload = {
-                    ...values,
-                    campaignId: parseInt(values.campaignId, 10)
-                }
-
-                let response
-                if (formId) {
-                    // Update existing Itinerary (MOCKED)
-                    response = await updateItenaryClient({ id: formId, ...payload }).unwrap()
-                } else {
-                    // Create new Itinerary (MOCKED)
-                    response = await createItenaryClient(payload).unwrap()
-                }
-
-                if (response.success || response.status_code === 200) {
-                    dispatch(
-                        openSnackbar({
-                            open: true,
-                            message: response.message || 'Itinerary saved successfully!',
-                            variant: 'alert',
-                            alert: { color: 'success' },
-                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                        })
-                    )
-                    // Navigate to the list view after submission
-                    navigate(-1) // Assuming the list route is '/master/itineraries'
+                const response = formId
+                    ? await updateItenaryClient({ id: formId, ...payload }).unwrap()
+                    : await createItenaryClient(payload).unwrap()
+                if (response?.success || response?.status_code === 200) {
+                    say(response.message || 'Itinerary saved', false)
+                    navigate(-1)
                 }
             } catch (error) {
-                // Error handling (keeping original structure)
-                const errorMessage = error.data?.data?.message || 'An error occurred, please try again'
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: errorMessage,
-                        variant: 'alert',
-                        alert: { color: 'error' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
+                say(
+                    error?.data?.data?.message ||
+                        error?.data?.message ||
+                        'Couldn’t save the itinerary. Please try again.',
+                    true
                 )
             }
-        },
-        validateOnBlur: true,
-        validateOnChange: true
+        }
     })
 
-    // --- Data Fetching and Edit Logic ---
-    const handleCustomChange = e => {
-        const { name, value } = e.target
-
-        formik.handleChange(e)
-    }
-    const getItenaryData = async id => {
-        // Fetch Itinerary data (MOCKED)
-        const { data: response, error } = await dispatch(getItenaryClientById.initiate(id))
-
-        if (error) return
-
-        if (response && response?.data && objectLength(response.data)) {
-            setEditData(response.data)
-
-            // Set form values for editing
-            const itineraryData = response.data
+    // ? editing: load the itinerary into the form
+    useEffect(() => {
+        if (!formId) return
+        dispatch(getItenaryClientById.initiate(formId)).then(({ data, error }) => {
+            const saved = data?.data
+            if (error || !saved) return
             formik.setValues({
-                ...initialValues, // Start with clean initial values
-                ...itineraryData,
-                campaignId: itineraryData.campaignId.toString() // Convert number to string for Select component
+                title: saved.title || '',
+                description: saved.description || '',
+                campaignId: saved.campaignId ? String(saved.campaignId) : ''
             })
-        }
-    }
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formId, dispatch])
 
-    const getCampaignsFunc = async () => {
-        // Fetch Campaign data (MOCKED)
-        const { data: response } = await dispatch(getCampaigns.initiate())
-        setcampaignsData(response.data || [])
-    }
-
-    useEffect(() => {
-        getCampaignsFunc()
-    }, [dispatch]) // Dispatch dependency added for best practice
-
-    useEffect(() => {
-        if (formId) getItenaryData(formId)
-    }, [formId, dispatch]) // Dispatch dependency added for best practice
-
-    useEffect(() => {
-        if (formId || !campaignContextId) return
-        formik.setFieldValue('campaignId', campaignContextId.toString())
-    }, [formId, campaignContextId])
-
-    // --- Form Fields Definition ---
-
-    const customSx = {
-        '& input, & textarea': {
-            // Apply styles to both input and textarea
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px'
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white'
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray'
-        },
-        flexGrow: 1
-    }
-
-    // Transform campaigns data for the Select component
-    const campaignOptions = campaignsData?.map(camp => ({
-        label: camp.title, // Use campaign title for display
-        value: camp.id.toString() // Use campaign ID as value (must be string for Formik Select)
-    }))
-
-    const tabsFields = [
-        {
-            label: 'Itinerary Information',
-            fields: [
-                {
-                    name: 'title',
-                    label: 'Itinerary Title',
-                    type: 'text',
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'campaignId',
-                    label: 'Associated Campaign',
-                    type: 'select', // Use select for the foreign key
-                    options: campaignOptions,
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx,
-                    isDisabled: campaignsLoading || Boolean(campaignContextId && !formId) // Disable while loading campaign options
-                },
-                {
-                    name: 'description',
-                    label: 'Itinerary Description',
-                    type: 'textarea', // Use textarea for a larger input area
-                    minRows: 4,
-                    required: false,
-                    grid: { xs: 12, sm: 12, md: 12 },
-                    size: 'small',
-                    customSx
-                }
-            ]
-        }
-    ]
-
-    const identityCardData = [
-        { label: 'Title', value: formik.values?.title ?? 'N/A' },
-        { label: 'Campaign ID', value: formik.values?.campaignId ?? 'N/A' },
-        { label: 'Description', value: formik.values?.description ? 'Provided' : 'N/A' }
-    ]
+    const tripChosen = Boolean(campaignContextId && !formId)
 
     return (
-        <MainCard
-            sx={{ py: '1px' }}
-            contentSX={{ px: '2px', py: 1.5 }}
-            title={formId ? 'Edit Itinerary' : 'Create New Itinerary'}
+        <FormPage
+            eyebrow={formId ? 'EDIT ITINERARY' : 'NEW ITINERARY'}
+            title={formId ? 'Edit itinerary' : 'Add an itinerary'}
+            subtitle='One day-plan of a trip, such as “Delhi to Shimla via cab”. Packages and quotes are built from these.'
+            onSubmit={formik.handleSubmit}
+            onCancel={() => navigate(-1)}
+            submitLabel={formId ? 'Save changes' : 'Add itinerary'}
+            saving={formik.isSubmitting}
         >
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid>
-
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        {/* We use the first (and only) tab's fields */}
-                        <Box sx={{ padding: 2 }}>
-                            <AiFormAssistant
-                                fields={tabsFields[0].fields}
-                                formik={formik}
-                                context='Travel itinerary form. User is adding one day at a time for a travel campaign. Each entry has a day number, title (e.g. "Chandigarh to Shimla Via Cab"), description (arrival/transfer/hotel check-in details), and location (state/city name).'
-                                suggestions={[
-                                    'Chandigarh to Shimla via Cab 120kms',
-                                    'Delhi to Manali via Volvo overnight',
-                                    'Arrival at Manali, hotel check-in',
-                                    'Local sightseeing Hadimba Temple Mall Road',
-                                    'Chandigarh to Manali via Cab 300kms',
-                                    'Delhi to Amritsar via Cab 450kms',
-                                    'Solang Valley and Rohtang Pass excursion',
-                                    'Delhi to Dharamshala via Cab 500kms'
-                                ]}
-                            />
-                            <FormComponent
-                                fields={tabsFields[0].fields} // Use fields from the single tab
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                // handleCustomChange is not needed as no custom logic was defined
-                                submitting={createItenaryLKey || updateItenaryLKey}
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={formId ? 'Update' : 'Create'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                    </Box>
-                </Grid>
-
-                <Grid item xs={12} md={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
+            <Box sx={{ mb: 2.5 }}>
+                <AiFormAssistant fields={AI_FIELDS} formik={formik} context={AI_CONTEXT} suggestions={AI_SUGGESTIONS} />
+            </Box>
+            <FormSection title='What happens on this day?' hint='A short title, and what the guest does.'>
+                <Box sx={formColumns}>
+                    <FormField
+                        formik={formik}
+                        name='title'
+                        label='Title'
+                        required
+                        placeholder='e.g. Delhi to Shimla via cab (380 km)'
                     />
-                </Grid>
-            </Grid>
-        </MainCard>
+                    <FormField
+                        formik={formik}
+                        name='campaignId'
+                        label='Trip'
+                        select
+                        required
+                        disabled={tripChosen}
+                        helperText={tripChosen ? 'Chosen from the trip you came from' : ''}
+                    >
+                        {campaigns.map(campaign => (
+                            <MenuItem key={campaign.id} value={String(campaign.id)}>
+                                {campaign.title}
+                            </MenuItem>
+                        ))}
+                    </FormField>
+                    <FormField
+                        formik={formik}
+                        name='description'
+                        label='Description (optional)'
+                        multiline
+                        minRows={4}
+                        wide
+                        placeholder='Arrival, transfers, sightseeing and where the guest stays that night'
+                        helperText='This text goes into the quotation the guest receives'
+                    />
+                </Box>
+            </FormSection>
+        </FormPage>
     )
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { z } from 'zod'
 import { useFormik } from 'formik'
 
@@ -6,35 +6,36 @@ import { useFormik } from 'formik'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 
 // theme components
-import { Box, Button, CircularProgress, Divider, Grid, Stack, Typography } from '@mui/material'
+import { Box, MenuItem } from '@mui/material'
 
 // components
-import FormComponent from '@core/components/forms/FormComponent'
-import MainCard from '@core/components/extended/MainCard'
+import FormPage from '@core/components/FormPage'
+import FormSection, { formColumns } from '@core/components/FormSection'
+import FormField from '@core/components/FormField'
 
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
 import {
-    // Assuming you will create these new hooks for DestinationClients
     useCreateDestinationClientMutation,
     useUpdateDestinationClientMutation,
     getDestinationClientById
-    // useGetAllCampaignsQuery // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/destinationSlice' // Adjust the slice name if needed
+} from '@/app/store/slices/api/destinationSlice'
 
-import {
-    // Assuming you will create these new hooks for DestinationClients
-
-    getCampaigns // New hook to fetch campaigns for dropdown
-} from '@/app/store/slices/api/campaignSlice' // Adjust the slice name if needed
+import { getCampaigns } from '@/app/store/slices/api/campaignSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
-import IdentityCard from '@/core/components/IdentityCard'
 import { useAssistAiMutation } from '@/app/store/slices/api/aiSlice'
 import { HOTEL_FIELDS, HOTELS_PER_CATEGORY, buildHotelRequest, parseHotelReply } from './hotelSuggestions'
+import DestinationSuggestions from './DestinationSuggestions'
 
-// CONSTANTS - assuming you have a way to import Select component data
+// ? what each category means, so an agent files a hotel under the right one
+const HOTEL_HINTS = {
+    delux_hotel: 'Good-value 3-star stays',
+    super_delux_hotel: 'Upscale 4-star stays',
+    luxury_hotel: '5-star and well-known luxury hotels',
+    premium_hotel: 'The most exclusive stays in the destination'
+}
 
 function DestinationClientsForm() {
     // Note: Assuming `id` in useParams is the DestinationClients ID for editing
@@ -50,7 +51,9 @@ function DestinationClientsForm() {
     // Hook to fetch all campaigns for the dropdown list
     // const { data: campaignsData, isLoading: campaignsLoading } = useGetAllCampaignsQuery()
 
-    const [editData, setEditData] = useState({})
+    const [, setEditData] = useState({})
+    // ? which hotel lists were empty (null) when the destination was loaded
+    const nullHotelsRef = useRef({})
     const [campaignsData, setcampaignsData] = useState([])
 
     // Assuming you will use appropriate loading keys for destination operations
@@ -109,6 +112,10 @@ function DestinationClientsForm() {
                     ...values,
                     campaignId: parseInt(values.campaignId, 10)
                 }
+                // ? a hotel list that was empty (null) in the database and is still untouched is sent as it was
+                HOTEL_FIELDS.forEach(({ field }) => {
+                    if (payload[field] === '' && nullHotelsRef.current[field]) payload[field] = null
+                })
 
                 let response
                 if (formId) {
@@ -118,7 +125,6 @@ function DestinationClientsForm() {
                     // Create new destination
                     response = await createDestinationClient(payload).unwrap()
                 }
-                console.log(response)
                 if (response.success || response.status_code === 200) {
                     dispatch(
                         openSnackbar({
@@ -131,6 +137,16 @@ function DestinationClientsForm() {
                     )
                     // Navigate to the list view after submission
                     navigate(-1)
+                } else {
+                    dispatch(
+                        openSnackbar({
+                            open: true,
+                            message: response?.message || 'The destination could not be saved',
+                            variant: 'alert',
+                            alert: { color: 'error' },
+                            anchorOrigin: { vertical: 'top', horizontal: 'right' }
+                        })
+                    )
                 }
             } catch (error) {
                 // ... (Error handling remains similar to your original code)
@@ -224,8 +240,14 @@ function DestinationClientsForm() {
 
             // Set form values for editing
             const destinationData = data.data
+            const hotels = {}
+            HOTEL_FIELDS.forEach(({ field }) => {
+                nullHotelsRef.current[field] = destinationData[field] === null || destinationData[field] === undefined
+                hotels[field] = destinationData[field] ?? ''
+            })
             formik.setValues({
                 ...destinationData,
+                ...hotels,
                 campaignId: destinationData.campaignId.toString() // Convert number to string for Select component
             })
         }
@@ -240,213 +262,94 @@ function DestinationClientsForm() {
         formik.setFieldValue('campaignId', campaignContextId.toString())
     }, [formId, campaignContextId])
 
-    // --- Form Fields Definition ---
+    // --- Campaigns for the dropdown ---
 
-    const customSx = {
-        '& input, & textarea': {
-            // Apply styles to both input and textarea
-            backgroundColor: '#fff',
-            padding: '12px 8px',
-            height: '18px'
-        },
-        '& .MuiInputBase-root.MuiOutlinedInput-root': {
-            backgroundColor: 'white'
-        },
-        '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'gray'
-        },
-        flexGrow: 1
-    }
-
-    // Transform campaigns data for the Select component
-    const campaignOptions = campaignsData?.map(camp => ({
-        label: camp.title, // Use campaign title for display
-        value: camp.id.toString() // Use campaign ID as value (must be string for Formik Select)
+    const campaignOptions = (campaignsData || []).map(camp => ({
+        label: camp.title,
+        value: camp.id.toString()
     }))
 
-    const handleCustomChange = e => {
-        const { name, value } = e.target
-
-        formik.handleChange(e)
-    }
-    const tabsFields = [
-        {
-            label: 'Destination Information',
-            fields: [
-                {
-                    name: 'name',
-                    label: 'Destination Name',
-                    type: 'text',
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'campaignId',
-                    label: 'Associated Campaign',
-                    type: 'select', // Use select for the foreign key
-                    options: campaignOptions,
-                    required: true,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx,
-                    isDisabled: Boolean(campaignContextId && !formId)
-                    // disabled: campaignsLoading // Disable while loading campaign options
-                },
-                {
-                    name: 'delux_hotel',
-                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
-                    label: 'Delux Hotel Details',
-                    type: 'textarea', // Use multiline-text for better input area
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'super_delux_hotel',
-                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
-                    label: 'Super Delux Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'luxury_hotel',
-                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
-                    label: 'Luxury Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                },
-                {
-                    name: 'premium_hotel',
-                    placeholder: `Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`,
-                    label: 'Premium Hotel Details',
-                    type: 'textarea',
-                    minRows: 3,
-                    required: false,
-                    grid: { xs: 12, sm: 6, md: 6 },
-                    size: 'small',
-                    customSx
-                }
-            ]
-        }
-    ]
-
-    const identityCardData = [
-        { label: 'Destination', value: formik.values?.name ?? 'N/A' },
-        { label: 'Campaign ID', value: formik.values?.campaignId ?? 'N/A' },
-        { label: 'Delux Hotel', value: formik.values?.delux_hotel ? 'Provided' : 'N/A' }
-    ]
     const getCampaignsFunc = async () => {
         const { data: response } = await dispatch(getCampaigns.initiate())
-        setcampaignsData(response.data)
+        setcampaignsData(response?.data || [])
     }
     useEffect(() => {
         getCampaignsFunc()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
-    // const campaigns = campaignsData?.data || []
+
+    const canSuggest = (formik.values.name || '').trim().length >= 3
 
     return (
-        <MainCard
-            sx={{ py: '1px' }}
-            contentSX={{ px: '2px', py: 1.5 }}
-            title={formId ? 'Edit Destination' : 'Create New Destination'}
+        <FormPage
+            eyebrow={formId ? 'EDIT DESTINATION' : 'NEW DESTINATION'}
+            title={formId ? 'Edit destination' : 'Add a destination'}
+            subtitle='A place your trips stay in. Its hotels are what the quotation offers in each category.'
+            onSubmit={formik.handleSubmit}
+            onCancel={() => (campaignContextId ? navigate(-1) : navigate('/master/destinations'))}
+            submitLabel={formId ? 'Save changes' : 'Add destination'}
+            saving={Boolean(createDestinationLKey || updateDestinationLKey || formik.isSubmitting)}
         >
-            <Grid
-                container
-                gap={4}
-                sx={{
-                    border: '1px solid #d0d0d0',
-                    px: 1.5,
-                    py: 2,
-                    borderRadius: '8px'
-                }}
-            >
-                <Grid container xs={12} md={3.6} spacing={2}>
-                    <Grid item xs={12} md={6} lg={12} sx={{ marginBottom: 2 }}>
-                        <IdentityCard data={identityCardData} />
-                    </Grid>
-                </Grid>
-
-                <Grid md={8.3} container spacing={1} sx={{ px: '4px' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                        {/* We use the first (and only) tab's fields */}
-                        <Box sx={{ padding: 2 }}>
-                            <Stack
-                                direction={{ xs: 'column', sm: 'row' }}
-                                spacing={1}
-                                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                                justifyContent='space-between'
-                                sx={{ mb: 2, minHeight: 36 }}
-                                role='status'
-                                aria-live='polite'
-                            >
-                                <Stack direction='row' spacing={1} alignItems='center'>
-                                    {hotelStatus.state === 'loading' ? <CircularProgress size={16} /> : null}
-                                    <Typography variant='body2' color='text.secondary'>
-                                        {
-                                            {
-                                                idle: `Type the destination name and we'll suggest its top ${HOTELS_PER_CATEGORY} hotels in each category.`,
-                                                loading: `Finding the top hotels in ${hotelStatus.place}…`,
-                                                done: `Suggested the top hotels in ${hotelStatus.place}. Check them before quoting — you can edit any of them.`,
-                                                empty: `We couldn't find hotels we're sure of for "${hotelStatus.place}". Add them yourself, or check the spelling.`,
-                                                error: `Couldn't get hotel suggestions right now.`
-                                            }[hotelStatus.state]
-                                        }
-                                    </Typography>
-                                </Stack>
-                                {(formik.values.name || '').trim().length >= 3 && hotelStatus.state !== 'loading' ? (
-                                    <Button
-                                        size='small'
-                                        onClick={() => suggestHotels({ replaceAll: allTypedByAgent })}
-                                        sx={{ textTransform: 'none', flexShrink: 0 }}
-                                    >
-                                        {suggestLabel}
-                                    </Button>
-                                ) : null}
-                            </Stack>
-                            <FormComponent
-                                fields={tabsFields[0].fields} // Use fields from the single tab
-                                formik={formik}
-                                handleCustomChange={handleCustomChange}
-                                // handleCustomChange is not needed here as there's no postcode logic
-                                submitting={createDestinationLKey || updateDestinationLKey}
-                                customStyle={{
-                                    backgroundColor: 'none'
-                                }}
-                                submitButtonText={formId ? 'Update' : 'Create'}
-                                submitButtonSx={{
-                                    textAlign: 'right',
-                                    marginTop: 2
-                                }}
-                                showSeparaterBorder={false}
-                            />
-                        </Box>
-                    </Box>
-                </Grid>
-
-                <Grid item xs={12} md={12}>
-                    <Divider
-                        sx={{
-                            marginTop: '-2rem',
-                            borderColor: '#BCC1CA',
-                            marginBottom: '1rem',
-                            boxShadow: '1px 1px 4px #00000054'
-                        }}
+            <FormSection title='Where is it?' hint='The place, and the campaign (trip) it belongs to.'>
+                <Box sx={formColumns}>
+                    <FormField
+                        formik={formik}
+                        name='name'
+                        label='Destination name'
+                        placeholder='e.g. Manali'
+                        helperText='At least 3 characters'
+                        required
                     />
-                </Grid>
-            </Grid>
-        </MainCard>
+                    <FormField
+                        formik={formik}
+                        name='campaignId'
+                        label='Campaign'
+                        helperText={
+                            campaignContextId && !formId
+                                ? 'Chosen from the campaign you came from'
+                                : 'The trip it is part of'
+                        }
+                        select
+                        required
+                        disabled={Boolean(campaignContextId && !formId)}
+                    >
+                        {campaignOptions.map(option => (
+                            <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                            </MenuItem>
+                        ))}
+                    </FormField>
+                </Box>
+            </FormSection>
+
+            <FormSection
+                title='Hotels in each category'
+                hint={`Up to ${HOTELS_PER_CATEGORY} hotels per category, separated by | (for example: Hotel A | Hotel B). All optional.`}
+            >
+                <DestinationSuggestions
+                    state={hotelStatus.state}
+                    place={hotelStatus.place}
+                    editing={Boolean(formId)}
+                    showButton={canSuggest}
+                    buttonLabel={suggestLabel}
+                    onSuggest={() => suggestHotels({ replaceAll: allTypedByAgent })}
+                />
+                <Box sx={{ ...formColumns, rowGap: 1.5 }}>
+                    {HOTEL_FIELDS.map(({ field, label }) => (
+                        <FormField
+                            key={field}
+                            formik={formik}
+                            name={field}
+                            label={`${label} hotels`}
+                            placeholder={`Up to ${HOTELS_PER_CATEGORY} hotels, separated by |`}
+                            helperText={HOTEL_HINTS[field]}
+                            multiline
+                            minRows={3}
+                        />
+                    ))}
+                </Box>
+            </FormSection>
+        </FormPage>
     )
 }
 

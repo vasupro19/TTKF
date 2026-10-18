@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button } from '@mui/material'
 import * as XLSX from 'xlsx'
 import { useDispatch, useSelector } from 'react-redux'
@@ -14,7 +14,13 @@ import UiAccessGuard from '@/app/guards/UiPermissionGuard'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 import { BackToCampaigns, CatalogRowActions, DeleteConfirm } from '../campaignCatalog/catalogParts'
-import { STATUS_FILTER, scopedSubtitle, useCampaignName, useDeleteFlow } from '../campaignCatalog/catalogFacts'
+import {
+    STATUS_FILTER,
+    columnsForCampaign,
+    scopedSubtitle,
+    useCampaignName,
+    useDeleteFlow
+} from '../campaignCatalog/catalogFacts'
 import { headers } from './helper'
 
 const FILTERS = [
@@ -50,6 +56,7 @@ function MasterDestinationTable() {
     const [uploadDestinations, { isLoading: uploading }] = useUploadDestinationsMutation()
     const [deleteDestination] = useDeleteDestinationClientMutation()
     const [reload, setReload] = useState(0)
+    const columns = useMemo(() => columnsForCampaign(headers, campaignId), [campaignId])
 
     const add = useCallback(
         () => navigate('/master/destinations/add', { state: { campaignId } }),
@@ -112,9 +119,10 @@ function MasterDestinationTable() {
                     'The places this trip visits, with the hotel used in each category.',
                     campaignName
                 )}
+                eyebrow={<BackToCampaigns />}
                 noun='destinations'
                 searchPlaceholder='Search destination, campaign or hotel'
-                headers={headers}
+                headers={columns}
                 endpoint={getDestinationClients}
                 baseParams={{ campaignId }}
                 reqKey='getDestinationsListKey'
@@ -126,15 +134,12 @@ function MasterDestinationTable() {
                 reloadSignal={reload}
                 emptyText='Add the places this campaign visits and the hotels you use there, then pick them when you build packages.'
                 extraActions={
-                    <>
-                        <BackToCampaigns />
-                        <UiAccessGuard type='create'>
-                            <Button size='small' variant='outlined' component='label' disabled={uploading}>
-                                {uploading ? 'Uploading...' : 'Upload Excel'}
-                                <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
-                            </Button>
-                        </UiAccessGuard>
-                    </>
+                    <UiAccessGuard type='create'>
+                        <Button variant='outlined' component='label' disabled={uploading}>
+                            {uploading ? 'Uploading...' : 'Upload Excel'}
+                            <input type='file' hidden accept='.xlsx, .xls' onChange={handleFileUpload} />
+                        </Button>
+                    </UiAccessGuard>
                 }
                 renderAction={row => (
                     <CatalogRowActions
