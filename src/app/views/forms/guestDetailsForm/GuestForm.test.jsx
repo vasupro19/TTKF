@@ -285,7 +285,7 @@ describe('Quotation for a verified lead', () => {
         })
     })
 
-    test('a new quote can be for another trip: its packages come first and its new days are saved in that campaign', async () => {
+    test('a new quote can be for another trip: only its packages are offered and its new days are saved in that campaign', async () => {
         api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
         api.tourRows = [row(1, 1, 'Arrive Shimla')]
         renderPage()
@@ -297,10 +297,12 @@ describe('Quotation for a verified lead', () => {
         // ? the pick is saved with the quote, so the email uses Uttarakhand whatever the days are saved under
         expect(api.setQuoteCampaign).toHaveBeenCalledWith({ leadId: 7, quoteNo: 2, campaignId: 2 })
 
-        // ? Uttarakhand's packages are listed first for this quote
+        // ? only Uttarakhand's packages are offered for this quote, never Himachal's
         fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Start from a package' }))
         const options = await screen.findAllByRole('option')
+        expect(options).toHaveLength(1)
         expect(options[0]).toHaveTextContent('Char Dham Yatra')
+        expect(screen.queryByRole('option', { name: /Manali Escape/ })).not.toBeInTheDocument()
 
         // a day typed for this quote is saved in Uttarakhand, not the lead's Himachal
         fireEvent.keyDown(document.activeElement, { key: 'Escape' })
@@ -312,6 +314,18 @@ describe('Quotation for a verified lead', () => {
         expect(api.createItenary.mock.calls[0][0]).toMatchObject({ title: 'Rishikesh rafting', campaignId: 2 })
         await waitFor(() => expect(api.createSingleTour).toHaveBeenCalled())
         expect(api.createSingleTour.mock.calls[0][0]).toMatchObject({ quoteNo: 2, itenaryId: 555 })
+    })
+
+    test('the package picker of a quote offers only the packages of that quote’s trip', async () => {
+        api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
+        renderPage()
+
+        // ? Quote 1 is for the lead's own trip, Himachal: its package is offered, Uttarakhand's is not
+        fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Start from a package' }))
+        const options = await screen.findAllByRole('option')
+        expect(options).toHaveLength(1)
+        expect(options[0]).toHaveTextContent('Manali Escape')
+        expect(screen.queryByRole('option', { name: /Char Dham Yatra/ })).not.toBeInTheDocument()
     })
 
     // ? a Spiti trip runs through Shimla and Manali, saved under Himachal

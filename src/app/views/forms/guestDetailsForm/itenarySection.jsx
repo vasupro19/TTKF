@@ -137,20 +137,24 @@ QuoteBar.propTypes = {
     defaultCampaignId: PropTypes.number
 }
 
-function PackagePicker({ packages, loading, replacing, busy, onPick, campaignId = null }) {
+function PackagePicker({ packages, loading, replacing, busy, onPick, campaignId = null, campaignName = '' }) {
     const [input, setInput] = useState('')
-    // ? this quote's campaign first, then the others, each under its campaign's name
-    const ordered = [...packages].sort(
+    // ? only this quote's trip: a Himachal quote offering Kashmir packages is a mistake waiting to be sent. With no trip
+    // ? chosen yet there is nothing to narrow by, so every package is listed under its trip's name
+    const options = campaignId ? packages.filter(item => Number(item.campaignId) === campaignId) : packages
+    const ordered = [...options].sort(
         (a, b) =>
-            (Number(b.campaignId) === campaignId) - (Number(a.campaignId) === campaignId) ||
-            String(a.campaign?.title || '').localeCompare(String(b.campaign?.title || ''))
+            String(a.campaign?.title || '').localeCompare(String(b.campaign?.title || '')) ||
+            String(a.name || '').localeCompare(String(b.name || ''))
     )
+    let emptyText = 'No packages yet — create one in Packages'
+    if (campaignId) emptyText = `No packages for ${campaignName || 'this trip'} yet — add one in Packages`
     return (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
             <Autocomplete
                 sx={{ width: { xs: '100%', sm: 380 } }}
                 options={ordered}
-                groupBy={option => option.campaign?.title || 'Other packages'}
+                groupBy={campaignId ? undefined : option => option.campaign?.title || 'Other packages'}
                 loading={loading}
                 disabled={busy}
                 value={null}
@@ -163,12 +167,13 @@ function PackagePicker({ packages, loading, replacing, busy, onPick, campaignId 
                     `${option.name || 'Untitled package'} · ${option.packageItenaries?.length || 0} days`
                 }
                 isOptionEqualToValue={(option, value) => option.id === value.id}
-                noOptionsText='No packages yet — create one in Packages'
+                noOptionsText={emptyText}
                 renderInput={params => (
                     <TextField
                         // eslint-disable-next-line react/jsx-props-no-spreading
                         {...params}
                         label={replacing ? 'Replace the days with a package' : 'Start from a package'}
+                        helperText={campaignId && campaignName ? `Packages of ${campaignName}` : ' '}
                     />
                 )}
             />
@@ -186,6 +191,7 @@ function PackagePicker({ packages, loading, replacing, busy, onPick, campaignId 
 
 PackagePicker.propTypes = {
     campaignId: PropTypes.number,
+    campaignName: PropTypes.string,
     packages: PropTypes.arrayOf(packageShape).isRequired,
     loading: PropTypes.bool.isRequired,
     replacing: PropTypes.bool.isRequired,
@@ -447,6 +453,7 @@ export default function ItinerarySection({
                         <Box sx={{ mb: 2.5 }}>
                             <PackagePicker
                                 campaignId={currentCampaignId}
+                                campaignName={quoteCampaigns[currentQuoteNo] || ''}
                                 packages={packages}
                                 loading={loadingPackages}
                                 replacing={hasDays}
