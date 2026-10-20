@@ -40,6 +40,7 @@ import SimplePlanner from './tripUi/SimplePlanner'
 import { DayDetail } from './tripUi/DayRow'
 import { addDestinationText, emptyPlannerInput, fromRequirements, toRequirements } from './tripUi/plannerInput'
 import { emptyRequirements, mergeRequirements, normalizeText, sameName } from './tripEngine/requirements'
+import nameKey from './nameKey'
 import { editRequirements, extractFromText, planTrip } from './tripEngine/pipeline'
 import { entryTypeFor, renderDayDescription, renderDayTitle } from './tripEngine/render'
 import { DAY_TYPES } from './tripEngine/route'
@@ -85,7 +86,12 @@ const createInsertedActivityTitle = entryType => {
     return 'New Stay Day'
 }
 
-const toNormalized = value => (value || '').toString().trim().toLowerCase()
+// ? a list asks for every row of the trip: the server sends only 100 unless told more, and a destination or itinerary
+//   the wizard cannot see is one it saves a second time
+const ALL_ROWS = 5000
+
+// ? the same rule as the server's: capitals, spacing and the kind of dash do not make a name new
+const toNormalized = nameKey
 
 const getAiResponseText = response =>
     response?.content?.[0]?.text || response?.data?.content?.[0]?.text || response?.text || ''
@@ -749,8 +755,8 @@ function PackageCreationWizard() {
             }
 
             const [destinationResponse, itenaryResponse] = await Promise.all([
-                dispatch(getDestinationClients.initiate(`?campaignId=${campaignId}`, false)),
-                dispatch(getItenaryClients.initiate(`?campaignId=${campaignId}`, false))
+                dispatch(getDestinationClients.initiate(`?campaignId=${campaignId}&length=${ALL_ROWS}`, false)),
+                dispatch(getItenaryClients.initiate(`?campaignId=${campaignId}&length=${ALL_ROWS}`, false))
             ])
 
             setExistingDestinations(destinationResponse?.data?.data || [])
@@ -2186,8 +2192,14 @@ DESCRIPTION RULES:
             //   campaign was only just picked, and saving against an empty list created a second "Shimla" with no
             //   hotels (and second copies of saved days) instead of reusing the saved ones
             const [savedDestinationsResponse, savedItenariesResponse] = await Promise.all([
-                dispatch(getDestinationClients.initiate(`?campaignId=${campaignId}`, { forceRefetch: true })),
-                dispatch(getItenaryClients.initiate(`?campaignId=${campaignId}`, { forceRefetch: true }))
+                dispatch(
+                    getDestinationClients.initiate(`?campaignId=${campaignId}&length=${ALL_ROWS}`, {
+                        forceRefetch: true
+                    })
+                ),
+                dispatch(
+                    getItenaryClients.initiate(`?campaignId=${campaignId}&length=${ALL_ROWS}`, { forceRefetch: true })
+                )
             ])
             const savedDestinations = savedDestinationsResponse?.data?.data || existingDestinations
             const savedItenaries = savedItenariesResponse?.data?.data || existingItenaries
@@ -2249,7 +2261,10 @@ DESCRIPTION RULES:
 
             // const validActivities = activities.filter(item => item.title.trim())
             const validActivities = activities.filter(item => item.title.trim())
-            const uniqueActivityTitles = [...new Set(validActivities.map(item => item.title.trim()))]
+            // ? once per name ("Local sightseeing" and "local  Sightseeing" are one itinerary), not once per spelling
+            const uniqueActivityTitles = [
+                ...new Map(validActivities.map(item => [toNormalized(item.title), item.title.trim()])).values()
+            ]
 
             // ? a workspace database whose text columns were never widened (VARCHAR(191)) silently cuts a long day
             //   description; the API returns what was stored, so a shorter value means it was cut
