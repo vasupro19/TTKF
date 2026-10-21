@@ -76,7 +76,34 @@ const fallbackTitle = dayPlan => {
     return places.length ? places.join(', ').replace(/, ([^,]*)$/, ' & $1') : `${dayPlan.location} at Leisure`
 }
 
-export const renderDayTitle = dayPlan => dayPlan.title || fallbackTitle(dayPlan)
+/**
+ * @description the fixed title of a day that is the same whoever plans it: "Manali Local Sightseeing", "Arrival in Manali",
+ *              "Dharamshala to Manali", "Manali Departure". What the guest actually sees — Old Manali, Vashisht, the temples —
+ *              belongs in the day's description, not its title: a title that names the stops comes out worded a little
+ *              differently each time, and every wording is saved as an itinerary of its own. An excursion names its own
+ *              destination, so it has no fixed title (null).
+ * @param {object} dayPlan
+ * @param {number} ordinal for a full day: 1 for the first at that place, 2 for the second, so a stay of several days there
+ *                         has "Manali Local Sightseeing" and "Manali Local Sightseeing 2", each reusable on its own
+ * @returns {string|null}
+ */
+export const standardDayTitle = (dayPlan, ordinal = 1) => {
+    if (dayPlan.type === DAY_TYPES.DEPARTURE) {
+        return dayPlan.leg ? `${dayPlan.leg.from} to ${dayPlan.leg.to} Return` : `${dayPlan.location} Departure`
+    }
+    if (dayPlan.leg) return `${dayPlan.leg.from} to ${dayPlan.leg.to}`
+    if (!dayPlan.location) return null
+    if (dayPlan.type === DAY_TYPES.ARRIVAL) return `Arrival in ${dayPlan.location}`
+    if (dayPlan.type === DAY_TYPES.FULL_DAY) {
+        return ordinal > 1
+            ? `${dayPlan.location} Local Sightseeing ${ordinal}`
+            : `${dayPlan.location} Local Sightseeing`
+    }
+    return null
+}
+
+export const renderDayTitle = (dayPlan, ordinal = 1) =>
+    standardDayTitle(dayPlan, ordinal) || dayPlan.title || fallbackTitle(dayPlan)
 
 // ---------------------------------------------------------------- the day as a paragraph
 

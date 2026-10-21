@@ -41,6 +41,7 @@ import { DayDetail } from './tripUi/DayRow'
 import { addDestinationText, emptyPlannerInput, fromRequirements, toRequirements } from './tripUi/plannerInput'
 import { emptyRequirements, mergeRequirements, normalizeText, sameName } from './tripEngine/requirements'
 import nameKey from './nameKey'
+import { findSimilarTitle } from './similarTitle'
 import { editRequirements, extractFromText, planTrip } from './tripEngine/pipeline'
 import { entryTypeFor, renderDayDescription, renderDayTitle } from './tripEngine/render'
 import { DAY_TYPES } from './tripEngine/route'
@@ -1565,6 +1566,8 @@ DESCRIPTION RULES:
                 }
 
                 const updated = { ...item, [field]: value }
+                // ? text the agent wrote or changed themselves: it replaces a saved itinerary's text on save (see saveWizard)
+                if (field === 'description') updated.descriptionEdited = true
 
                 if ((field === 'title' || field === 'description') && value?.toString?.().trim?.()) {
                     updated.isAiPending = false
@@ -1782,14 +1785,22 @@ DESCRIPTION RULES:
             name: prev.name || buildSuggestedPackageName(requirements.destinations)
         }))
 
+        // ? the nth full day at one place gets "… Local Sightseeing", "… Local Sightseeing 2": titles that are the same for
+        //   any plan, so a package planned from another city reuses the saved itineraries (the stops are in the description)
+        const fullDaysAt = {}
         const nextRows = nextTrip.days.map(day => {
+            let ordinal = 1
+            if (day.type === DAY_TYPES.FULL_DAY && !day.leg) {
+                fullDaysAt[day.location] = (fullDaysAt[day.location] || 0) + 1
+                ordinal = fullDaysAt[day.location]
+            }
             const description = renderDayDescription(day)
             const previousRow = activities.find(row => row.planKey === day.planKey)
             if (previousRow && previousRow.generatedDescription === description) {
                 return { ...previousRow, dayPlan: day }
             }
             return createActivityRow({
-                title: renderDayTitle(day),
+                title: renderDayTitle(day, ordinal),
                 description,
                 generatedDescription: description,
                 planKey: day.planKey,
@@ -2275,9 +2286,18 @@ DESCRIPTION RULES:
                 return record
             }
 
+            // ? a title that is the same day as a saved itinerary, worded differently ("Arrival in Manali & Evening Rest"
+            //   for the saved "Arrival in Manali"), uses the saved one instead of becoming a near-copy
+            const reusedSimilar = []
             const itenaryResults = await Promise.all(
                 uniqueActivityTitles.map(async title => {
-                    const existing = savedItenaries.find(item => toNormalized(item.title) === toNormalized(title))
+                    const exact = savedItenaries.find(item => toNormalized(item.title) === toNormalized(title))
+                    const similar = exact ? null : findSimilarTitle(title, savedItenaries)
+                    if (similar) {
+                        reusedSimilar.push(similar.title)
+                        return [toNormalized(title), similar]
+                    }
+                    const existing = exact
                     const sourceActivity = validActivities.find(
                         item => toNormalized(item.title) === toNormalized(title)
                     )
@@ -2293,8 +2313,15 @@ DESCRIPTION RULES:
 
                     if (existing) {
                         const existingDescription = existing?.description?.trim?.() || ''
+                        // ? a saved itinerary is shared by every package that uses it: it keeps its text unless the agent wrote
+                        //   new text for this day (or it has none). Saving a package planned from another city must not
+                        //   rewrite "Manali Local Sightseeing" for all the others
+                        const keepSavedText = Boolean(existingDescription) && !sourceActivity?.descriptionEdited
+                        if (keepSavedText && nextDescription && nextDescription !== existingDescription) {
+                            reusedSimilar.push(existing.title)
+                        }
 
-                        if (nextDescription && nextDescription !== existingDescription) {
+                        if (nextDescription && nextDescription !== existingDescription && !keepSavedText) {
                             const updated = await updateItenaryClient({
                                 id: existing.id,
                                 title: existing.title,
@@ -2356,7 +2383,13 @@ DESCRIPTION RULES:
                 dispatch(
                     openSnackbar({
                         open: true,
-                        message: 'Package wizard completed successfully.',
+                        message: `Package wizard completed successfully.${
+                            reusedSimilar.length
+                                ? ` Used ${new Set(reusedSimilar).size} saved itinerar${
+                                      new Set(reusedSimilar).size === 1 ? 'y' : 'ies'
+                                  } instead of creating near-copies: ${[...new Set(reusedSimilar)].join(', ')}.`
+                                : ''
+                        }`,
                         variant: 'alert',
                         alert: { color: 'success' },
                         anchorOrigin: { vertical: 'top', horizontal: 'right' }
