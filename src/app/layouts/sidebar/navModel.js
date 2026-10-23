@@ -47,6 +47,7 @@ export const NAV_SECTIONS = [
             { url: '/userManagement/role', label: 'Roles' },
             { url: '/master/company', label: 'Company' },
             { url: '/master/gst', label: 'GST Settings' },
+            { url: '/master/rates', label: 'Rates' },
             { url: '/master/client', label: 'Clients' }
         ]
     }

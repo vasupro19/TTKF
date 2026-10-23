@@ -301,7 +301,11 @@ export const CSV_COLUMNS = [
 ]
 
 /** @description the leads as CSV text, a header row first */
-export const leadsCsv = rows =>
-    [CSV_COLUMNS.map(([title]) => csvCell(title)).join(',')]
-        .concat((rows || []).map(row => CSV_COLUMNS.map(([, read]) => csvCell(read(row))).join(',')))
+export const leadsCsv = rows => {
+    // ? the API leaves the source out for people who may not see it: no empty Source column then
+    const sourceShown = (rows || []).some(row => row.leadSource !== undefined)
+    const columns = CSV_COLUMNS.filter(([title]) => sourceShown || title !== 'Source')
+    return [columns.map(([title]) => csvCell(title)).join(',')]
+        .concat((rows || []).map(row => columns.map(([, read]) => csvCell(read(row))).join(',')))
         .join('\r\n')
+}

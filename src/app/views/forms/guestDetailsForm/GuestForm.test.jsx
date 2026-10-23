@@ -55,6 +55,9 @@ vi.mock('@/app/store/slices/api/gstSlice', () => ({
     useGetTaxProfileQuery: () => ({ data: null, isFetching: false }),
     useSetQuoteTaxMutation: () => [() => ({ unwrap: () => Promise.resolve({}) }), { isLoading: false }]
 }))
+vi.mock('@/app/store/slices/api/ratesSlice', () => ({
+    usePriceFromRatesMutation: () => [() => ({ unwrap: () => Promise.resolve({ data: null }) }), { isLoading: false }]
+}))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useGetPackageByLeadIdQuery: () => ({ data: undefined }),
     useConvertPackageMutation: idle

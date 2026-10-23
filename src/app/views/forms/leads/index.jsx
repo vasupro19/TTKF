@@ -15,7 +15,12 @@ import MainCard from '@core/components/extended/MainCard'
 
 // redux imports
 import { useDispatch, useSelector } from 'react-redux'
-import { useCreateLeadMutation, getLeadById, useUpdateLeadMutation } from '@/app/store/slices/api/leadSlice'
+import {
+    useCreateLeadMutation,
+    getLeadById,
+    useGetLeadAccessQuery,
+    useUpdateLeadMutation
+} from '@/app/store/slices/api/leadSlice'
 import { useGetUsersQuery } from '@/app/store/slices/api/usersSlice'
 import { useGetCampaignsQuery } from '@/app/store/slices/api/campaignSlice'
 
@@ -44,6 +49,7 @@ function LeadsForm() {
     // ? lists are paged at 25 by default: the 26th user or campaign could not be chosen
     const { data: users = [] } = useGetUsersQuery('?length=200')
     const { data: campaignsData = [] } = useGetCampaignsQuery('?length=200')
+    const { data: access } = useGetLeadAccessQuery()
     const [editData, setEditData] = useState({})
     const { createLeadLKey, updateLeadLKey } = useSelector(state => state.loading)
     const { user } = useSelector(state => state.auth)
@@ -268,13 +274,15 @@ function LeadsForm() {
                                     </MenuItem>
                                 ))}
                             </FormField>
-                            <FormField formik={formik} name='leadSource' label='How did they reach you?' select>
-                                {LEAD_SOURCES.map(source => (
-                                    <MenuItem key={source.value} value={source.value}>
-                                        {source.label}
-                                    </MenuItem>
-                                ))}
-                            </FormField>
+                            {access?.canSeeLeadSource && (
+                                <FormField formik={formik} name='leadSource' label='How did they reach you?' select>
+                                    {LEAD_SOURCES.map(source => (
+                                        <MenuItem key={source.value} value={source.value}>
+                                            {source.label}
+                                        </MenuItem>
+                                    ))}
+                                </FormField>
+                            )}
                             <FormField
                                 formik={formik}
                                 name='remarks'

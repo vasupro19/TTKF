@@ -13,7 +13,11 @@ const api = vi.hoisted(() => ({
     // ? GST: what the API says about the agency and about this quote; `setTax` is the call that saves a quote's GST
     gstQuotes: null,
     gstProfile: null,
-    setTax: vi.fn()
+    setTax: vi.fn(),
+    // ? the rate card: what the server says a quote is worth, and the call that asks for it
+    rates: null,
+    ratesError: null,
+    priceFromRates: vi.fn()
 }))
 
 vi.mock('react-router-dom', async importOriginal => ({ ...(await importOriginal()), useNavigate: () => api.navigate }))
@@ -35,6 +39,17 @@ vi.mock('@/app/store/slices/api/gstSlice', () => ({
         { isLoading: false }
     ]
 }))
+vi.mock('@/app/store/slices/api/ratesSlice', () => ({
+    usePriceFromRatesMutation: () => [
+        payload => ({
+            unwrap: () => {
+                api.priceFromRates(payload)
+                return api.ratesError ? Promise.reject(api.ratesError) : Promise.resolve({ data: api.rates })
+            }
+        }),
+        { isLoading: false }
+    ]
+}))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useConvertPackageMutation: () => [
         payload => ({ unwrap: () => Promise.resolve(api.convert(payload)) }),
@@ -47,6 +62,8 @@ beforeEach(() => {
     api.price = null
     api.gstQuotes = null
     api.gstProfile = null
+    api.rates = null
+    api.ratesError = null
     api.savePrices.mockImplementation(payload => ({ success: true, data: { priceBasis: payload.priceBasis } }))
     api.convert.mockImplementation(() => ({ success: true }))
 })
@@ -288,5 +305,155 @@ describe('booking a quote that charges GST', () => {
         renderBooking(gstPrice('none', 0))
         await pick('Deluxe · ₹10,000 per person')
         expect(screen.getByLabelText('Final selling price')).toHaveValue(20000)
+    })
+})
+
+// ? the quote's four prices worked out from the agency's rate card
+const priced = (extra = {}) => ({
+    canSeeCosts: true,
+    inputs: { persons: 4, nights: 3, rooms: 2, mealPlan: 'CP', vehicle: 'Sedan', marginPct: 15 },
+    notes: [],
+    categories: [
+        {
+            key: 'delux',
+            priceKey: 'deluxePrice',
+            label: 'Deluxe',
+            ok: true,
+            missing: [],
+            cost: 23000,
+            perPerson: 13200,
+            lines: [
+                { label: 'Deluxe stay in Manali', detail: '3 nights × 2 rooms × ₹3,000 (CP)', amount: 18000 },
+                { label: 'Cost', detail: '', amount: 23000 },
+                { label: 'Margin 15%', detail: '', amount: 3450 }
+            ]
+        },
+        {
+            key: 'superDelux',
+            priceKey: 'superDeluxePrice',
+            label: 'Super Deluxe',
+            ok: true,
+            missing: [],
+            cost: 27500,
+            perPerson: 15800,
+            lines: []
+        },
+        {
+            key: 'luxury',
+            priceKey: 'luxuryPrice',
+            label: 'Luxury',
+            ok: false,
+            missing: ['No Luxury rate for Manali'],
+            cost: null,
+            perPerson: null,
+            lines: []
+        },
+        {
+            key: 'premium',
+            priceKey: 'premiumPrice',
+            label: 'Premium',
+            ok: false,
+            missing: ['No Luxury rate for Manali'],
+            cost: null,
+            perPerson: null,
+            lines: []
+        }
+    ],
+    ...extra
+})
+
+describe('calculating the prices from the rate card', () => {
+    const open = (people = 4) => {
+        render(<GuestTourPriceForm tourId={7} quotationNo={2} activeTab={1} people={people} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Calculate from rates' }))
+    }
+
+    test('asks the server about this quote and shows each category’s price, and what is missing', async () => {
+        api.rates = priced()
+        open()
+        expect(await screen.findByText('Prices from your rates — Quote 2')).toBeInTheDocument()
+        expect(api.priceFromRates).toHaveBeenCalledWith({ leadId: 7, quoteNo: 2 })
+        expect(
+            screen.getByText('4 guests · 3 nights · 2 rooms · CP meals · Sedan cab · 15% margin')
+        ).toBeInTheDocument()
+        expect(screen.getByText('₹13,200')).toBeInTheDocument()
+        expect(screen.getByText('per person · ₹52,800 for 4')).toBeInTheDocument()
+        expect(screen.getAllByText('No Luxury rate for Manali')).toHaveLength(2)
+        expect(screen.getByText(/left out instead of guessed/)).toBeInTheDocument()
+    })
+
+    test('"Use these prices" fills only the categories that were priced, and leaves the rest as typed', async () => {
+        api.rates = priced()
+        render(<GuestTourPriceForm tourId={7} quotationNo={2} activeTab={1} people={4} />)
+        fireEvent.change(screen.getByLabelText('Luxury'), { target: { value: '99000' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Calculate from rates' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Use these prices' }))
+        expect(screen.getByLabelText('Deluxe')).toHaveValue('13200')
+        expect(screen.getByLabelText('Super Deluxe')).toHaveValue('15800')
+        expect(screen.getByLabelText('Luxury')).toHaveValue('99000')
+        expect(screen.getByLabelText('Premium')).toHaveValue('')
+        // ? filled in the boxes, not saved: the agent saves them
+        expect(api.savePrices).not.toHaveBeenCalled()
+        expect(screen.getByRole('button', { name: 'Save prices' })).toBeEnabled()
+        expect(screen.queryByText('Prices from your rates — Quote 2')).not.toBeInTheDocument()
+    })
+
+    test('a quote priced as a total for the group gets the per-person price times the guests', async () => {
+        api.rates = priced()
+        render(<GuestTourPriceForm tourId={7} quotationNo={2} activeTab={1} people={4} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Total for the group' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Calculate from rates' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Use these prices' }))
+        expect(screen.getByLabelText('Deluxe')).toHaveValue('52800')
+    })
+
+    test('a manager sees how a price was worked out, and can try another margin', async () => {
+        api.rates = priced()
+        open()
+        fireEvent.click(await screen.findByRole('button', { name: /Cost ₹23,000 · show how/ }))
+        const lines = within(screen.getByRole('list', { name: 'How Deluxe was worked out' }))
+        expect(lines.getByText('3 nights × 2 rooms × ₹3,000 (CP)')).toBeInTheDocument()
+        expect(lines.getByText('Margin 15%')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Margin for this quote'), { target: { value: '20' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Recalculate' }))
+        await waitFor(() =>
+            expect(api.priceFromRates).toHaveBeenLastCalledWith({ leadId: 7, quoteNo: 2, marginPct: 20 })
+        )
+    })
+
+    test('a salesperson sees the prices only: no cost, no margin, no workings', async () => {
+        api.rates = priced({
+            canSeeCosts: false,
+            inputs: { persons: 4, nights: 3, rooms: 2, mealPlan: 'CP', vehicle: 'Sedan', marginPct: null },
+            categories: priced().categories.map(({ key, priceKey, label, ok, missing, perPerson }) => ({
+                key,
+                priceKey,
+                label,
+                ok,
+                missing,
+                perPerson
+            }))
+        })
+        open()
+        expect(await screen.findByText('₹13,200')).toBeInTheDocument()
+        expect(screen.getByText('4 guests · 3 nights · 2 rooms · CP meals · Sedan cab')).toBeInTheDocument()
+        expect(screen.queryByText(/margin/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /show how/ })).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('Margin for this quote')).not.toBeInTheDocument()
+        expect(screen.getByText(/Ask your admin to add them/)).toBeInTheDocument()
+    })
+
+    test('says why it cannot price the quote, and offers nothing to use', async () => {
+        api.ratesError = { data: { message: 'Enter the number of adults for this quote first' } }
+        open()
+        expect(await screen.findByText('Enter the number of adults for this quote first')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Use these prices' })).toBeDisabled()
+    })
+
+    test('passes on the notes, such as a meal plan that was assumed', async () => {
+        api.rates = priced({ notes: ['No meal plan is chosen on this quote, so CP (breakfast) rates are used.'] })
+        open()
+        expect(await screen.findByText(/No meal plan is chosen on this quote/)).toBeInTheDocument()
     })
 })

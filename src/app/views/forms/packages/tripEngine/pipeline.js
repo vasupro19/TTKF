@@ -22,7 +22,9 @@ import {
     mergeRequirements,
     normalizeRequirements,
     normalizeText,
-    resolveRequirements
+    resolveRequirements,
+    spreadNights,
+    statedNights
 } from './requirements'
 import { dayBudget, profileFor } from './timeBudget'
 import { assignClusters, dedupeRecommended, freeMinutesFor, scheduleDay } from './schedule'
@@ -86,6 +88,7 @@ export const extractFromText = async ({ text, form = {}, ask }) => {
         extracted.destinations = suggested.map(({ name, nights }) => ({ name, nights }))
         extracted.suggestedDestinations = []
     }
+    extracted.destinations = spreadNights(extracted.destinations, statedNights(text))
     return extracted
 }
 

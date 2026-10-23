@@ -191,6 +191,33 @@ export const mergeRequirements = (extracted, form) => {
     })
 }
 
+/**
+ * @description the one total the notes state ("7 nights", "6N/7D", "8 days"), or null when they give none or
+ *              several numbers (each stay then has its own)
+ */
+export const statedNights = text => {
+    const source = String(text || '').toLowerCase()
+    const nightMatches = [...source.matchAll(/(\d{1,2})\s*(?:nights?|n\b)/g)].map(match => Number(match[1]))
+    if (nightMatches.length === 1) return nightMatches[0] > 0 ? nightMatches[0] : null
+    if (nightMatches.length) return null
+    const days = [...source.matchAll(/(\d{1,2})\s*(?:days?|d\b)/g)].map(match => Number(match[1]))
+    return days.length === 1 && days[0] > 1 ? days[0] - 1 : null
+}
+
+/**
+ * @description shares a stated total over the stays when the model split it evenly and wrongly ("7 nights" over
+ *              three stays came back as 1 each). Stays the notes gave different nights are left alone.
+ */
+export const spreadNights = (destinations, total) => {
+    const stays = destinations || []
+    const sum = stays.reduce((subtotal, item) => subtotal + (Number(item.nights) || 0), 0)
+    if (!total || !stays.length || sum === total) return stays
+    if (new Set(stays.map(item => Number(item.nights) || 0)).size > 1) return stays
+    const base = Math.floor(total / stays.length)
+    const extra = total % stays.length
+    return stays.map((item, index) => ({ ...item, nights: Math.max(1, base + (index < extra ? 1 : 0)) }))
+}
+
 export const totalNightsOf = requirements => requirements.destinations.reduce((sum, item) => sum + item.nights, 0)
 
 const travellerSummary = travellers => {

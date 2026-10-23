@@ -1,8 +1,16 @@
 import { describe, expect, test } from 'vitest'
-import { applyPatch, mergeRequirements, normalizeRequirements, resolveRequirements } from './requirements'
+import {
+    applyPatch,
+    mergeRequirements,
+    normalizeRequirements,
+    resolveRequirements,
+    spreadNights,
+    statedNights
+} from './requirements'
 import { buildDaySkeleton, buildRoute, DAY_TYPES } from './route'
 import { dayBudget, profileFor } from './timeBudget'
 import { assignClusters, scheduleDay } from './schedule'
+import { normalizeFill } from './prompts'
 import { planTrip, understand } from './pipeline'
 import { formatWindow, renderDayDescription } from './render'
 
@@ -167,6 +175,77 @@ describe('understand', () => {
         })
         expect(requirements.destinations).toEqual([])
         expect(requirements.suggestedDestinations.map(item => item.name)).toEqual(['Shimla'])
+    })
+})
+
+describe('model replies', () => {
+    test('a place name that slipped into another script is dropped', () => {
+        const fill = normalizeFill(
+            {
+                days: [
+                    {
+                        day: 2,
+                        activities: [
+                            { name: 'Aguada Fort', area: 'Candolim', note: 'See the lighthouse.' },
+                            { name: 'M组织/Braganza House', area: 'Chandor', note: 'Heritage home.' }
+                        ]
+                    }
+                ]
+            },
+            [2]
+        )
+        expect(fill.days[2].activities.map(item => item.name)).toEqual(['Aguada Fort'])
+    })
+})
+
+describe('stated nights', () => {
+    test('reads the one total the notes give', () => {
+        expect(statedNights('Jaipur Jodhpur Jaisalmer 7 nights from Delhi')).toBe(7)
+        expect(statedNights('Goa 6N/7D honeymoon')).toBe(6)
+        expect(statedNights('Kashmir 8 days, couple, 15 December')).toBe(7)
+    })
+
+    test('gives nothing when the notes give none or several', () => {
+        expect(statedNights('Kerala houseboat, family of 4')).toBeNull()
+        expect(statedNights('3 nights Shimla and 2 nights Manali')).toBeNull()
+    })
+
+    test('shares the total when the model split it evenly and wrongly', () => {
+        const stays = [
+            { name: 'Jaipur', nights: 1 },
+            { name: 'Jodhpur', nights: 1 },
+            { name: 'Jaisalmer', nights: 1 }
+        ]
+        expect(spreadNights(stays, 7).map(item => item.nights)).toEqual([3, 2, 2])
+    })
+
+    test('leaves stays alone when the nights already add up or differ per stay', () => {
+        const uneven = [
+            { name: 'Shimla', nights: 2 },
+            { name: 'Manali', nights: 3 }
+        ]
+        expect(spreadNights(uneven, 9)).toBe(uneven)
+        const right = [
+            { name: 'Shimla', nights: 3 },
+            { name: 'Manali', nights: 3 }
+        ]
+        expect(spreadNights(right, 6)).toBe(right)
+    })
+
+    test('understand fixes a trip the model gave one night per stop', async () => {
+        const requirements = await understand({
+            text: 'Jaipur Jodhpur Jaisalmer 7 nights from Delhi',
+            form: {},
+            ask: async () => ({
+                origin: 'Delhi',
+                destinations: [
+                    { name: 'Jaipur', nights: 1 },
+                    { name: 'Jodhpur', nights: 1 },
+                    { name: 'Jaisalmer', nights: 1 }
+                ]
+            })
+        })
+        expect(requirements.destinations.map(item => item.nights)).toEqual([3, 2, 2])
     })
 })
 

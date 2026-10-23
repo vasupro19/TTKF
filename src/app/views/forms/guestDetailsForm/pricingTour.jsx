@@ -12,6 +12,7 @@ import {
     ToggleButtonGroup,
     Typography
 } from '@mui/material'
+import { Calculate } from '@mui/icons-material'
 import { useDispatch } from 'react-redux'
 import { useUpsertGuestTourPriceMutation, useGetGuestTourPriceQuery } from '@/app/store/slices/api/guestTourPrice'
 import { openSnackbar } from '@app/store/slices/snackbar'
@@ -19,6 +20,7 @@ import useQuoteGst from '@views/gst/useQuoteGst'
 import QuoteGstControl from '@views/gst/QuoteGstControl'
 import { computeTax, money } from '@views/gst/gstFacts'
 import { PER_PERSON, TOTAL, groupPrice, guestsLabel, priceBasisOf } from './quote/pricing'
+import RatesPriceDialog from './quote/RatesPriceDialog'
 import { HOTEL_TIERS, formatRupees } from './quote/quoteDays'
 
 // ? the API stores Decimals; "12500.00" reads better as "12500" in a box the agent types into
@@ -50,6 +52,7 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
     const [savedPrices, setSavedPrices] = useState(() => fromPriceData(null))
     const [basis, setBasis] = useState(PER_PERSON)
     const [savedBasis, setSavedBasis] = useState(PER_PERSON)
+    const [ratesOpen, setRatesOpen] = useState(false)
 
     useEffect(() => {
         const loaded = fromPriceData(price?.data)
@@ -85,6 +88,21 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
         return people > 1
             ? `${shown} per person · ${formatRupees(groupPrice(amount, basis, people))} for ${people}`
             : `${shown} per person`
+    }
+
+    // ? prices worked out from the rate card go into the boxes, not into the quote: the agent still saves them (or changes them first)
+    const applyRatePrices = picked => {
+        setPrices(current => ({ ...current, ...picked }))
+        setRatesOpen(false)
+        dispatch(
+            openSnackbar({
+                open: true,
+                message: 'Prices filled in from your rates. Check them, then save.',
+                variant: 'alert',
+                alert: { color: 'info' },
+                close: false
+            })
+        )
     }
 
     const handleSave = async () => {
@@ -147,7 +165,26 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
                         ? `${guestsLabel(people)} on this trip`
                         : 'Add the guests in trip details to see group totals'}
                 </Typography>
+                <Button
+                    variant='outlined'
+                    size='small'
+                    startIcon={<Calculate />}
+                    onClick={() => setRatesOpen(true)}
+                    sx={{ textTransform: 'none', ml: { sm: 'auto' } }}
+                >
+                    Calculate from rates
+                </Button>
             </Stack>
+            {ratesOpen ? (
+                <RatesPriceDialog
+                    leadId={tourId}
+                    quoteNo={quotationNo}
+                    basis={basis}
+                    people={people}
+                    onApply={applyRatePrices}
+                    onClose={() => setRatesOpen(false)}
+                />
+            ) : null}
             <QuoteGstControl gst={gst} quotationNo={quotationNo} />
             <Grid container spacing={2}>
                 {HOTEL_TIERS.map(tier => (

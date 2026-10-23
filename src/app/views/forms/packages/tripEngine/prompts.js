@@ -24,6 +24,8 @@ const clamp = (value, min, max, fallback) => {
     const number = Number(value)
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback
 }
+// ? a model that slips into another script mid-word ("M组织/Braganza House") writes a name no guest can use
+const readable = value => !/[^\s\u0020-\u024F\u2010-\u206F\u20A0-\u20CF]/.test(value)
 const clock = value => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(str(value)) ? str(value).padStart(5, '0') : '')
 const range = (value, min, max) => {
     const pair = Array.isArray(value) ? value : [value, value]
@@ -181,7 +183,8 @@ RULES:
 5. Match the pace, travellers, styles and interests (e.g. cafes, snow, photography).
 6. "fixed" lists the required places already on that day. Never list them again: "activities" are only ADDITIONAL places. When usableMinutes is 90 or more, use it — e.g. after returning from an excursion, a short visit near the hotel or in town.
 7. "title": under 10 words naming the day's key places, including the fixed ones, e.g. "Kufri, Green Valley & Jakhu Temple". For an ARRIVAL or TRANSFER day name the route, e.g. "Delhi to Shimla & Mall Road Evening"; for DEPARTURE, e.g. "Manali to Delhi Return".
-8. Only real, well-known places, correctly spelled. For cafes, restaurants and shops name the area ("Old Manali cafes", "Mall Road shopping") unless the place is a long-established landmark.
+8. Only real, well-known places, correctly spelled, written in English letters only. For cafes, restaurants and shops name the area ("<Area> cafes", "<Market> shopping") unless the place is a long-established landmark.
+9. Every place must be in or near that day's own location. Never use a place, area or name from a different region or state.
 
 Return JSON only.`
 
@@ -241,7 +244,7 @@ export const normalizeFill = (raw, dayNumbers) => {
                     category: CATEGORIES.has(str(activity?.category)) ? str(activity.category) : 'sightseeing',
                     note: str(activity?.note, 160)
                 }))
-                .filter(activity => activity.name)
+                .filter(activity => activity.name && readable(`${activity.name} ${activity.area} ${activity.note}`))
                 .slice(0, 8)
         }
     })
@@ -257,7 +260,7 @@ export const normalizeFill = (raw, dayNumbers) => {
                 reason: str(item?.reason, 200),
                 impact: str(item?.impact, 160)
             }))
-            .filter(item => item.name)
+            .filter(item => item.name && readable(`${item.name} ${item.reason} ${item.impact}`))
             .slice(0, 3)
     }
 }
@@ -323,6 +326,7 @@ export const normalizeWrite = (raw, inputs) => {
             const ok =
                 text.length >= 200 &&
                 text.length <= 1600 &&
+                readable(text) &&
                 !CLOCK_TIME.test(text) &&
                 names.every(name => mentions(text, name))
             return [input.day, ok ? text : '']
