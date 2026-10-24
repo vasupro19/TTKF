@@ -15,9 +15,16 @@ import {
 import { FileDownload, UploadFile } from '@mui/icons-material'
 import * as XLSX from 'xlsx'
 import { useImportRatesMutation } from '@/app/store/slices/api/ratesSlice'
-import { cabsFromSheet, hotelsFromSheet, pickSheets, templateSheets } from './rateFacts'
+import {
+    cabsFromSheet,
+    hotelsFromSheet,
+    localFromSheet,
+    pickSheets,
+    routesFromSheet,
+    templateSheets
+} from './rateFacts'
 
-/** @description the template as an Excel file the agent fills in: one sheet of hotel rates, one of cabs */
+/** @description the template as an Excel file the agent fills in: hotel rates, cab routes, cab days in a place, and a cab's plain day rate */
 const downloadTemplate = () => {
     const workbook = XLSX.utils.book_new()
     Object.entries(templateSheets()).forEach(([name, rows]) => {
@@ -51,12 +58,16 @@ export default function RatesImport({ onDone }) {
                 name ? XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: '', raw: true }) : []
             const hotels = hotelsFromSheet(rowsOf(names.hotels))
             const vehicles = cabsFromSheet(rowsOf(names.cabs))
-            if (!hotels.length && !vehicles.length) {
-                setProblem('That file has no rates in it. Use the template: a Hotels sheet and a Cabs sheet.')
+            const cabRoutes = routesFromSheet(rowsOf(names.routes))
+            const cabLocal = localFromSheet(rowsOf(names.days))
+            if (!hotels.length && !vehicles.length && !cabRoutes.length && !cabLocal.length) {
+                setProblem(
+                    'That file has no rates in it. Use the template: Hotels, Cab routes, Cab days and Cabs sheets.'
+                )
                 setReport({ empty: true })
                 return
             }
-            const reply = await importRates({ hotels, vehicles }).unwrap()
+            const reply = await importRates({ hotels, vehicles, cabRoutes, cabLocal }).unwrap()
             setReport(reply.data)
             if (onDone) onDone()
         } catch (error) {
@@ -98,7 +109,9 @@ export default function RatesImport({ onDone }) {
                     {done ? (
                         <Box>
                             <Typography>
-                                Hotels: {report.hotelsAdded} added, {report.hotelsChanged} changed. Cabs:{' '}
+                                Hotels: {report.hotelsAdded} added, {report.hotelsChanged} changed. Drives:{' '}
+                                {report.routesAdded} added, {report.routesChanged} changed. Cab days:{' '}
+                                {report.localAdded} added, {report.localChanged} changed. Plain day rates:{' '}
                                 {report.cabsAdded} added, {report.cabsChanged} changed.
                             </Typography>
                             {report.skippedCount ? (

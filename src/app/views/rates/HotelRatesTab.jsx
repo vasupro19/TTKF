@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import {
     Alert,
-    Autocomplete,
     Box,
     Button,
     CircularProgress,
-    IconButton,
     InputAdornment,
-    MenuItem,
     Stack,
     Table,
     TableBody,
@@ -17,16 +14,14 @@ import {
     TableHead,
     TableRow,
     TextField,
-    Tooltip,
     Typography
 } from '@mui/material'
-import { Add, ContentCopy, DeleteOutline, Search } from '@mui/icons-material'
+import { Add, Search } from '@mui/icons-material'
 import { useDispatch } from 'react-redux'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { useSaveHotelRatesMutation } from '@/app/store/slices/api/ratesSlice'
 import {
     AMOUNT_FIELDS,
-    CATEGORY_OPTIONS,
     blankHotelRow,
     changedHotelRows,
     copyHotelRow,
@@ -36,8 +31,10 @@ import {
     hotelRowProblem,
     hotelRowsMatching
 } from './rateFacts'
+import HotelRateRow from './HotelRateRow'
 
 const cell = { py: 0.75, px: 0.75, verticalAlign: 'top' }
+const PLACES_LIST = 'rate-places'
 
 /**
  * What a night costs in each hotel category of each place, per room (two sharing), for each meal plan. A row with From and To
@@ -65,26 +62,33 @@ export default function HotelRatesTab({ hotels, places }) {
     const duplicates = useMemo(() => duplicateHotelRows(rows), [rows])
     const unsaved = changes.length > 0 || removeIds.length > 0
     const visible = hotelRowsMatching(rows, search)
+    const rowNumbers = useMemo(() => new Map(rows.map((row, index) => [row, index + 1])), [rows])
 
     const problemOf = row => duplicates[row.key] || (changes.includes(row) ? hotelRowProblem(row) : '')
     const hasProblem = changes.some(row => problemOf(row)) || Object.keys(duplicates).length > 0
 
-    const update = (key, field, value) =>
-        setRows(current => current.map(row => (row.key === key ? { ...row, [field]: value } : row)))
+    const update = useCallback(
+        (key, field, value) =>
+            setRows(current => current.map(row => (row.key === key ? { ...row, [field]: value } : row))),
+        []
+    )
     const addRow = () => {
         // ? a search that is still typed would hide the new, empty row
         setSearch('')
         setRows(current => [...current, blankHotelRow()])
     }
-    const copyRow = row =>
-        setRows(current => {
-            const at = current.findIndex(item => item.key === row.key)
-            return [...current.slice(0, at + 1), copyHotelRow(row), ...current.slice(at + 1)]
-        })
-    const removeRow = row => {
+    const copyRow = useCallback(
+        row =>
+            setRows(current => {
+                const at = current.findIndex(item => item.key === row.key)
+                return [...current.slice(0, at + 1), copyHotelRow(row), ...current.slice(at + 1)]
+            }),
+        []
+    )
+    const removeRow = useCallback(row => {
         if (row.id) setRemoveIds(current => [...current, row.id])
         setRows(current => current.filter(item => item.key !== row.key))
-    }
+    }, [])
 
     const discard = () => {
         setRows(original)
@@ -120,7 +124,8 @@ export default function HotelRatesTab({ hotels, places }) {
             <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mb: 2, maxWidth: 760 }}>
                 Rates are what you pay <strong>per room per night</strong> (two people sharing), for each meal plan you
                 offer. Leave a meal plan empty if you don’t use it. A row with <strong>From</strong> and{' '}
-                <strong>To</strong> dates is a season: it replaces the standard row for the nights inside it.
+                <strong>To</strong> dates is a season: it replaces the standard row for the nights inside it. Tick{' '}
+                <strong>Every year</strong> and the season comes back every year, also over New Year.
             </Typography>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} sx={{ mb: 2 }}>
@@ -159,14 +164,20 @@ export default function HotelRatesTab({ hotels, places }) {
                 </Box>
             ) : (
                 <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                    <Table size='small' sx={{ minWidth: 1100 }}>
+                    <datalist id={PLACES_LIST}>
+                        {places.map(place => (
+                            <option key={place} value={place} />
+                        ))}
+                    </datalist>
+                    <Table size='small' sx={{ minWidth: 1250 }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell sx={{ ...cell, minWidth: 150 }}>Place</TableCell>
-                                <TableCell sx={{ ...cell, minWidth: 120 }}>Category</TableCell>
-                                <TableCell sx={{ ...cell, minWidth: 100 }}>Season</TableCell>
+                                <TableCell sx={{ ...cell, minWidth: 150 }}>Category</TableCell>
+                                <TableCell sx={{ ...cell, minWidth: 130 }}>Season</TableCell>
                                 <TableCell sx={{ ...cell, minWidth: 128 }}>From</TableCell>
                                 <TableCell sx={{ ...cell, minWidth: 128 }}>To</TableCell>
+                                <TableCell sx={{ ...cell, minWidth: 72 }}>Every year</TableCell>
                                 {AMOUNT_FIELDS.map(([field, label]) => (
                                     <TableCell key={field} sx={{ ...cell, minWidth: 80 }}>
                                         {label}
@@ -177,117 +188,23 @@ export default function HotelRatesTab({ hotels, places }) {
                         </TableHead>
                         <TableBody>
                             {visible.map(row => {
-                                const number = rows.indexOf(row) + 1
+                                const number = rowNumbers.get(row)
                                 const problem = problemOf(row)
                                 const flagged = showProblems && Boolean(problem)
                                 return [
-                                    <TableRow key={row.key} hover>
-                                        <TableCell sx={cell}>
-                                            <Autocomplete
-                                                freeSolo
-                                                size='small'
-                                                options={places}
-                                                inputValue={row.place}
-                                                onInputChange={(event, value) => update(row.key, 'place', value)}
-                                                renderInput={params => (
-                                                    <TextField
-                                                        // eslint-disable-next-line react/jsx-props-no-spreading -- the picker hands these over as props
-                                                        {...params}
-                                                        inputProps={{
-                                                            ...params.inputProps,
-                                                            'aria-label': `Place, row ${number}`
-                                                        }}
-                                                        placeholder='Place'
-                                                        error={flagged && !row.place.trim()}
-                                                    />
-                                                )}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cell}>
-                                            <TextField
-                                                select
-                                                size='small'
-                                                fullWidth
-                                                value={row.category}
-                                                onChange={event => update(row.key, 'category', event.target.value)}
-                                                inputProps={{ 'aria-label': `Category, row ${number}` }}
-                                            >
-                                                {CATEGORY_OPTIONS.map(option => (
-                                                    <MenuItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </MenuItem>
-                                                ))}
-                                            </TextField>
-                                        </TableCell>
-                                        <TableCell sx={cell}>
-                                            <TextField
-                                                size='small'
-                                                fullWidth
-                                                placeholder='Standard'
-                                                value={row.season}
-                                                onChange={event => update(row.key, 'season', event.target.value)}
-                                                inputProps={{ 'aria-label': `Season, row ${number}`, maxLength: 60 }}
-                                            />
-                                        </TableCell>
-                                        {['validFrom', 'validTo'].map(field => (
-                                            <TableCell key={field} sx={cell}>
-                                                <TextField
-                                                    size='small'
-                                                    type='date'
-                                                    fullWidth
-                                                    value={row[field]}
-                                                    onChange={event => update(row.key, field, event.target.value)}
-                                                    inputProps={{
-                                                        'aria-label': `${field === 'validFrom' ? 'From' : 'To'}, row ${number}`
-                                                    }}
-                                                />
-                                            </TableCell>
-                                        ))}
-                                        {AMOUNT_FIELDS.map(([field, label]) => (
-                                            <TableCell key={field} sx={cell}>
-                                                <TextField
-                                                    size='small'
-                                                    fullWidth
-                                                    value={row[field]}
-                                                    onChange={event =>
-                                                        update(
-                                                            row.key,
-                                                            field,
-                                                            event.target.value.replace(/[^0-9.,]/g, '')
-                                                        )
-                                                    }
-                                                    inputProps={{
-                                                        inputMode: 'decimal',
-                                                        'aria-label': `${label}, row ${number}`
-                                                    }}
-                                                />
-                                            </TableCell>
-                                        ))}
-                                        <TableCell sx={{ ...cell, whiteSpace: 'nowrap' }}>
-                                            <Tooltip title='Copy this row (to add a season or another category)'>
-                                                <IconButton
-                                                    size='small'
-                                                    aria-label={`Copy row ${number}`}
-                                                    onClick={() => copyRow(row)}
-                                                >
-                                                    <ContentCopy fontSize='small' />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title='Remove this row'>
-                                                <IconButton
-                                                    size='small'
-                                                    color='error'
-                                                    aria-label={`Remove row ${number}`}
-                                                    onClick={() => removeRow(row)}
-                                                >
-                                                    <DeleteOutline fontSize='small' />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>,
+                                    <HotelRateRow
+                                        key={row.key}
+                                        row={row}
+                                        number={number}
+                                        flagged={flagged}
+                                        listId={PLACES_LIST}
+                                        onChange={update}
+                                        onCopy={copyRow}
+                                        onRemove={removeRow}
+                                    />,
                                     flagged ? (
                                         <TableRow key={`${row.key}-problem`}>
-                                            <TableCell colSpan={11} sx={{ py: 0.25, borderBottom: 'none' }}>
+                                            <TableCell colSpan={12} sx={{ py: 0.25, borderBottom: 'none' }}>
                                                 <Typography color='error' role='alert' sx={{ fontSize: '0.8125rem' }}>
                                                     Row {number}: {problem}
                                                 </Typography>

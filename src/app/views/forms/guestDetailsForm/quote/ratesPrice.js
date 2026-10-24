@@ -48,3 +48,50 @@ export const inputsLine = (inputs, canSeeCosts) => {
         parts.push(`${inputs.marginPct}% margin`)
     return parts.join(' · ')
 }
+
+const PLAN_FIELDS = { EP: 'epRate', CP: 'cpRate', MAP: 'mapRate' }
+
+/** @description the question for a rate the card has no row for: "Sedan, Manali to Jibhi" */
+export const gapLabel = gap => {
+    if (gap.kind === 'route') return `${gap.vehicle}: ${gap.from} to ${gap.to}`
+    if (gap.kind === 'local') return `${gap.vehicle}: a day in ${gap.place}`
+    return `${gap.categoryLabel} hotel in ${gap.place}`
+}
+
+/** @description what the price is for, under the question */
+export const gapHint = gap => {
+    if (gap.kind === 'route') return 'per drive, also used for the drive back'
+    if (gap.kind === 'local') return 'per day of local sightseeing'
+    return `per room per night, ${gap.mealPlan} meals`
+}
+
+/**
+ * @description the rows to save for the prices typed beside the missing rates — each is the plain (all-year) price; a gap left
+ *              empty is skipped, so the agent can fill what they know
+ * @param {object[]} gaps `gaps` from the server's answer
+ * @param {Record<string, string>} amounts the typed price by gap id
+ * @returns {{ routes: object[], days: object[], hotels: object[] }}
+ */
+export const gapRows = (gaps, amounts) => {
+    const out = { routes: [], days: [], hotels: [] }
+    ;(gaps || []).forEach(gap => {
+        const amount = String(amounts?.[gap.id] ?? '').replace(/[\s,]/g, '')
+        if (!(Number(amount) > 0)) return
+        if (gap.kind === 'route')
+            out.routes.push({
+                vehicle: gap.vehicle,
+                fromPlace: gap.from,
+                toPlace: gap.to,
+                rate: amount,
+                bothWays: true
+            })
+        else if (gap.kind === 'local') out.days.push({ vehicle: gap.vehicle, place: gap.place, dayRate: amount })
+        else
+            out.hotels.push({
+                place: gap.place,
+                category: gap.category,
+                [PLAN_FIELDS[gap.mealPlan] || 'cpRate']: amount
+            })
+    })
+    return out
+}

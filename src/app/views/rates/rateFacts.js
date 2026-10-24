@@ -24,7 +24,15 @@ export const AMOUNT_FIELDS = [
 ]
 
 const ROOM_FIELDS = ['epRate', 'cpRate', 'mapRate']
-const TEXT_FIELDS = ['place', 'category', 'season', 'validFrom', 'validTo', ...AMOUNT_FIELDS.map(([field]) => field)]
+const TEXT_FIELDS = [
+    'place',
+    'category',
+    'season',
+    'validFrom',
+    'validTo',
+    'repeatsYearly',
+    ...AMOUNT_FIELDS.map(([field]) => field)
+]
 const AMOUNT = /^\d{1,8}(\.\d{1,2})?$/
 const tidyAmount = value => String(value ?? '').replace(/[\s,₹]/g, '')
 
@@ -44,6 +52,7 @@ export const blankHotelRow = (place = '') => ({
     season: '',
     validFrom: '',
     validTo: '',
+    repeatsYearly: false,
     epRate: '',
     cpRate: '',
     mapRate: '',
@@ -80,7 +89,8 @@ export const hotelRowProblem = row => {
     if (badAmount) return `${badAmount[1]} must be an amount like 3500`
     if (!ROOM_FIELDS.some(field => tidyAmount(row[field]))) return 'Enter at least one room rate'
     if (Boolean(row.validFrom) !== Boolean(row.validTo)) return 'A season needs a start and an end date'
-    if (row.validFrom && row.validFrom > row.validTo) return 'The season ends before it starts'
+    if (row.repeatsYearly && !row.validFrom) return 'A season that comes back every year needs its dates'
+    if (!row.repeatsYearly && row.validFrom && row.validFrom > row.validTo) return 'The season ends before it starts'
     return ''
 }
 
@@ -107,15 +117,21 @@ export const changedHotelRows = (rows, original) =>
                 )
         )
 
+/** @description a row's season in words, for a message: "for 2026-12-15 to 2027-01-05 every year" or "(standard rate)" */
+const seasonWords = row =>
+    row.validFrom
+        ? `for ${row.validFrom} to ${row.validTo}${row.repeatsYearly ? ' every year' : ''}`
+        : '(standard rate)'
+
 /** @description the same place, category and dates twice: { key → message } for each row after the first */
 export const duplicateHotelRows = rows => {
     const seen = new Map()
     const problems = {}
     rows.forEach(row => {
         if (isUntouched(row) || !row.place.trim()) return
-        const id = `${nameKey(row.place)}|${row.category}|${row.validFrom}|${row.validTo}`
+        const id = `${nameKey(row.place)}|${row.category}|${row.validFrom}|${row.validTo}|${Boolean(row.repeatsYearly)}`
         if (seen.has(id)) {
-            const dates = row.validFrom ? `for ${row.validFrom} to ${row.validTo}` : '(standard rate)'
+            const dates = seasonWords(row)
             problems[row.key] = `${row.place.trim()} ${categoryLabel(row.category)} is already listed ${dates}`
         } else seen.set(id, row.key)
     })
@@ -137,6 +153,7 @@ export const hotelPayload = row => ({
     season: row.season.trim(),
     validFrom: row.validFrom,
     validTo: row.validTo,
+    repeatsYearly: Boolean(row.repeatsYearly),
     ...Object.fromEntries(AMOUNT_FIELDS.map(([field]) => [field, tidyAmount(row[field])]))
 })
 
@@ -180,6 +197,135 @@ export const cabPayload = row => ({
     perDayRate: tidyAmount(row.perDayRate)
 })
 
+// ---------------------------------------------------------------- cab routes and local days
+
+const SEASON_FIELDS = ['season', 'validFrom', 'validTo']
+
+/**
+ * @description the helpers of a cab table, built from what the table holds. `texts` are the fields compared as text,
+ *              `amount` the price field, `problemOf` the row's own check and `idOf` what makes two rows the same rate
+ */
+const cabKit = ({ texts, amount, blank, problemOf, idOf, said }) => {
+    const empty = () => ({
+        key: nextKey(),
+        id: null,
+        ...blank,
+        season: '',
+        validFrom: '',
+        validTo: '',
+        repeatsYearly: false
+    })
+    const compared = [...texts, ...SEASON_FIELDS, 'repeatsYearly']
+    const untouched = row =>
+        !row.id &&
+        [...texts, ...SEASON_FIELDS].every(field => !String(row[field] ?? '').trim()) &&
+        !tidyAmount(row[amount])
+    const sameAs = (a, b) =>
+        compared.every(field => String(a?.[field] ?? '').trim() === String(b?.[field] ?? '').trim()) &&
+        sameAmount(a?.[amount], b?.[amount])
+    return {
+        blank: (extra = {}) => ({ ...empty(), ...extra }),
+        draft: (row, prefix) => ({ ...empty(), ...row, key: `${prefix}-${row.id}` }),
+        copy: row => ({
+            ...empty(),
+            ...Object.fromEntries(
+                [...texts, ...SEASON_FIELDS, 'repeatsYearly', amount, ...Object.keys(blank)].map(field => [
+                    field,
+                    row[field] ?? ''
+                ])
+            )
+        }),
+        untouched,
+        problem: row => {
+            const own = problemOf(row)
+            if (own) return own
+            const value = tidyAmount(row[amount])
+            if (!AMOUNT.test(value) || Number(value) <= 0) return 'Enter the price, such as 4500'
+            if (Boolean(row.validFrom) !== Boolean(row.validTo)) return 'A season needs a start and an end date'
+            if (row.repeatsYearly && !row.validFrom) return 'A season that comes back every year needs its dates'
+            if (!row.repeatsYearly && row.validFrom && row.validFrom > row.validTo)
+                return 'The season ends before it starts'
+            return ''
+        },
+        changed: (rows, original) =>
+            rows
+                .filter(row => !untouched(row))
+                .filter(
+                    row =>
+                        !row.id ||
+                        !sameAs(
+                            row,
+                            original.find(item => item.id === row.id)
+                        )
+                ),
+        duplicates: rows => {
+            const seen = new Set()
+            const problems = {}
+            rows.forEach(row => {
+                if (untouched(row)) return
+                const id = idOf(row)
+                if (!id) return
+                if (seen.has(id)) problems[row.key] = `${said(row)} is already listed ${seasonWords(row)}`
+                else seen.add(id)
+            })
+            return problems
+        },
+        payload: row => ({
+            ...(row.id ? { id: row.id } : {}),
+            ...Object.fromEntries(texts.map(field => [field, String(row[field] ?? '').trim()])),
+            ...Object.fromEntries(
+                Object.keys(blank)
+                    .filter(field => !texts.includes(field))
+                    .map(field => [field, row[field]])
+            ),
+            season: String(row.season ?? '').trim(),
+            validFrom: row.validFrom,
+            validTo: row.validTo,
+            repeatsYearly: Boolean(row.repeatsYearly),
+            [amount]: tidyAmount(row[amount])
+        })
+    }
+}
+
+const dates = row => `${row.validFrom}|${row.validTo}|${Boolean(row.repeatsYearly)}`
+
+/** @description a drive: this cab, from a place to another, one price (both ways unless it is ticked off) */
+export const routeKit = cabKit({
+    texts: ['vehicle', 'fromPlace', 'toPlace'],
+    amount: 'rate',
+    blank: { vehicle: '', fromPlace: '', toPlace: '', rate: '', bothWays: true },
+    problemOf: row => {
+        if (!row.vehicle.trim()) return 'Enter the cab type, such as Sedan'
+        if (!row.fromPlace.trim() || !row.toPlace.trim()) return 'Enter where the drive starts and ends'
+        if (nameKey(row.fromPlace) === nameKey(row.toPlace)) return 'A drive needs two different places'
+        return ''
+    },
+    idOf: row => {
+        const a = nameKey(row.fromPlace)
+        const b = nameKey(row.toPlace)
+        if (!a || !b || !nameKey(row.vehicle)) return ''
+        // ? both ways: "Chandigarh to Manali" and "Manali to Chandigarh" are the same drive
+        const places = row.bothWays === false ? `${a}>${b}` : [a, b].sort().join('<>')
+        return `${nameKey(row.vehicle)}|${places}|${dates(row)}`
+    },
+    said: row => `${row.vehicle.trim()} ${row.fromPlace.trim()} to ${row.toPlace.trim()}`
+})
+
+/** @description a day in one place (local sightseeing): this cab, one price */
+export const localKit = cabKit({
+    texts: ['vehicle', 'place'],
+    amount: 'dayRate',
+    blank: { vehicle: '', place: '', dayRate: '' },
+    problemOf: row => {
+        if (!row.vehicle.trim()) return 'Enter the cab type, such as Sedan'
+        if (!row.place.trim()) return 'Choose the place'
+        return ''
+    },
+    idOf: row =>
+        nameKey(row.vehicle) && nameKey(row.place) ? `${nameKey(row.vehicle)}|${nameKey(row.place)}|${dates(row)}` : '',
+    said: row => `${row.vehicle.trim()} in ${row.place.trim()}`
+})
+
 // ---------------------------------------------------------------- the margin
 
 /** @description what is wrong with the margin and rounding boxes, or '' */
@@ -206,8 +352,32 @@ const HEADERS = {
     mapRate: ['map', 'maprate', 'breakfastdinner', 'breakfastanddinner', 'breakfastdinnermap'],
     extraBedRate: ['extrabed', 'extrabedrate', 'extramattress'],
     childRate: ['child', 'childrate', 'childwithoutbed', 'childnobed'],
+    repeatsYearly: ['everyyear', 'yearly', 'repeatsyearly', 'repeat', 'everyyearly'],
     vehicle: ['vehicle', 'cab', 'cabtype', 'car', 'vehicletype'],
     perDayRate: ['perday', 'perdayrate', 'rateperday', 'dayrate', 'rate', 'price']
+}
+
+// ? a cab route's sheet words "from" and "to" for the places; its dates say "valid from" and "valid to"
+const ROUTE_HEADERS = {
+    vehicle: HEADERS.vehicle,
+    fromPlace: ['from', 'fromplace', 'origin', 'pickup', 'start'],
+    toPlace: ['to', 'toplace', 'destination', 'drop', 'end'],
+    rate: ['rate', 'price', 'fare', 'cost', 'amount'],
+    bothWays: ['bothways', 'return', 'roundtrip', 'twoway'],
+    season: HEADERS.season,
+    validFrom: ['validfrom', 'seasonstart', 'datefrom', 'startdate', 'fromdate'],
+    validTo: ['validto', 'seasonend', 'dateto', 'enddate', 'todate', 'till'],
+    repeatsYearly: HEADERS.repeatsYearly
+}
+
+const LOCAL_HEADERS = {
+    vehicle: HEADERS.vehicle,
+    place: HEADERS.place,
+    dayRate: ['dayrate', 'perday', 'rate', 'price', 'localrate', 'sightseeing'],
+    season: HEADERS.season,
+    validFrom: HEADERS.validFrom,
+    validTo: HEADERS.validTo,
+    repeatsYearly: HEADERS.repeatsYearly
 }
 
 const headerKey = text => nameKey(text).replace(/[^a-z0-9]/g, '')
@@ -228,13 +398,13 @@ export const excelDay = value => {
 }
 
 /** @description the sheet's rows as { field → cell }, whichever way its headers are worded; empty rows are dropped */
-const readSheet = (rows, wanted) =>
+const readSheet = (rows, wanted, map = HEADERS) =>
     (rows || [])
         .map(row => {
             const found = {}
             Object.entries(row).forEach(([header, cell]) => {
                 const key = headerKey(header)
-                const field = wanted.find(name => HEADERS[name].includes(key))
+                const field = wanted.find(name => map[name].includes(key))
                 if (field && found[field] === undefined) found[field] = cell
             })
             return found
@@ -242,6 +412,13 @@ const readSheet = (rows, wanted) =>
         .filter(row => Object.values(row).some(cell => String(cell ?? '').trim() !== ''))
 
 const asText = value => (value === null || value === undefined ? '' : String(value).trim())
+
+/** @description "Yes", "true", 1 → true; "No", "false", 0 → false; an empty cell is `fallback` */
+const yesNo = (value, fallback) => {
+    const text = asText(value).toLowerCase()
+    if (!text) return fallback
+    return ['yes', 'y', 'true', '1', 'both', 'both ways'].includes(text)
+}
 
 /** @description the hotel rows of a sheet, ready for the import */
 export const hotelsFromSheet = rows =>
@@ -255,13 +432,15 @@ export const hotelsFromSheet = rows =>
         'cpRate',
         'mapRate',
         'extraBedRate',
-        'childRate'
+        'childRate',
+        'repeatsYearly'
     ]).map(row => ({
         place: asText(row.place),
         category: asText(row.category),
         season: asText(row.season),
         validFrom: excelDay(row.validFrom),
         validTo: excelDay(row.validTo),
+        repeatsYearly: yesNo(row.repeatsYearly, false),
         epRate: asText(row.epRate),
         cpRate: asText(row.cpRate),
         mapRate: asText(row.mapRate),
@@ -276,29 +455,69 @@ export const cabsFromSheet = rows =>
         perDayRate: asText(row.perDayRate)
     }))
 
-/** @description the sheets of a workbook: the one named for hotels (else the first), and the one named for cabs */
+/** @description the cab route rows of a sheet, ready for the import */
+export const routesFromSheet = rows =>
+    readSheet(rows, Object.keys(ROUTE_HEADERS), ROUTE_HEADERS).map(row => ({
+        vehicle: asText(row.vehicle),
+        fromPlace: asText(row.fromPlace),
+        toPlace: asText(row.toPlace),
+        rate: asText(row.rate),
+        bothWays: yesNo(row.bothWays, true),
+        season: asText(row.season),
+        validFrom: excelDay(row.validFrom),
+        validTo: excelDay(row.validTo),
+        repeatsYearly: yesNo(row.repeatsYearly, false)
+    }))
+
+/** @description the local-day rows of a sheet, ready for the import */
+export const localFromSheet = rows =>
+    readSheet(rows, Object.keys(LOCAL_HEADERS), LOCAL_HEADERS).map(row => ({
+        vehicle: asText(row.vehicle),
+        place: asText(row.place),
+        dayRate: asText(row.dayRate),
+        season: asText(row.season),
+        validFrom: excelDay(row.validFrom),
+        validTo: excelDay(row.validTo),
+        repeatsYearly: yesNo(row.repeatsYearly, false)
+    }))
+
+/** @description the sheets of a workbook: hotels, cab routes, cab days in a place, and a cab's plain day rate (each may be missing) */
 export const pickSheets = names => {
-    // ? the cab sheet is named first: "Vehicle rates" must not be taken for the hotel sheet because it says "rates"
-    const cabs = names.find(name => /cab|vehicle|car|taxi/i.test(name))
+    // ? the cab sheets are named first: "Cab routes" must not be taken for the hotel sheet because it says "rates"
+    const routes = names.find(name => /route|transfer/i.test(name))
+    const days = names.find(name => name !== routes && /local|sightseeing|cab days|days/i.test(name))
+    const cabs = names.find(name => name !== routes && name !== days && /cab|vehicle|car|taxi/i.test(name))
+    const taken = [routes, days, cabs]
     const hotels =
-        names.find(name => name !== cabs && /hotel|room|stay|rate/i.test(name)) ||
-        names.find(name => name !== cabs) ||
+        names.find(name => !taken.includes(name) && /hotel|room|stay|rate/i.test(name)) ||
+        names.find(name => !taken.includes(name)) ||
         names[0]
-    return { hotels, cabs }
+    return { hotels, cabs, routes, days }
 }
 
 /** @description the template: header rows and a couple of examples, as arrays of rows per sheet */
 export const templateSheets = () => ({
     Hotels: [
-        ['Place', 'Category', 'Season', 'From', 'To', 'EP', 'CP', 'MAP', 'Extra bed', 'Child'],
-        ['Manali', 'Deluxe', '', '', '', 2500, 3000, 3800, 800, 600],
-        ['Manali', 'Deluxe', 'New Year', '2026-12-25', '2027-01-05', 4000, 5000, 6200, 1200, 900],
-        ['Shimla', 'Luxury', '', '', '', 5500, 6500, 8000, 1500, 1000]
+        ['Place', 'Category', 'Season', 'From', 'To', 'Every year', 'EP', 'CP', 'MAP', 'Extra bed', 'Child'],
+        ['Manali', 'Deluxe', '', '', '', '', 2500, 3000, 3800, 800, 600],
+        ['Manali', 'Deluxe', 'New Year', '2026-12-25', '2027-01-05', 'Yes', 4000, 5000, 6200, 1200, 900],
+        ['Shimla', 'Luxury', '', '', '', '', 5500, 6500, 8000, 1500, 1000]
+    ],
+    'Cab routes': [
+        ['Vehicle', 'From', 'To', 'Price', 'Both ways', 'Season', 'Valid from', 'Valid to', 'Every year'],
+        ['Sedan', 'Chandigarh', 'Manali', 5500, 'Yes', '', '', '', ''],
+        ['Sedan', 'Chandigarh', 'Manali', 6500, 'Yes', 'New Year', '2026-12-20', '2027-01-05', 'Yes'],
+        ['Innova', 'Chandigarh', 'Dharamshala', 6000, 'Yes', '', '', '', '']
+    ],
+    'Cab days': [
+        ['Vehicle', 'Place', 'Day rate', 'Season', 'From', 'To', 'Every year'],
+        ['Sedan', 'Manali', 2500, '', '', '', ''],
+        ['Innova', 'Manali', 3500, '', '', '', '']
     ],
     Cabs: [
         ['Vehicle', 'Per day'],
-        ['Sedan', 3500],
-        ['Innova', 4500]
+        ['Sedan', 3000],
+        ['Innova', 4000]
     ]
 })
 

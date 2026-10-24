@@ -16,6 +16,10 @@ import {
     hotelRowsMatching,
     hotelsFromSheet,
     isUntouched,
+    localFromSheet,
+    localKit,
+    routeKit,
+    routesFromSheet,
     marginExample,
     pickSheets,
     settingsProblem,
@@ -146,8 +150,8 @@ describe('reading an Excel sheet', () => {
             cabLines.map(line => Object.fromEntries(cabHeader.map((name, index) => [name, line[index]])))
         )
         expect(cabs).toEqual([
-            { vehicle: 'Sedan', perDayRate: '3500' },
-            { vehicle: 'Innova', perDayRate: '4500' }
+            { vehicle: 'Sedan', perDayRate: '3000' },
+            { vehicle: 'Innova', perDayRate: '4000' }
         ])
     })
 
@@ -195,6 +199,42 @@ describe('reading an Excel sheet', () => {
         expect(pickSheets(['Hotels', 'Cabs'])).toEqual({ hotels: 'Hotels', cabs: 'Cabs' })
         expect(pickSheets(['Sheet1'])).toEqual({ hotels: 'Sheet1', cabs: undefined })
         expect(pickSheets(['Vehicle rates', 'Room rates'])).toEqual({ hotels: 'Room rates', cabs: 'Vehicle rates' })
+        expect(pickSheets(['Hotels', 'Cab routes', 'Cab days', 'Cabs'])).toEqual({
+            hotels: 'Hotels',
+            cabs: 'Cabs',
+            routes: 'Cab routes',
+            days: 'Cab days'
+        })
+    })
+
+    test('reads the template’s cab route and cab day sheets, with seasons that come back every year', () => {
+        const sheets = templateSheets()
+        const asRows = ([header, ...lines]) =>
+            lines.map(line => Object.fromEntries(header.map((name, index) => [name, line[index]])))
+        const routes = routesFromSheet(asRows(sheets['Cab routes']))
+        expect(routes).toHaveLength(3)
+        expect(routes[0]).toMatchObject({
+            vehicle: 'Sedan',
+            fromPlace: 'Chandigarh',
+            toPlace: 'Manali',
+            rate: '5500',
+            bothWays: true,
+            repeatsYearly: false
+        })
+        expect(routes[1]).toMatchObject({
+            season: 'New Year',
+            validFrom: '2026-12-20',
+            validTo: '2027-01-05',
+            repeatsYearly: true
+        })
+        const days = localFromSheet(asRows(sheets['Cab days']))
+        expect(days[0]).toMatchObject({ vehicle: 'Sedan', place: 'Manali', dayRate: '2500' })
+        const hotels = hotelsFromSheet(asRows(sheets.Hotels))
+        expect(hotels.map(item => item.repeatsYearly)).toEqual([false, true, false])
+    })
+    test('a route sheet that says No under both ways is one way', () => {
+        const [route] = routesFromSheet([{ Vehicle: 'Sedan', From: 'A', To: 'B', Price: 100, 'Both ways': 'No' }])
+        expect(route.bothWays).toBe(false)
     })
 })
 
@@ -207,5 +247,75 @@ describe('the margin example', () => {
         expect(marginExample('20', 50)).toMatchObject({ margin: 4600, total: 27600, perPerson: 13800 })
         expect(marginExample(15, 1).perPerson).toBe(13225)
         expect(marginExample('', 100).margin).toBe(0)
+    })
+})
+
+describe('a cab route row', () => {
+    const drive = (extra = {}) => ({
+        ...routeKit.blank(),
+        vehicle: 'Sedan',
+        fromPlace: 'Chandigarh',
+        toPlace: 'Manali',
+        rate: '5500',
+        ...extra
+    })
+
+    test('a new row nobody typed in is untouched; a filled one is checked', () => {
+        expect(routeKit.untouched(routeKit.blank())).toBe(true)
+        expect(routeKit.problem(drive())).toBe('')
+        expect(routeKit.problem(drive({ vehicle: '' }))).toMatch(/cab type/)
+        expect(routeKit.problem(drive({ toPlace: 'chandigarh' }))).toMatch(/two different places/)
+        expect(routeKit.problem(drive({ rate: '' }))).toMatch(/price/)
+        expect(routeKit.problem(drive({ validFrom: '2026-12-20' }))).toMatch(/start and an end/)
+        expect(routeKit.problem(drive({ repeatsYearly: true }))).toMatch(/needs its dates/)
+    })
+    test('a season over New Year is fine when it comes back every year, wrong when it does not', () => {
+        const over = { validFrom: '2026-12-20', validTo: '2026-01-05' }
+        expect(routeKit.problem(drive(over))).toMatch(/ends before it starts/)
+        expect(routeKit.problem(drive({ ...over, repeatsYearly: true }))).toBe('')
+    })
+    test('the same drive twice is flagged, also the other way round when both ways', () => {
+        const rows = [drive(), drive({ fromPlace: 'Manali', toPlace: 'Chandigarh' })]
+        expect(Object.values(routeKit.duplicates(rows))).toEqual([
+            'Sedan Manali to Chandigarh is already listed (standard rate)'
+        ])
+        const oneWay = [
+            drive({ bothWays: false }),
+            drive({ bothWays: false, fromPlace: 'Manali', toPlace: 'Chandigarh' })
+        ]
+        expect(routeKit.duplicates(oneWay)).toEqual({})
+        const seasons = [drive(), drive({ validFrom: '2026-12-20', validTo: '2027-01-05', repeatsYearly: true })]
+        expect(routeKit.duplicates(seasons)).toEqual({})
+    })
+    test('only rows that changed are sent, with the price as typed cleaned up', () => {
+        const saved = { ...drive(), id: 4, key: 'route-4', rate: '5500.00' }
+        expect(routeKit.changed([saved], [saved])).toEqual([])
+        const edited = { ...saved, rate: '6,000' }
+        expect(routeKit.changed([edited], [saved])).toEqual([edited])
+        expect(routeKit.payload(edited)).toMatchObject({
+            id: 4,
+            vehicle: 'Sedan',
+            rate: '6000',
+            bothWays: true,
+            repeatsYearly: false
+        })
+    })
+})
+
+describe('a cab local-day row', () => {
+    test('is checked, and the same cab in the same place and dates twice is flagged', () => {
+        const day = (extra = {}) => ({
+            ...localKit.blank(),
+            vehicle: 'Sedan',
+            place: 'Manali',
+            dayRate: '2500',
+            ...extra
+        })
+        expect(localKit.problem(day())).toBe('')
+        expect(localKit.problem(day({ place: '' }))).toMatch(/place/)
+        expect(Object.values(localKit.duplicates([day(), day({ place: 'manali' })]))).toEqual([
+            'Sedan in manali is already listed (standard rate)'
+        ])
+        expect(localKit.payload(day())).toMatchObject({ vehicle: 'Sedan', place: 'Manali', dayRate: '2500' })
     })
 })

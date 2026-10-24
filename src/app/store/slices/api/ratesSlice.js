@@ -9,7 +9,7 @@ const handle = async result => customResponseHandler({ result })
  */
 export const ratesSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
-        // ---- `{ hotels, vehicles, settings: { defaultMarginPct, roundTo }, places }`
+        // ---- `{ hotels, vehicles, cabRoutes, cabLocal, vehicleNames, settings: { defaultMarginPct, roundTo }, places }`
         getRateCard: build.query({
             query: () => ({ url: '/rates', responseHandler: handle }),
             providesTags: ['RateCard']
@@ -17,6 +17,16 @@ export const ratesSlice = apiSliceConfig.injectEndpoints({
         // `{ rows: [{ id?, place, category, season, validFrom, validTo, epRate, cpRate, mapRate, extraBedRate, childRate }], removeIds }`
         saveHotelRates: build.mutation({
             query: body => ({ url: '/rates/hotels', method: 'PUT', body, responseHandler: handle }),
+            invalidatesTags: ['RateCard']
+        }),
+        // `{ rows: [{ id?, vehicle, fromPlace, toPlace, rate, bothWays, season, validFrom, validTo, repeatsYearly }], removeIds }`
+        saveCabRoutes: build.mutation({
+            query: body => ({ url: '/rates/cab-routes', method: 'PUT', body, responseHandler: handle }),
+            invalidatesTags: ['RateCard']
+        }),
+        // `{ rows: [{ id?, vehicle, place, dayRate, season, validFrom, validTo, repeatsYearly }], removeIds }`
+        saveCabDays: build.mutation({
+            query: body => ({ url: '/rates/cab-days', method: 'PUT', body, responseHandler: handle }),
             invalidatesTags: ['RateCard']
         }),
         // `{ rows: [{ id?, vehicle, perDayRate }], removeIds }`
@@ -29,7 +39,7 @@ export const ratesSlice = apiSliceConfig.injectEndpoints({
             query: body => ({ url: '/rates/settings', method: 'PUT', body, responseHandler: handle }),
             invalidatesTags: ['RateCard']
         }),
-        // `{ hotels: [...], vehicles: [...] }` → how many were added, changed and skipped
+        // `{ hotels, vehicles, cabRoutes, cabLocal }` (each a list of rows) → how many were added, changed and skipped
         importRates: build.mutation({
             query: body => ({ url: '/rates/import', method: 'POST', body, responseHandler: handle }),
             invalidatesTags: ['RateCard']
@@ -45,6 +55,8 @@ export const {
     useGetRateCardQuery,
     useSaveHotelRatesMutation,
     useSaveCabRatesMutation,
+    useSaveCabRoutesMutation,
+    useSaveCabDaysMutation,
     useSaveRateSettingsMutation,
     useImportRatesMutation,
     usePriceFromRatesMutation

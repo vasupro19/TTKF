@@ -7,7 +7,15 @@ import HotelRatesTab from './HotelRatesTab'
 import MarginTab from './MarginTab'
 import RatesImport from './RatesImport'
 
-const EMPTY = { hotels: [], vehicles: [], settings: { defaultMarginPct: 15, roundTo: 100 }, places: [] }
+const EMPTY = {
+    hotels: [],
+    vehicles: [],
+    cabRoutes: [],
+    cabLocal: [],
+    vehicleNames: [],
+    settings: { defaultMarginPct: 15, roundTo: 100 },
+    places: []
+}
 
 /**
  * The rate card: what the agency pays for hotels (per place and category, by meal plan, with seasons) and cabs, and its
@@ -39,11 +47,23 @@ export default function RatesPage() {
                     sx={{ mb: 2.5, borderBottom: 1, borderColor: 'divider' }}
                 >
                     <Tab value='hotels' label={`Hotels (${card.hotels.length})`} sx={{ textTransform: 'none' }} />
-                    <Tab value='cabs' label={`Cabs (${card.vehicles.length})`} sx={{ textTransform: 'none' }} />
+                    <Tab
+                        value='cabs'
+                        label={`Cabs (${card.cabRoutes.length + card.cabLocal.length + card.vehicles.length})`}
+                        sx={{ textTransform: 'none' }}
+                    />
                     <Tab value='margin' label='Margin and rounding' sx={{ textTransform: 'none' }} />
                 </Tabs>
                 {tab === 'hotels' ? <HotelRatesTab hotels={card.hotels} places={card.places} /> : null}
-                {tab === 'cabs' ? <CabRatesTab vehicles={card.vehicles} /> : null}
+                {tab === 'cabs' ? (
+                    <CabRatesTab
+                        vehicles={card.vehicles}
+                        routes={card.cabRoutes}
+                        local={card.cabLocal}
+                        cabNames={card.vehicleNames}
+                        places={card.places}
+                    />
+                ) : null}
                 {tab === 'margin' ? <MarginTab settings={card.settings} /> : null}
             </>
         )

@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { usePriceFromRatesMutation } from '@/app/store/slices/api/ratesSlice'
+import GapRates from './GapRates'
 import { formatRupees } from './quoteDays'
 import { PER_PERSON, TOTAL, groupPrice, priceBasisOf } from './pricing'
 import { inputsLine, missingRates, pricedCount, pricesFromResult } from './ratesPrice'
@@ -222,6 +223,10 @@ export default function RatesPriceDialog({ leadId, quoteNo, basis, people, onApp
                                     ? 'Some rates are not on your rate card, so those categories were left out instead of guessed.'
                                     : 'Some rates are not on the agency’s rate card yet. Ask your admin to add them.'}
                             </Alert>
+                        ) : null}
+
+                        {data.canEditRates && data.gaps?.length ? (
+                            <GapRates gaps={data.gaps} onSaved={() => run(marginOk ? Number(margin) : undefined)} />
                         ) : null}
 
                         {canSeeCosts ? (
