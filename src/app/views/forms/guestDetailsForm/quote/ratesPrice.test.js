@@ -70,6 +70,7 @@ describe('a quote priced from the rate card', () => {
 
 describe('the prices typed beside missing rates', () => {
     const gaps = [
+        { id: 'ticket|volvo|delhi|shimla|', kind: 'ticket', mode: 'Volvo', from: 'Delhi', to: 'Shimla' },
         { id: 'route|Sedan|manali|jibhi|', kind: 'route', vehicle: 'Sedan', from: 'Manali', to: 'Jibhi' },
         { id: 'local|Sedan|jibhi||', kind: 'local', vehicle: 'Sedan', place: 'Jibhi' },
         {
@@ -83,7 +84,10 @@ describe('the prices typed beside missing rates', () => {
     ]
 
     test('turns each typed price into the row to save, and skips the empty ones', () => {
-        const rows = gapRows(gaps, { [gaps[0].id]: '5,000', [gaps[2].id]: '1800' })
+        const rows = gapRows(gaps, { [gaps[0].id]: '1,200', [gaps[1].id]: '5,000', [gaps[3].id]: '1800' })
+        expect(rows.tickets).toEqual([
+            { mode: 'Volvo', fromPlace: 'Delhi', toPlace: 'Shimla', adultRate: '1200', bothWays: true }
+        ])
         expect(rows.routes).toEqual([
             { vehicle: 'Sedan', fromPlace: 'Manali', toPlace: 'Jibhi', rate: '5000', bothWays: true }
         ])
@@ -92,6 +96,11 @@ describe('the prices typed beside missing rates', () => {
     })
 
     test('names each missing rate', () => {
-        expect(gaps.map(gapLabel)).toEqual(['Sedan: Manali to Jibhi', 'Sedan: a day in Jibhi', 'Deluxe hotel in Jibhi'])
+        expect(gaps.map(gapLabel)).toEqual([
+            'Volvo fare: Delhi to Shimla',
+            'Sedan: Manali to Jibhi',
+            'Sedan: a day in Jibhi',
+            'Deluxe hotel in Jibhi'
+        ])
     })
 })

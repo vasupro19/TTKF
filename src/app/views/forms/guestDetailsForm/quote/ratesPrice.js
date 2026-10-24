@@ -55,6 +55,7 @@ const PLAN_FIELDS = { EP: 'epRate', CP: 'cpRate', MAP: 'mapRate' }
 export const gapLabel = gap => {
     if (gap.kind === 'route') return `${gap.vehicle}: ${gap.from} to ${gap.to}`
     if (gap.kind === 'local') return `${gap.vehicle}: a day in ${gap.place}`
+    if (gap.kind === 'ticket') return `${gap.mode} fare: ${gap.from} to ${gap.to}`
     return `${gap.categoryLabel} hotel in ${gap.place}`
 }
 
@@ -62,6 +63,7 @@ export const gapLabel = gap => {
 export const gapHint = gap => {
     if (gap.kind === 'route') return 'per drive, also used for the drive back'
     if (gap.kind === 'local') return 'per day of local sightseeing'
+    if (gap.kind === 'ticket') return 'per adult, also used for the way back'
     return `per room per night, ${gap.mealPlan} meals`
 }
 
@@ -70,10 +72,10 @@ export const gapHint = gap => {
  *              empty is skipped, so the agent can fill what they know
  * @param {object[]} gaps `gaps` from the server's answer
  * @param {Record<string, string>} amounts the typed price by gap id
- * @returns {{ routes: object[], days: object[], hotels: object[] }}
+ * @returns {{ routes: object[], days: object[], hotels: object[], tickets: object[] }}
  */
 export const gapRows = (gaps, amounts) => {
-    const out = { routes: [], days: [], hotels: [] }
+    const out = { routes: [], days: [], hotels: [], tickets: [] }
     ;(gaps || []).forEach(gap => {
         const amount = String(amounts?.[gap.id] ?? '').replace(/[\s,]/g, '')
         if (!(Number(amount) > 0)) return
@@ -86,6 +88,14 @@ export const gapRows = (gaps, amounts) => {
                 bothWays: true
             })
         else if (gap.kind === 'local') out.days.push({ vehicle: gap.vehicle, place: gap.place, dayRate: amount })
+        else if (gap.kind === 'ticket')
+            out.tickets.push({
+                mode: gap.mode,
+                fromPlace: gap.from,
+                toPlace: gap.to,
+                adultRate: amount,
+                bothWays: true
+            })
         else
             out.hotels.push({
                 place: gap.place,

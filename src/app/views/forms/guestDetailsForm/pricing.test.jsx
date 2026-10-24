@@ -441,7 +441,7 @@ describe('calculating the prices from the rate card', () => {
         expect(screen.queryByText(/margin/i)).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /show how/ })).not.toBeInTheDocument()
         expect(screen.queryByLabelText('Margin for this quote')).not.toBeInTheDocument()
-        expect(screen.getByText(/Ask your admin to add them/)).toBeInTheDocument()
+        expect(screen.getByText(/or ask your admin to add the rates/)).toBeInTheDocument()
     })
 
     test('says why it cannot price the quote, and offers nothing to use', async () => {

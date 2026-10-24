@@ -4,7 +4,8 @@ import { Alert, Box, Button, CircularProgress, InputAdornment, Stack, TextField,
 import {
     useSaveCabDaysMutation,
     useSaveCabRoutesMutation,
-    useSaveHotelRatesMutation
+    useSaveHotelRatesMutation,
+    useSaveTicketsMutation
 } from '@/app/store/slices/api/ratesSlice'
 import { gapHint, gapLabel, gapRows } from './ratesPrice'
 
@@ -19,9 +20,10 @@ export default function GapRates({ gaps, onSaved }) {
     const [saveRoutes, { isLoading: savingRoutes }] = useSaveCabRoutesMutation()
     const [saveDays, { isLoading: savingDays }] = useSaveCabDaysMutation()
     const [saveHotels, { isLoading: savingHotels }] = useSaveHotelRatesMutation()
-    const saving = savingRoutes || savingDays || savingHotels
+    const [saveTickets, { isLoading: savingTickets }] = useSaveTicketsMutation()
+    const saving = savingRoutes || savingDays || savingHotels || savingTickets
     const rows = gapRows(gaps, amounts)
-    const typed = rows.routes.length + rows.days.length + rows.hotels.length
+    const typed = rows.routes.length + rows.days.length + rows.hotels.length + rows.tickets.length
 
     const handleSave = async () => {
         setProblem('')
@@ -29,6 +31,7 @@ export default function GapRates({ gaps, onSaved }) {
             if (rows.routes.length) await saveRoutes({ rows: rows.routes }).unwrap()
             if (rows.days.length) await saveDays({ rows: rows.days }).unwrap()
             if (rows.hotels.length) await saveHotels({ rows: rows.hotels }).unwrap()
+            if (rows.tickets.length) await saveTickets({ rows: rows.tickets }).unwrap()
             setAmounts({})
             onSaved()
         } catch (error) {

@@ -10,6 +10,7 @@ import {
     HOTEL_CATEGORIES,
     LEAD_QUALITY,
     MEAL_PLANS,
+    TRAVEL_WAYS,
     TRIP_TYPES,
     VEHICLES,
     hasMoreDetails,
@@ -271,6 +272,7 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                             name='pickupLocation'
                             label='Pickup from'
                             placeholder='e.g. Chandigarh airport'
+                            helper='Where the cab starts, or where the guest boards if they come by Volvo, train or flight (choose that under More details).'
                         />
                     </Stack>
                 </Box>
@@ -297,6 +299,7 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                                         name='dropLocation'
                                         label='Drop at'
                                         placeholder='e.g. Delhi railway station'
+                                        helper='Where the cab ends, or where the guest gets off if they leave by Volvo, train or flight.'
                                     />
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
@@ -308,6 +311,8 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                                     />
                                 </Grid>
                             </Grid>
+                            <Choice formik={formik} name='arriveBy' label='Guest arrives by' options={TRAVEL_WAYS} />
+                            <Choice formik={formik} name='leaveBy' label='Guest leaves by' options={TRAVEL_WAYS} />
                             <Choice formik={formik} name='tourType' label='Trip type' options={TRIP_TYPES} />
                             <VehicleSelect formik={formik} />
                             <Box sx={{ maxWidth: 180 }}>

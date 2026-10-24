@@ -6,12 +6,15 @@ import CabRatesTab from './CabRatesTab'
 import HotelRatesTab from './HotelRatesTab'
 import MarginTab from './MarginTab'
 import RatesImport from './RatesImport'
+import TicketRatesTab from './TicketRatesTab'
 
 const EMPTY = {
     hotels: [],
     vehicles: [],
     cabRoutes: [],
     cabLocal: [],
+    tickets: [],
+    ticketModes: [],
     vehicleNames: [],
     settings: { defaultMarginPct: 15, roundTo: 100 },
     places: []
@@ -52,6 +55,7 @@ export default function RatesPage() {
                         label={`Cabs (${card.cabRoutes.length + card.cabLocal.length + card.vehicles.length})`}
                         sx={{ textTransform: 'none' }}
                     />
+                    <Tab value='tickets' label={`Tickets (${card.tickets.length})`} sx={{ textTransform: 'none' }} />
                     <Tab value='margin' label='Margin and rounding' sx={{ textTransform: 'none' }} />
                 </Tabs>
                 {tab === 'hotels' ? <HotelRatesTab hotels={card.hotels} places={card.places} /> : null}
@@ -63,6 +67,9 @@ export default function RatesPage() {
                         cabNames={card.vehicleNames}
                         places={card.places}
                     />
+                ) : null}
+                {tab === 'tickets' ? (
+                    <TicketRatesTab tickets={card.tickets} modes={card.ticketModes} places={card.places} />
                 ) : null}
                 {tab === 'margin' ? <MarginTab settings={card.settings} /> : null}
             </>
@@ -95,8 +102,8 @@ export default function RatesPage() {
                         Rates
                     </Typography>
                     <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: 0.5, maxWidth: 640 }}>
-                        What you pay for hotels and cabs. A quote works out its own prices from these, so your team
-                        doesn’t have to.
+                        What you pay for hotels, cabs and tickets. A quote works out its own prices from these, so your
+                        team doesn’t have to.
                     </Typography>
                 </Box>
                 {error ? null : <RatesImport />}

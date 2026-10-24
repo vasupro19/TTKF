@@ -81,6 +81,13 @@ describe('trip details', () => {
         expect(values.id).toBeUndefined()
     })
 
+    test('how the guest arrives and leaves is kept, and left empty means the cab', () => {
+        const payload = toGuestPayload(withValues({ adults: '2', arriveBy: 'Volvo', leaveBy: '' }), 7)
+        expect(payload).toMatchObject({ arriveBy: 'Volvo', leaveBy: null })
+        expect(fromGuestDetail({ arriveBy: 'Train', leaveBy: null })).toMatchObject({ arriveBy: 'Train', leaveBy: '' })
+        expect(hasMoreDetails(withValues({ leaveBy: 'Flight' }))).toBe(true)
+    })
+
     test('"More details" opens by itself only when one of its fields has a value', () => {
         expect(hasMoreDetails(withValues({ adults: '2', foodPlan: 'CP' }))).toBe(false)
         expect(hasMoreDetails(withValues({ leadRemarks: 'Wants a river view' }))).toBe(true)

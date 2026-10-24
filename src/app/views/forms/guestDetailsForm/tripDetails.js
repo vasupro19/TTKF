@@ -52,6 +52,16 @@ export const VEHICLES = [
     { value: 'None', label: 'No vehicle' }
 ]
 
+// ? how the guest reaches the first place and leaves the last. Nothing chosen is the cab; a Volvo, train or flight is priced as
+// ? a ticket for each person and the cab starts at the first place; "Self" means the guest arranges it and no ticket is priced
+export const TRAVEL_WAYS = [
+    { value: '', label: 'Cab' },
+    { value: 'Volvo', label: 'Volvo' },
+    { value: 'Train', label: 'Train' },
+    { value: 'Flight', label: 'Flight' },
+    { value: 'Self', label: 'Guest arranges' }
+]
+
 export const LEAD_QUALITY = [
     { value: 'Hot', label: 'Hot' },
     { value: 'Warm', label: 'Warm' },
@@ -70,6 +80,8 @@ const TEXT_FIELDS = [
     'packageType',
     'foodPlan',
     'pickupLocation',
+    'arriveBy',
+    'leaveBy',
     'dropLocation',
     'tourType',
     'taxiType',
@@ -82,6 +94,8 @@ const TEXT_FIELDS = [
 // ? behind "More details": useful for operations, rarely known on the first call
 export const MORE_DETAIL_FIELDS = [
     'dropLocation',
+    'arriveBy',
+    'leaveBy',
     'tourType',
     'taxiType',
     'extraBedding',

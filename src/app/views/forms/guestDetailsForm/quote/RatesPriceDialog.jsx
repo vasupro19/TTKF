@@ -220,8 +220,8 @@ export default function RatesPriceDialog({ leadId, quoteNo, basis, people, onApp
                                 }
                             >
                                 {canSeeCosts
-                                    ? 'Some rates are not on your rate card, so those categories were left out instead of guessed.'
-                                    : 'Some rates are not on the agency’s rate card yet. Ask your admin to add them.'}
+                                    ? 'Something is missing (listed above), so those categories were left out instead of guessed.'
+                                    : 'Something is missing (listed above). Fill in the trip details it names, or ask your admin to add the rates.'}
                             </Alert>
                         ) : null}
 

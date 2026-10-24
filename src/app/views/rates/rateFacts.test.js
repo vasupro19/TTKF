@@ -10,6 +10,7 @@ import {
     draftHotelRow,
     duplicateCabRows,
     duplicateHotelRows,
+    ticketKit,
     excelDay,
     hotelPayload,
     hotelRowProblem,
@@ -317,5 +318,45 @@ describe('a cab local-day row', () => {
             'Sedan in manali is already listed (standard rate)'
         ])
         expect(localKit.payload(day())).toMatchObject({ vehicle: 'Sedan', place: 'Manali', dayRate: '2500' })
+    })
+})
+
+describe('ticket fares', () => {
+    const fare = extra => ({
+        ...ticketKit.blank(),
+        mode: 'Volvo',
+        fromPlace: 'Delhi',
+        toPlace: 'Shimla',
+        adultRate: '1,200',
+        ...extra
+    })
+
+    test('needs a mode, two different places and an adult fare, and checks a child fare when there is one', () => {
+        expect(ticketKit.problem(ticketKit.blank())).toMatch(/how they travel/)
+        expect(ticketKit.problem(fare({ toPlace: 'delhi' }))).toMatch(/two different/)
+        expect(ticketKit.problem(fare({ adultRate: '' }))).toMatch(/Enter the price/)
+        expect(ticketKit.problem(fare({ childRate: 'half' }))).toMatch(/child fare/)
+        expect(ticketKit.problem(fare())).toBe('')
+        expect(ticketKit.problem(fare({ childRate: '600' }))).toBe('')
+    })
+
+    test('sends the fares as plain amounts, the child fare empty when there is none', () => {
+        expect(ticketKit.payload(fare())).toMatchObject({
+            mode: 'Volvo',
+            adultRate: '1200',
+            childRate: '',
+            bothWays: true
+        })
+        expect(ticketKit.payload(fare({ childRate: '₹600' }))).toMatchObject({ childRate: '600' })
+    })
+
+    test('sees a changed child fare, and the same journey twice written the other way round', () => {
+        const saved = { ...fare({ adultRate: '1200', childRate: '600' }), id: 5 }
+        const edited = { ...saved, childRate: '700' }
+        expect(ticketKit.changed([edited], [saved])).toEqual([edited])
+        expect(ticketKit.changed([saved], [saved])).toEqual([])
+        const twice = [fare(), fare({ fromPlace: 'Shimla', toPlace: 'Delhi' })]
+        expect(Object.keys(ticketKit.duplicates(twice))).toEqual([twice[1].key])
+        expect(ticketKit.copy(saved).childRate).toBe('600')
     })
 })

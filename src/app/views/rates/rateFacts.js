@@ -205,7 +205,7 @@ const SEASON_FIELDS = ['season', 'validFrom', 'validTo']
  * @description the helpers of a cab table, built from what the table holds. `texts` are the fields compared as text,
  *              `amount` the price field, `problemOf` the row's own check and `idOf` what makes two rows the same rate
  */
-const cabKit = ({ texts, amount, blank, problemOf, idOf, said }) => {
+const cabKit = ({ texts, amount, extras = [], blank, problemOf, idOf, said }) => {
     const empty = () => ({
         key: nextKey(),
         id: null,
@@ -219,17 +219,18 @@ const cabKit = ({ texts, amount, blank, problemOf, idOf, said }) => {
     const untouched = row =>
         !row.id &&
         [...texts, ...SEASON_FIELDS].every(field => !String(row[field] ?? '').trim()) &&
-        !tidyAmount(row[amount])
+        !tidyAmount(row[amount]) &&
+        extras.every(field => !tidyAmount(row[field]))
     const sameAs = (a, b) =>
         compared.every(field => String(a?.[field] ?? '').trim() === String(b?.[field] ?? '').trim()) &&
-        sameAmount(a?.[amount], b?.[amount])
+        [amount, ...extras].every(field => sameAmount(a?.[field], b?.[field]))
     return {
         blank: (extra = {}) => ({ ...empty(), ...extra }),
         draft: (row, prefix) => ({ ...empty(), ...row, key: `${prefix}-${row.id}` }),
         copy: row => ({
             ...empty(),
             ...Object.fromEntries(
-                [...texts, ...SEASON_FIELDS, 'repeatsYearly', amount, ...Object.keys(blank)].map(field => [
+                [...texts, ...SEASON_FIELDS, 'repeatsYearly', amount, ...extras, ...Object.keys(blank)].map(field => [
                     field,
                     row[field] ?? ''
                 ])
@@ -241,6 +242,8 @@ const cabKit = ({ texts, amount, blank, problemOf, idOf, said }) => {
             if (own) return own
             const value = tidyAmount(row[amount])
             if (!AMOUNT.test(value) || Number(value) <= 0) return 'Enter the price, such as 4500'
+            const badExtra = extras.find(field => tidyAmount(row[field]) && !AMOUNT.test(tidyAmount(row[field])))
+            if (badExtra) return 'The child fare must be an amount, such as 600'
             if (Boolean(row.validFrom) !== Boolean(row.validTo)) return 'A season needs a start and an end date'
             if (row.repeatsYearly && !row.validFrom) return 'A season that comes back every year needs its dates'
             if (!row.repeatsYearly && row.validFrom && row.validFrom > row.validTo)
@@ -282,7 +285,8 @@ const cabKit = ({ texts, amount, blank, problemOf, idOf, said }) => {
             validFrom: row.validFrom,
             validTo: row.validTo,
             repeatsYearly: Boolean(row.repeatsYearly),
-            [amount]: tidyAmount(row[amount])
+            [amount]: tidyAmount(row[amount]),
+            ...Object.fromEntries(extras.map(field => [field, tidyAmount(row[field])]))
         })
     }
 }
@@ -309,6 +313,28 @@ export const routeKit = cabKit({
         return `${nameKey(row.vehicle)}|${places}|${dates(row)}`
     },
     said: row => `${row.vehicle.trim()} ${row.fromPlace.trim()} to ${row.toPlace.trim()}`
+})
+
+/** @description a ticket: this mode (Volvo, Train, Flight) between two places, a fare for an adult and, when it differs, a child */
+export const ticketKit = cabKit({
+    texts: ['mode', 'fromPlace', 'toPlace'],
+    amount: 'adultRate',
+    extras: ['childRate'],
+    blank: { mode: '', fromPlace: '', toPlace: '', adultRate: '', childRate: '', bothWays: true },
+    problemOf: row => {
+        if (!row.mode.trim()) return 'Enter how they travel, such as Volvo'
+        if (!row.fromPlace.trim() || !row.toPlace.trim()) return 'Enter where the journey starts and ends'
+        if (nameKey(row.fromPlace) === nameKey(row.toPlace)) return 'A journey needs two different places'
+        return ''
+    },
+    idOf: row => {
+        const a = nameKey(row.fromPlace)
+        const b = nameKey(row.toPlace)
+        if (!a || !b || !nameKey(row.mode)) return ''
+        const places = row.bothWays === false ? `${a}>${b}` : [a, b].sort().join('<>')
+        return `${nameKey(row.mode)}|${places}|${dates(row)}`
+    },
+    said: row => `${row.mode.trim()} ${row.fromPlace.trim()} to ${row.toPlace.trim()}`
 })
 
 /** @description a day in one place (local sightseeing): this cab, one price */
