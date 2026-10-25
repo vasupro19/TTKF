@@ -24,7 +24,11 @@ import { CSVExport } from '@/core/components/extended/CreateCSV'
 import ListEmptyState from '@/core/listing/ListEmptyState'
 import { downloadCsv } from '@/core/listing/listingFacts'
 import { openSnackbar } from '@app/store/slices/snackbar'
-import { getBookingsPage, useGetBookingsPageQuery } from '@/app/store/slices/api/packageConvert'
+import {
+    getBookingsPage,
+    useGetBookingsPageQuery,
+    useGetServiceRequestsQuery
+} from '@/app/store/slices/api/packageConvert'
 import {
     DEFAULT_PAGE_SIZE,
     EMPTY_FILTERS,
@@ -37,7 +41,18 @@ import {
     hasAnyFilter,
     searchWithFilters
 } from './bookingsListFacts'
-import { STAGES, STEPS, dateRange, doneCount, guestMoney, nextStep, progressOf, rupees, urgency } from './bookingFacts'
+import {
+    STAGES,
+    dateRange,
+    doneCount,
+    guestMoney,
+    nextStep,
+    progressOf,
+    rupees,
+    stepsFor,
+    urgency
+} from './bookingFacts'
+import { RequestRow } from './serviceRequestParts'
 
 const rowShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
@@ -85,9 +100,9 @@ StagePill.propTypes = {
 
 const progressShape = PropTypes.objectOf(PropTypes.bool)
 
-function BookingRow({ row, progress, onOpen }) {
+function BookingRow({ row, progress, steps, onOpen }) {
     const money = guestMoney(row)
-    const step = nextStep(progress)
+    const step = nextStep(progress, steps)
     const dates = dateRange(row.travelDate, row.travelEnd)
     const soon = urgency(row.travelDate, !step)
     return (
@@ -138,7 +153,7 @@ function BookingRow({ row, progress, onOpen }) {
 
                     <Box sx={{ flex: 1.4, minWidth: 0 }}>
                         <Stack direction='row' spacing={0.5} alignItems='center' sx={{ mb: 0.5 }}>
-                            {STEPS.map(item =>
+                            {steps.map(item =>
                                 progress[item.key] ? (
                                     <CheckCircle
                                         key={item.key}
@@ -154,7 +169,7 @@ function BookingRow({ row, progress, onOpen }) {
                                 )
                             )}
                             <Typography color='text.secondary' sx={{ fontSize: '0.8125rem', pl: 0.5 }}>
-                                {doneCount(progress)} of {STEPS.length}
+                                {doneCount(progress, steps)} of {steps.length}
                             </Typography>
                         </Stack>
                         <Typography
@@ -181,6 +196,9 @@ function BookingRow({ row, progress, onOpen }) {
 BookingRow.propTypes = {
     row: rowShape.isRequired,
     progress: progressShape.isRequired,
+    steps: PropTypes.arrayOf(
+        PropTypes.shape({ key: PropTypes.string, label: PropTypes.string, next: PropTypes.string })
+    ).isRequired,
     onOpen: PropTypes.func.isRequired
 }
 
@@ -242,6 +260,38 @@ const snack = (message, color) =>
     })
 
 /**
+ * What sales has asked operations to book, across every booking, oldest first: the first thing the operations team
+ * looks at. It shows only to those who can answer, and only while something is waiting.
+ */
+function RequestQueue({ onOpen }) {
+    const { data } = useGetServiceRequestsQuery({ status: 'Open' }, { refetchOnMountOrArgChange: true })
+    const waiting = Array.isArray(data?.data) ? data.data : []
+    if (!data?.summary?.canAnswer || !waiting.length) return null
+    return (
+        <Box sx={{ border: '1px solid', borderColor: 'warning.main', borderRadius: 2, px: 2, pt: 1.5, pb: 0.5 }}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                {`Waiting for operations (${waiting.length})`}
+            </Typography>
+            <Typography color='text.secondary' sx={{ fontSize: '0.875rem' }}>
+                Sales asked for these hotels and transport. Open the booking to add them.
+            </Typography>
+            <Box component='ul' sx={{ m: 0, p: 0 }} aria-label='Requests from sales'>
+                {waiting.slice(0, 8).map(request => (
+                    <RequestRow key={request.id} request={request} withBooking onOpen={item => onOpen(item.leadId)} />
+                ))}
+            </Box>
+            {waiting.length > 8 ? (
+                <Typography color='text.secondary' sx={{ fontSize: '0.8125rem', pb: 1 }}>
+                    {`${waiting.length - 8} more waiting`}
+                </Typography>
+            ) : null}
+        </Box>
+    )
+}
+
+RequestQueue.propTypes = { onOpen: PropTypes.func.isRequired }
+
+/**
  * Confirmed bookings: where each one stands and what to do next, upcoming trips first. A page at a time — the server
  * works out stage, search, filters, order and the chip counts — and everything about a booking (hotels, transport,
  * payments, voucher) is one click away on its own page. The stage and filters live in the address bar.
@@ -277,6 +327,9 @@ function BookingsPage() {
         { refetchOnMountOrArgChange: true }
     )
 
+    // ? what this person may see of suppliers: sales has no supplier column, filter or step
+    const suppliers = data?.summary?.access?.suppliers || 'manage'
+    const steps = stepsFor(suppliers)
     const rows = Array.isArray(data?.data) ? data.data : []
     const count = Number(data?.count) || 0
     const summary = data?.summary || { total: 0, toCollect: 0, stages: {} }
@@ -292,7 +345,7 @@ function BookingsPage() {
         setFilters({ ...EMPTY_FILTERS })
     }
 
-    const exportCurrent = () => downloadCsv(bookingsCsv(rows), 'bookings.csv')
+    const exportCurrent = () => downloadCsv(bookingsCsv(rows, suppliers), 'bookings.csv')
 
     const exportAll = async () => {
         try {
@@ -307,7 +360,7 @@ function BookingsPage() {
                 all.push(...batch)
                 if (batch.length < 100) break
             }
-            downloadCsv(bookingsCsv(all.slice(0, EXPORT_CAP)), 'bookings-all.csv')
+            downloadCsv(bookingsCsv(all.slice(0, EXPORT_CAP), suppliers), 'bookings-all.csv')
             if (count > EXPORT_CAP) {
                 dispatch(
                     snack(
@@ -348,6 +401,8 @@ function BookingsPage() {
                     </Box>
                     <CSVExport handleExcelClick={exportCurrent} exportAllFunc={exportAll} />
                 </Box>
+
+                <RequestQueue onOpen={leadId => navigate(`/process/packages/${leadId}`)} />
 
                 <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap role='group' aria-label='Show bookings'>
                     <StagePill
@@ -415,12 +470,14 @@ function BookingsPage() {
                         options={PAYMENT_OPTIONS}
                         onChange={value => setFilters({ guestPayment: value })}
                     />
-                    <SelectFilter
-                        label='Supplier payment'
-                        value={values.supplierPayment}
-                        options={PAYMENT_OPTIONS}
-                        onChange={value => setFilters({ supplierPayment: value })}
-                    />
+                    {suppliers === 'none' ? null : (
+                        <SelectFilter
+                            label='Supplier payment'
+                            value={values.supplierPayment}
+                            options={PAYMENT_OPTIONS}
+                            onChange={value => setFilters({ supplierPayment: value })}
+                        />
+                    )}
                     <SelectFilter
                         label='Invoice'
                         value={values.invoice}
@@ -470,6 +527,7 @@ function BookingsPage() {
                                         key={row.id}
                                         row={row}
                                         progress={progressOf({ booking: row })}
+                                        steps={steps}
                                         onOpen={() => navigate(`/process/packages/${row.leadId}`)}
                                     />
                                 ))}

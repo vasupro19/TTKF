@@ -59,6 +59,24 @@ function AssignmentModal({ open, onClose, type, row, onSave, isLoading }) {
                     <Typography variant='body2' color='textSecondary' gutterBottom>
                         For <strong>{row?.guestName || 'this booking'}</strong>
                     </Typography>
+                    {/* ? what sales asked for: adding the line answers this request */}
+                    {row?.request ? (
+                        <Box sx={{ mb: 2, p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+                            <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                                {row.request.text}
+                            </Typography>
+                            {row.request.by ? (
+                                <Typography variant='body2' color='textSecondary'>
+                                    Asked by {row.request.by}
+                                </Typography>
+                            ) : null}
+                            {row.request.note ? (
+                                <Typography variant='body2' color='textSecondary' sx={{ whiteSpace: 'pre-wrap' }}>
+                                    {row.request.note}
+                                </Typography>
+                            ) : null}
+                        </Box>
+                    ) : null}
                     <SupplierAssignmentForm type={type} row={row} onDataChange={handleDataChange} />
                 </Box>
             </DialogContent>

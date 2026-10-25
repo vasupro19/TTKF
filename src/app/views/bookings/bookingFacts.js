@@ -23,6 +23,13 @@ export const STEPS = [
     { key: 'voucher', label: 'Voucher sent', next: 'Send the voucher to the guest', section: 'documents' }
 ]
 
+// ? what a step is called for sales: operations books the hotel and the transport, sales asks
+const SALES_WORDS = {
+    hotel: { label: 'Hotel booked by operations', next: 'Ask operations for a hotel' },
+    // ? sales has one section for both, "Hotels and transport", so both steps lead to it
+    taxi: { label: 'Transport booked by operations', next: 'Ask operations for transport', section: 'hotels' }
+}
+
 const FULLY_PAID = 'Fully Paid'
 
 /**
@@ -50,10 +57,20 @@ export const progressOf = ({ booking, services = null }) => {
     }
 }
 
-export const doneCount = progress => STEPS.filter(step => progress[step.key]).length
+/**
+ * @description the steps this person works through. Sales never sees the suppliers, so "Suppliers paid" is not theirs
+ *              — and for them hotels and transport are asked for, not booked
+ * @param {'manage' | 'view' | 'none'} suppliers what the server lets them do about hotels and transport
+ */
+export const stepsFor = (suppliers = 'manage') =>
+    suppliers === 'none'
+        ? STEPS.filter(step => step.key !== 'suppliersPaid').map(step => ({ ...step, ...SALES_WORDS[step.key] }))
+        : STEPS
+
+export const doneCount = (progress, steps = STEPS) => steps.filter(step => progress[step.key]).length
 
 /** @returns {object|null} the first step not done yet, or null when the booking is ready */
-export const nextStep = progress => STEPS.find(step => !progress[step.key]) || null
+export const nextStep = (progress, steps = STEPS) => steps.find(step => !progress[step.key]) || null
 
 export const STAGES = [
     { key: 'action', label: 'Not started' },

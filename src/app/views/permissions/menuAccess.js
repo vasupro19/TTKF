@@ -157,6 +157,12 @@ export const ACCESS_LEVELS = Object.freeze([
         label: 'Accounts — verifies payments and sees every booking; can’t manage users or roles'
     },
     {
+        value: 'operations',
+        title: 'Operations',
+        color: 'secondary',
+        label: 'Operations — books hotels and transport on every booking; sales staff only ask them; can’t manage users or roles'
+    },
+    {
         value: 'staff',
         title: 'Staff',
         color: 'success',
@@ -166,7 +172,7 @@ export const ACCESS_LEVELS = Object.freeze([
 
 /**
  * @description a level's title, colour and meaning; the server's wording wins when it sends one
- * @param {string} access admin | manager | accounts | staff
+ * @param {string} access admin | manager | accounts | operations | staff
  * @param {object} [serverOptions] accessOptions from the API ({ admin: '…' })
  */
 export const accessMeta = (access, serverOptions = null) => {
@@ -178,7 +184,7 @@ export const accessMeta = (access, serverOptions = null) => {
     return { ...known, label, meaning }
 }
 
-/** @description the four levels, worded as the server sends them when it does */
+/** @description the levels, worded as the server sends them when it does */
 export const accessLevelsWith = serverOptions => ACCESS_LEVELS.map(level => accessMeta(level.value, serverOptions))
 
 /**

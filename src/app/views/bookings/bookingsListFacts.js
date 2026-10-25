@@ -88,7 +88,14 @@ export const BOOKING_CSV_COLUMNS = [
     { key: 'createdAt', label: 'Created', csv: row => (row.createdAt ? String(row.createdAt).slice(0, 10) : '') }
 ]
 
-export const bookingsCsv = rows => csvOf(rows, BOOKING_CSV_COLUMNS)
+// ? sales is not shown what suppliers are owed, so its export has no such column
+export const bookingsCsv = (rows, suppliers = 'manage') =>
+    csvOf(
+        rows,
+        suppliers === 'none'
+            ? BOOKING_CSV_COLUMNS.filter(column => column.key !== 'supplierPaymentStatus')
+            : BOOKING_CSV_COLUMNS
+    )
 
 /** @description the page's arguments for the server, from the chosen filters */
 export const queryArgs = ({ page, pageSize, q, values }) => ({

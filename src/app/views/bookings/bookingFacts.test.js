@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'vitest'
-import { guestMoney, nextStep, progressOf, rupees, stageOf, supplierMoney, urgency } from './bookingFacts'
+import {
+    STEPS,
+    doneCount,
+    guestMoney,
+    nextStep,
+    progressOf,
+    rupees,
+    stageOf,
+    stepsFor,
+    supplierMoney,
+    urgency
+} from './bookingFacts'
 
 const row = over => ({
     id: 1,
@@ -77,5 +88,37 @@ describe('booking facts', () => {
         expect(urgency('2026-12-12T00:00:00.000Z', true, today)).toBe('')
         expect(urgency('2027-01-12T00:00:00.000Z', false, today)).toBe('')
         expect(urgency(null, false, today)).toBe('')
+    })
+})
+
+describe('the steps each person works through', () => {
+    test('operations and accounts see all five', () => {
+        expect(stepsFor('manage')).toBe(STEPS)
+        expect(stepsFor('view')).toBe(STEPS)
+        expect(stepsFor()).toBe(STEPS)
+    })
+
+    test('sales has four: no "Suppliers paid", and hotels and transport are asked for, not booked', () => {
+        const steps = stepsFor('none')
+        expect(steps.map(step => step.key)).toEqual(['hotel', 'taxi', 'guestPaid', 'voucher'])
+        expect(steps.find(step => step.key === 'hotel')).toMatchObject({
+            label: 'Hotel booked by operations',
+            next: 'Ask operations for a hotel'
+        })
+        expect(steps.find(step => step.key === 'taxi')).toMatchObject({
+            next: 'Ask operations for transport',
+            section: 'hotels'
+        })
+        // ? the steps that are the same for everyone stay as they were
+        expect(steps.find(step => step.key === 'voucher')).toEqual(STEPS.find(step => step.key === 'voucher'))
+    })
+
+    test('progress and the next step are counted over the steps given', () => {
+        const progress = progressOf({ booking: row({ guestPaymentStatus: 'Fully Paid', taxiAssigned: true }) })
+        const sales = stepsFor('none')
+        // ? sales is done but for the voucher; everyone else is also waiting for the suppliers to be paid
+        expect(doneCount(progress, sales)).toBe(3)
+        expect(nextStep(progress, sales).key).toBe('voucher')
+        expect(nextStep(progress).key).toBe('suppliersPaid')
     })
 })

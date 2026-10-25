@@ -19,6 +19,12 @@ const api = vi.hoisted(() => {
         payments: [],
         paymentSummary: { pendingAmount: 0, canDecide: false },
         addService: call(),
+        // ? sales asks operations for a hotel or transport; operations answers
+        requests: [],
+        requestSummary: { canAnswer: false },
+        createRequest: call(),
+        cancelRequest: call(),
+        declineRequest: call(),
         deleteService: call(),
         sendSupplierEmail: call(),
         sendReceipt: call(),
@@ -96,6 +102,10 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useGetServicesByPackageQuery: ({ type }) => query({ data: type === 'Hotel' ? api.hotels : api.taxis }),
     useGetGuestPaymentHistoryQuery: () => query({ data: api.payments, summary: api.paymentSummary }),
     useAddServiceToPackageMutation: () => [api.addService, { isLoading: false }],
+    useGetServiceRequestsQuery: () => query({ data: api.requests, summary: api.requestSummary }),
+    useCreateServiceRequestMutation: () => [api.createRequest, { isLoading: false }],
+    useCancelServiceRequestMutation: () => [api.cancelRequest],
+    useDeclineServiceRequestMutation: () => [api.declineRequest, { isLoading: false }],
     useDeleteServiceMutation: () => [api.deleteService],
     useSendSupplierEmailMutation: () => [api.sendSupplierEmail],
     useSendGuestReceiptMutation: () => [api.sendReceipt],
@@ -261,6 +271,8 @@ beforeEach(() => {
         }
     ]
     api.paymentSummary = { pendingAmount: 0, canDecide: false }
+    api.requests = []
+    api.requestSummary = { canAnswer: false }
     api.invoices = []
     api.invoiceSummary = { canCancel: false }
 })
@@ -846,5 +858,317 @@ describe('Emails about the booking are always previewed first', () => {
         expect(api.sendHotel).not.toHaveBeenCalled()
         fireEvent.click(within(dialog).getByRole('button', { name: 'Send to asha@example.com' }))
         await waitFor(() => expect(api.sendHotel).toHaveBeenCalledWith(1))
+    })
+})
+
+describe('Hotels and transport: operations books them, sales asks', () => {
+    const SALES = { suppliers: 'none', pay: false }
+    const OPERATIONS = { suppliers: 'manage', pay: false }
+    const ACCOUNTS = { suppliers: 'view', pay: true }
+
+    // ? sales is sent the lines as the guest hears of them: kind, dates, rooms — never the supplier, cost or profit
+    const asSales = (services = []) => {
+        api.booking = { ...api.booking, access: SALES, services }
+    }
+
+    test('sales gets no hotel or transport section, supplier, cost or margin — only a way to ask', () => {
+        asSales()
+        renderBooking()
+        expect(screen.queryByRole('region', { name: 'Hotels' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('region', { name: 'Transport' })).not.toBeInTheDocument()
+        expect(screen.queryByText('Hotel Willow Banks')).not.toBeInTheDocument()
+        expect(screen.queryByText('To suppliers')).not.toBeInTheDocument()
+        expect(screen.queryByText('Margin')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /Add hotel|Add transport/ })).not.toBeInTheDocument()
+        const section = screen.getByRole('region', { name: 'Hotels and transport' })
+        expect(within(section).getByRole('button', { name: 'Ask for a hotel' })).toBeInTheDocument()
+        expect(within(section).getByRole('button', { name: 'Ask for transport' })).toBeInTheDocument()
+    })
+
+    test('sales has four steps: "Suppliers paid" is not theirs, and the first is asking operations', () => {
+        asSales()
+        renderBooking()
+        expect(screen.getByText(/0 of 4 done/)).toBeInTheDocument()
+        expect(screen.queryByText('Suppliers paid')).not.toBeInTheDocument()
+        expect(screen.getByText('Next: Ask operations for a hotel')).toBeInTheDocument()
+    })
+
+    test('sales asks for a hotel: the form starts from the trip, and what is sent is the booking, the place and the dates', async () => {
+        asSales()
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Ask for a hotel' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Ask operations for a hotel' })
+        // ? the first place of the booked quote, and the guest's dates
+        expect(within(dialog).getByLabelText(/Where/)).toHaveValue('Shimla')
+        expect(within(dialog).getByLabelText('Check-in')).toHaveValue('2026-12-12')
+        expect(within(dialog).getByLabelText('Check-out')).toHaveValue('2026-12-17')
+        fireEvent.change(within(dialog).getByLabelText('Rooms'), { target: { value: '2' } })
+        fireEvent.change(within(dialog).getByLabelText('Anything operations should know'), {
+            target: { value: 'near the mall' }
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to operations' }))
+        await waitFor(() =>
+            expect(api.createRequest).toHaveBeenCalledWith({
+                packageId: 1,
+                type: 'Hotel',
+                place: 'Shimla',
+                startDate: '2026-12-12',
+                endDate: '2026-12-17',
+                quantity: 2,
+                note: 'near the mall'
+            })
+        )
+    })
+
+    test('a request that is not filled in is not sent: it says what is missing', async () => {
+        asSales()
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Ask for transport' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Ask operations for transport' })
+        fireEvent.change(within(dialog).getByLabelText(/Route/), { target: { value: '  ' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send to operations' }))
+        expect(await within(dialog).findByText('Say the route the guest needs')).toBeInTheDocument()
+        expect(api.createRequest).not.toHaveBeenCalled()
+    })
+
+    test('the next-step button asks operations instead of opening the supplier form', async () => {
+        asSales()
+        renderBooking()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Ask operations for a hotel' })[0])
+        expect(await screen.findByRole('dialog', { name: 'Ask operations for a hotel' })).toBeInTheDocument()
+        expect(screen.queryByText('Add hotel booking', { selector: 'h4' })).not.toBeInTheDocument()
+    })
+
+    test('sales sees how each ask stands, withdraws an open one, and reads what was booked without the supplier', async () => {
+        asSales([
+            {
+                id: 21,
+                type: 'Hotel',
+                startDate: '2026-12-12T00:00:00.000Z',
+                endDate: '2026-12-14T00:00:00.000Z',
+                quantity: 2,
+                roomType: 'Deluxe'
+            }
+        ])
+        api.requests = [
+            {
+                id: 5,
+                type: 'Hotel',
+                place: 'Manali',
+                startDate: '2026-12-12',
+                endDate: '2026-12-14',
+                quantity: 2,
+                status: 'Open',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-25T10:00:00.000Z'
+            },
+            {
+                id: 6,
+                type: 'Taxi',
+                place: 'Delhi to Shimla',
+                status: 'Declined',
+                reply: 'No vehicle free that day',
+                repliedByName: 'Anil Verma',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-24T10:00:00.000Z'
+            },
+            {
+                id: 7,
+                type: 'Hotel',
+                place: 'Shimla',
+                status: 'Done',
+                repliedByName: 'Anil Verma',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-23T10:00:00.000Z'
+            }
+        ]
+        renderBooking()
+        const section = screen.getByRole('region', { name: 'Hotels and transport' })
+        expect(within(section).getByText('Waiting for operations')).toBeInTheDocument()
+        expect(within(section).getByText('Declined by Anil Verma')).toBeInTheDocument()
+        expect(within(section).getByText(/No vehicle free that day/)).toBeInTheDocument()
+        expect(within(section).getByText('Booked by Anil Verma')).toBeInTheDocument()
+        expect(within(section).getByText('Booked by operations')).toBeInTheDocument()
+        expect(within(section).getByText(/Hotel · 12 Dec 2026 – 14 Dec 2026 · 2 rooms · Deluxe/)).toBeInTheDocument()
+        // ? only the open one can be withdrawn
+        expect(within(section).getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1)
+        fireEvent.click(within(section).getByRole('button', { name: 'Withdraw' }))
+        await waitFor(() => expect(api.cancelRequest).toHaveBeenCalledWith(5))
+    })
+
+    test('the guest’s hotel and transport emails wait for operations', () => {
+        asSales()
+        renderBooking()
+        expect(screen.getByRole('button', { name: 'Waiting for the hotel to be booked' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Waiting for the transport to be booked' })).toBeDisabled()
+    })
+
+    test('operations sees what sales asked for, and adds it: the line answers the request', async () => {
+        api.booking = { ...api.booking, access: OPERATIONS }
+        api.requests = [
+            {
+                id: 5,
+                type: 'Taxi',
+                place: 'Delhi to Shimla',
+                startDate: '2026-12-12',
+                endDate: '2026-12-17',
+                quantity: 1,
+                status: 'Open',
+                note: 'Innova',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-25T10:00:00.000Z'
+            }
+        ]
+        renderBooking()
+        const asked = screen.getByRole('region', { name: 'Asked of operations (1)' })
+        expect(
+            within(asked).getByText('Transport: Delhi to Shimla · 12 Dec 2026 – 17 Dec 2026 · 1 vehicle')
+        ).toBeInTheDocument()
+        expect(within(asked).getByText(/Asked by Riya Sharma/)).toBeInTheDocument()
+        fireEvent.click(within(asked).getByRole('button', { name: 'Add the transport' }))
+        expect(await screen.findByText('Add transport', { selector: 'h4' })).toBeInTheDocument()
+        api.formChanges = { supplierId: 5, cost: '9000' }
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+        await waitFor(() =>
+            expect(api.addService).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'Taxi', packageId: 1, requestId: 5 })
+            )
+        )
+    })
+
+    test('a line added with no request asks nothing of any request', async () => {
+        api.booking = { ...api.booking, access: OPERATIONS }
+        renderBooking()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Add transport' })[0])
+        await screen.findByText('Add transport', { selector: 'h4' })
+        api.formChanges = { supplierId: 5, cost: '9000' }
+        fireEvent.click(screen.getByRole('button', { name: 'Save the form' }))
+        await waitFor(() => expect(api.addService).toHaveBeenCalled())
+        expect(api.addService.mock.calls[0][0]).not.toHaveProperty('requestId')
+    })
+
+    test('operations declines with a reason, and cannot without one', async () => {
+        api.booking = { ...api.booking, access: OPERATIONS }
+        api.requests = [
+            {
+                id: 5,
+                type: 'Hotel',
+                place: 'Manali',
+                status: 'Open',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-25T10:00:00.000Z'
+            }
+        ]
+        renderBooking()
+        fireEvent.click(screen.getByRole('button', { name: 'Can’t book it' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Can’t book it' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Decline' }))
+        expect(await within(dialog).findByText('Say why, so sales can tell the guest')).toBeInTheDocument()
+        expect(api.declineRequest).not.toHaveBeenCalled()
+        fireEvent.change(within(dialog).getByLabelText('Why not'), { target: { value: 'No rooms that week' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Decline' }))
+        await waitFor(() => expect(api.declineRequest).toHaveBeenCalledWith({ id: 5, reason: 'No rooms that week' }))
+    })
+
+    test('operations books but does not pay: no payment button, and the last supplier step is accounts’', () => {
+        api.booking = { ...api.booking, access: OPERATIONS }
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        expect(within(hotels).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+        expect(within(hotels).queryByRole('button', { name: 'Record payment' })).not.toBeInTheDocument()
+    })
+
+    test('accounts sees the suppliers and pays them, but cannot add, edit, email or remove a line', () => {
+        api.booking = { ...api.booking, access: ACCOUNTS }
+        renderBooking()
+        const hotels = screen.getByRole('region', { name: 'Hotels' })
+        expect(within(hotels).getByText('Hotel Willow Banks')).toBeInTheDocument()
+        expect(within(hotels).getByRole('button', { name: 'Record payment' })).toBeInTheDocument()
+        ;['Add hotel', 'Edit', 'Remove', 'Email hotel'].forEach(name =>
+            expect(within(hotels).queryByRole('button', { name })).not.toBeInTheDocument()
+        )
+        expect(screen.getByText('To suppliers')).toBeInTheDocument()
+    })
+
+    test('a server that does not say what is allowed is an older one: the page works as it did', () => {
+        renderBooking()
+        expect(
+            within(screen.getByRole('region', { name: 'Hotels' })).getByRole('button', { name: 'Edit' })
+        ).toBeInTheDocument()
+    })
+})
+
+describe('Bookings list: what sales is not shown', () => {
+    const renderList = () =>
+        render(
+            <MemoryRouter>
+                <BookingsPage />
+            </MemoryRouter>
+        )
+
+    test('sales has no supplier payment filter and one step fewer on each booking', () => {
+        api.summary = { ...api.summary, access: { suppliers: 'none' } }
+        api.list = [
+            listRow({
+                supplierPaymentStatus: undefined,
+                guestPaymentStatus: 'Fully Paid',
+                hotelAssigned: true,
+                taxiAssigned: true
+            })
+        ]
+        api.count = 1
+        renderList()
+        expect(screen.queryByLabelText('Supplier payment')).not.toBeInTheDocument()
+        const row = screen.getByRole('button', { name: 'Open the booking for Asha Verma' })
+        expect(within(row).getByText('3 of 4')).toBeInTheDocument()
+        // ? not "Pay the suppliers": that is not sales's step
+        expect(within(row).getByText('Next: Send the voucher to the guest')).toBeInTheDocument()
+    })
+
+    test('everyone else keeps the supplier filter and all five steps', () => {
+        renderList()
+        expect(screen.getByLabelText('Supplier payment')).toBeInTheDocument()
+        expect(
+            within(screen.getByRole('button', { name: 'Open the booking for Asha Verma' })).getByText(/of 5$/)
+        ).toBeInTheDocument()
+    })
+
+    test('operations sees what sales is waiting on at the top, and opens the booking from it', () => {
+        api.requestSummary = { canAnswer: true }
+        api.requests = [
+            {
+                id: 5,
+                type: 'Hotel',
+                place: 'Manali',
+                status: 'Open',
+                leadId: 12,
+                guestName: 'Rohan Das',
+                bookingNo: 'TTK-B-261002-009',
+                requestedByName: 'Riya Sharma',
+                createdAt: '2026-10-25T10:00:00.000Z'
+            }
+        ]
+        renderList()
+        const queue = screen.getByRole('list', { name: 'Requests from sales' })
+        expect(within(queue).getByText('Rohan Das · TTK-B-261002-009')).toBeInTheDocument()
+        expect(screen.getByText('Waiting for operations (1)')).toBeInTheDocument()
+        fireEvent.click(within(queue).getByRole('button', { name: 'Open the booking' }))
+        expect(navigate).toHaveBeenCalledWith('/process/packages/12')
+    })
+
+    test('sales never sees the queue, even with requests of its own', () => {
+        api.requests = [
+            {
+                id: 5,
+                type: 'Hotel',
+                place: 'Manali',
+                status: 'Open',
+                leadId: 12,
+                guestName: 'Rohan Das',
+                createdAt: '2026-10-25T10:00:00.000Z'
+            }
+        ]
+        renderList()
+        expect(screen.queryByText(/Waiting for operations \(/)).not.toBeInTheDocument()
     })
 })

@@ -24,7 +24,45 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['confirmedBooking', 'ServiceList']
+            // ? adding the line a request asked for answers that request
+            invalidatesTags: ['confirmedBooking', 'ServiceList', 'ServiceRequest']
+        }),
+
+        // ? sales asks operations for a hotel or transport; operations answers: adds the line (above) or declines.
+        // ? `{ packageId?, status? }` → the booking's requests, or every one waiting (status 'Open', or 'all')
+        getServiceRequests: build.query({
+            query: ({ packageId, status } = {}) => {
+                const params = new URLSearchParams()
+                if (packageId) params.set('packageId', String(packageId))
+                if (status) params.set('status', status)
+                const search = params.toString()
+                return {
+                    url: `/package/service-requests${search ? `?${search}` : ''}`,
+                    method: 'GET',
+                    responseHandler: async result => customResponseHandler({ result })
+                }
+            },
+            providesTags: ['ServiceRequest']
+        }),
+        createServiceRequest: build.mutation({
+            query: payload => ({
+                url: '/package/service-requests',
+                method: 'POST',
+                body: payload
+            }),
+            invalidatesTags: ['ServiceRequest']
+        }),
+        cancelServiceRequest: build.mutation({
+            query: id => ({ url: `/package/service-requests/${id}/cancel`, method: 'POST' }),
+            invalidatesTags: ['ServiceRequest']
+        }),
+        declineServiceRequest: build.mutation({
+            query: ({ id, reason }) => ({
+                url: `/package/service-requests/${id}/decline`,
+                method: 'POST',
+                body: { reason }
+            }),
+            invalidatesTags: ['ServiceRequest']
         }),
 
         // === CONVERT PACKAGE ===
@@ -272,6 +310,10 @@ export const {
     useConvertPackageMutation,
     useUpdateConfirmedBookingMutation,
     useAddServiceToPackageMutation,
+    useGetServiceRequestsQuery,
+    useCreateServiceRequestMutation,
+    useCancelServiceRequestMutation,
+    useDeclineServiceRequestMutation,
     useGetServicesByPackageQuery,
     useDeleteServiceMutation,
     useSendSupplierEmailMutation,

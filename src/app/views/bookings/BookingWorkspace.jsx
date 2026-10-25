@@ -14,10 +14,14 @@ import {
     getSupplierEmailPreview,
     useAddGuestPaymentMutation,
     useAddServiceToPackageMutation,
+    useCancelServiceRequestMutation,
+    useCreateServiceRequestMutation,
+    useDeclineServiceRequestMutation,
     useDeleteServiceMutation,
     useDownloadConfirmedVoucherPdfMutation,
     useGetGuestPaymentHistoryQuery,
     useGetPackageByLeadIdQuery,
+    useGetServiceRequestsQuery,
     useGetServicesByPackageQuery,
     useSendGuestHotelConfirmationEmailMutation,
     useSendGuestReceiptMutation,
@@ -34,7 +38,6 @@ import { useGetGuestTourByIdQuery } from '@/app/store/slices/api/guestTourSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import InvoicePanel from './InvoicePanel'
 import {
-    STEPS,
     amount,
     categoryLabel,
     dateRange,
@@ -44,11 +47,22 @@ import {
     nextStep,
     progressOf,
     rupees,
+    stepsFor,
     supplierHasBooking,
     supplierMoney,
     urgency
 } from './bookingFacts'
 import { EmailNote, EmailPreview, MoneyCard, PaymentRow, Section, ServiceRow, StepsBar } from './bookingParts'
+import { AskOperations, DeclineDialog, RequestDialog, RequestRow } from './serviceRequestParts'
+import {
+    draftPayload,
+    draftProblem,
+    lineDefaults,
+    openOf,
+    requestDraft,
+    requestSummary,
+    rightsOf
+} from './serviceRequestFacts'
 
 const listOf = response => (Array.isArray(response?.data) ? response.data : [])
 
@@ -92,8 +106,17 @@ function BookingWorkspace() {
     const bookingQuery = useGetPackageByLeadIdQuery(leadId, fresh)
     const booking = bookingQuery.data?.data || null
     const packageId = booking?.id
-    const hotelsQuery = useGetServicesByPackageQuery({ packageId, type: 'Hotel' }, { ...fresh, skip: !packageId })
-    const taxisQuery = useGetServicesByPackageQuery({ packageId, type: 'Taxi' }, { ...fresh, skip: !packageId })
+    // ? what this person may do about hotels and transport: operations manages them, accounts reads them, sales asks
+    const rights = rightsOf(booking)
+    const hotelsQuery = useGetServicesByPackageQuery(
+        { packageId, type: 'Hotel' },
+        { ...fresh, skip: !packageId || !rights.view }
+    )
+    const taxisQuery = useGetServicesByPackageQuery(
+        { packageId, type: 'Taxi' },
+        { ...fresh, skip: !packageId || !rights.view }
+    )
+    const requestsQuery = useGetServiceRequestsQuery({ packageId, status: 'all' }, { ...fresh, skip: !packageId })
     const paymentsQuery = useGetGuestPaymentHistoryQuery(packageId, { ...fresh, skip: !packageId })
     const { data: leadData } = useGetLeadByIdQuery(leadId)
     const { data: guestData } = useGetGuestByIdQuery(leadId)
@@ -101,6 +124,9 @@ function BookingWorkspace() {
 
     const [addService, { isLoading: savingService }] = useAddServiceToPackageMutation()
     const [deleteService] = useDeleteServiceMutation()
+    const [createRequest, { isLoading: sendingRequest }] = useCreateServiceRequestMutation()
+    const [cancelRequest] = useCancelServiceRequestMutation()
+    const [declineRequest, { isLoading: decliningRequest }] = useDeclineServiceRequestMutation()
     const [sendSupplierEmail] = useSendSupplierEmailMutation()
     const [sendGuestReceipt] = useSendGuestReceiptMutation()
     const [addGuestPayment, { isLoading: savingGuestPayment }] = useAddGuestPaymentMutation()
@@ -111,7 +137,11 @@ function BookingWorkspace() {
     const [sendTaxiEmail] = useSendGuestTaxiConfirmationEmailMutation()
     const [downloadPdf] = useDownloadConfirmedVoucherPdfMutation()
 
-    const [serviceForm, setServiceForm] = useState({ open: false, type: 'Hotel', row: null })
+    // ? `requestId`: the request this line answers, when operations adds it from one
+    const [serviceForm, setServiceForm] = useState({ open: false, type: 'Hotel', row: null, requestId: null })
+    // ? sales asking operations for a hotel or transport, and operations declining one
+    const [requestForm, setRequestForm] = useState({ open: false, draft: requestDraft('Hotel'), error: '' })
+    const [declining, setDeclining] = useState(null)
     const [guestPaymentOpen, setGuestPaymentState] = useState(false)
     // ? a payment being corrected (waiting, or rejected by accounts); null when a new one is recorded
     const [editingPayment, setEditingPayment] = useState(null)
@@ -153,9 +183,13 @@ function BookingWorkspace() {
     const lead = leadData?.data || {}
     const guest = guestData?.data || {}
     const guestName = lead.fullName || 'Guest'
-    const hotels = listOf(hotelsQuery.data)
-    const taxis = listOf(taxisQuery.data)
+    // ? sales is given the lines as the guest hears of them (kind, dates, rooms) with the booking, never the suppliers
+    const guestLines = Array.isArray(booking?.services) ? booking.services : []
+    const hotels = rights.view ? listOf(hotelsQuery.data) : guestLines.filter(line => line.type === 'Hotel')
+    const taxis = rights.view ? listOf(taxisQuery.data) : guestLines.filter(line => line.type === 'Taxi')
     const services = [...hotels, ...taxis]
+    const requests = listOf(requestsQuery.data)
+    const waiting = openOf(requests)
     const payments = listOf(paymentsQuery.data)
     // ? beside the list: what is still waiting for accounts, and whether this user is the one who decides
     const paymentSummary = paymentsQuery.data?.summary || {}
@@ -167,7 +201,8 @@ function BookingWorkspace() {
         .filter(day => (Number(day.quoteNo) || 1) === bookedQuote)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     const progress = progressOf({ booking, services })
-    const step = nextStep(progress)
+    const steps = stepsFor(rights.suppliers)
+    const step = nextStep(progress, steps)
     const money = guestMoney(booking)
     const suppliers = supplierMoney(services)
     // ? the GST in the price belongs to the government, so the margin leaves it out
@@ -178,8 +213,11 @@ function BookingWorkspace() {
     const refresh = () => {
         bookingQuery.refetch()
         if (packageId) {
-            hotelsQuery.refetch()
-            taxisQuery.refetch()
+            if (rights.view) {
+                hotelsQuery.refetch()
+                taxisQuery.refetch()
+            }
+            requestsQuery.refetch()
             paymentsQuery.refetch()
         }
     }
@@ -229,8 +267,61 @@ function BookingWorkspace() {
         setServiceForm({
             open: true,
             type,
+            requestId: null,
             row: row ? { ...row, guestName } : { guestName, defaults: serviceDefaults(type) }
         })
+
+    // ? operations adds the hotel or transport a salesperson asked for: the form starts from the request, and saving closes it
+    const answerRequest = request =>
+        setServiceForm({
+            open: true,
+            type: request.type,
+            requestId: request.id,
+            row: {
+                guestName,
+                defaults: { ...serviceDefaults(request.type), ...lineDefaults(request) },
+                request: { text: requestSummary(request), by: request.requestedByName, note: request.note }
+            }
+        })
+
+    // ? sales asks: the form starts from the guest's trip, and the first place of the booked quote
+    const openRequestForm = type =>
+        setRequestForm({
+            open: true,
+            error: '',
+            draft: requestDraft(type, guest, bookedDays[0]?.destination?.name || '')
+        })
+
+    const sendRequest = async () => {
+        const problem = draftProblem(requestForm.draft)
+        if (problem) {
+            setRequestForm(current => ({ ...current, error: problem }))
+            return
+        }
+        const ok = await run(
+            'request',
+            () => createRequest(draftPayload(packageId, requestForm.draft)).unwrap(),
+            'Asked operations',
+            'Couldn’t send the request.'
+        )
+        if (ok) setRequestForm(current => ({ ...current, open: false, error: '' }))
+    }
+
+    const withdrawRequest = request =>
+        run(
+            `withdraw-${request.id}`,
+            () => cancelRequest(request.id).unwrap(),
+            'Request withdrawn',
+            'Couldn’t withdraw it.'
+        )
+
+    const declineIt = (request, reason) =>
+        run(
+            `decline-${request.id}`,
+            () => declineRequest({ id: request.id, reason }).unwrap(),
+            'Request declined',
+            'Couldn’t decline it.'
+        )
 
     const PREVIEWS = {
         voucher: () => getConfirmedVoucherPreview.initiate(packageId, { forceRefetch: true }),
@@ -366,6 +457,7 @@ function BookingWorkspace() {
                     ...formData,
                     type: formData.type || serviceForm.type,
                     packageId,
+                    ...(!formData.id && serviceForm.requestId ? { requestId: serviceForm.requestId } : {}),
                     cost: parseFloat(formData.cost || 0),
                     paidAmount: parseFloat(formData.paidAmount || 0),
                     quantity: formData.quantity ? parseInt(formData.quantity, 10) : null
@@ -448,17 +540,22 @@ function BookingWorkspace() {
         </Box>
     ) : null
 
-    const doNext = () => {
-        if (!step) return
-        if (step.key === 'hotel') openServiceForm('Hotel')
-        if (step.key === 'taxi') openServiceForm('Taxi')
-        if (step.key === 'guestPaid') setGuestPaymentOpen(true)
+    // ? what the next step lets this person do: operations books, sales asks, accounts pays; the rest is waiting on someone else
+    const stepAction = () => {
+        if (!step) return null
+        if (step.key === 'hotel' || step.key === 'taxi') {
+            const type = step.key === 'hotel' ? 'Hotel' : 'Taxi'
+            if (rights.manage) return () => openServiceForm(type)
+            return rights.view ? null : () => openRequestForm(type)
+        }
         if (step.key === 'suppliersPaid') {
             const unpaid = services.find(service => service.paymentStatus !== 'Fully Paid')
-            if (unpaid) setSupplierPayment(unpaid)
+            return rights.pay && unpaid ? () => setSupplierPayment(unpaid) : null
         }
-        if (step.key === 'voucher') openPreview()
+        if (step.key === 'guestPaid') return () => setGuestPaymentOpen(true)
+        return openPreview
     }
+    const doNext = stepAction()
 
     if (bookingQuery.isLoading) {
         return (
@@ -481,6 +578,34 @@ function BookingWorkspace() {
         )
     }
 
+    // ? the guest's hotel and transport emails go once the line exists: operations adds it, so sales waits
+    const guestMailLabel = (list, noun) => {
+        if (list.length) return 'Preview and email'
+        if (rights.manage) return noun === 'hotel' ? 'Add a hotel first' : 'Add transport first'
+        return `Waiting for the ${noun} to be booked`
+    }
+
+    // ? the margin is operations' and accounts' to see: sales is not told what the suppliers cost
+    let marginCard = null
+    if (rights.view && services.length) {
+        marginCard = (
+            <MoneyCard
+                title='Margin'
+                lines={[
+                    [gstInPrice > 0 ? 'Price − GST − supplier costs' : 'Price − supplier costs', rupees(margin), true],
+                    [
+                        gstInPrice > 0 ? 'Share of price without GST' : 'Share of price',
+                        money.price - gstInPrice > 0
+                            ? `${Math.round((margin / (money.price - gstInPrice)) * 100)}%`
+                            : '—'
+                    ]
+                ]}
+            />
+        )
+    } else if (rights.view) {
+        marginCard = <MoneyCard title='Margin' lines={[['Shown once hotels and transport are added', '']]} />
+    }
+
     const tripLine = [
         dateRange(guest.pickupDate, guest.dropDate),
         [
@@ -495,6 +620,8 @@ function BookingWorkspace() {
         lead.senderEmail
     ].filter(Boolean)
 
+    // ? hotels and transport: operations adds, edits, emails and removes them; accounts only reads them and records the
+    // ? payments; sales never gets this section (it has the request panel below instead)
     const serviceList = (type, list) => {
         const label = type === 'Hotel' ? 'hotel' : 'transport'
         return (
@@ -502,9 +629,11 @@ function BookingWorkspace() {
                 id={type === 'Hotel' ? 'hotels' : 'transport'}
                 title={type === 'Hotel' ? 'Hotels' : 'Transport'}
                 action={
-                    <Button startIcon={<Add />} onClick={() => openServiceForm(type)}>
-                        Add {label}
-                    </Button>
+                    rights.manage ? (
+                        <Button startIcon={<Add />} onClick={() => openServiceForm(type)}>
+                            Add {label}
+                        </Button>
+                    ) : null
                 }
             >
                 {list.length ? (
@@ -514,17 +643,24 @@ function BookingWorkspace() {
                                 key={service.id}
                                 service={service}
                                 emailing={busy === 'mail' && mail.send?.id === service.id}
-                                onPay={setSupplierPayment}
-                                onEmail={item => openSupplierEmail(item)}
-                                onCancel={(item, remove) => openSupplierEmail(item, 'cancellation', { remove })}
-                                onEdit={item => openServiceForm(type, item)}
-                                onRemove={item =>
-                                    run(
-                                        `remove-${item.id}`,
-                                        () => deleteService(item.id).unwrap(),
-                                        'Removed from the booking',
-                                        'Couldn’t remove it.'
-                                    )
+                                onPay={rights.pay ? setSupplierPayment : null}
+                                onEmail={rights.manage ? item => openSupplierEmail(item) : null}
+                                onCancel={
+                                    rights.manage
+                                        ? (item, remove) => openSupplierEmail(item, 'cancellation', { remove })
+                                        : null
+                                }
+                                onEdit={rights.manage ? item => openServiceForm(type, item) : null}
+                                onRemove={
+                                    rights.manage
+                                        ? item =>
+                                              run(
+                                                  `remove-${item.id}`,
+                                                  () => deleteService(item.id).unwrap(),
+                                                  'Removed from the booking',
+                                                  'Couldn’t remove it.'
+                                              )
+                                        : null
                                 }
                             />
                         ))}
@@ -571,9 +707,9 @@ function BookingWorkspace() {
 
                 <Box sx={{ mb: 3 }}>
                     <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', fontWeight: 600, mb: 1 }}>
-                        {doneCount(progress)} of {STEPS.length} done — select a step to jump to it
+                        {doneCount(progress, steps)} of {steps.length} done — select a step to jump to it
                     </Typography>
-                    <StepsBar progress={progress} />
+                    <StepsBar progress={progress} steps={steps} />
                 </Box>
 
                 <Box
@@ -648,8 +784,37 @@ function BookingWorkspace() {
                             )}
                         </Section>
 
-                        {serviceList('Hotel', hotels)}
-                        {serviceList('Taxi', taxis)}
+                        {rights.manage && waiting.length ? (
+                            <Section id='requests' title={`Asked of operations (${waiting.length})`}>
+                                <Box component='ul' sx={{ m: 0, p: 0 }}>
+                                    {waiting.map(request => (
+                                        <RequestRow
+                                            key={request.id}
+                                            request={request}
+                                            working={busy.startsWith('decline-')}
+                                            onAnswer={answerRequest}
+                                            onDecline={setDeclining}
+                                        />
+                                    ))}
+                                </Box>
+                            </Section>
+                        ) : null}
+                        {rights.view ? (
+                            <>
+                                {serviceList('Hotel', hotels)}
+                                {serviceList('Taxi', taxis)}
+                            </>
+                        ) : (
+                            <Section id='hotels' title='Hotels and transport'>
+                                <AskOperations
+                                    requests={requests}
+                                    booked={services}
+                                    onAsk={openRequestForm}
+                                    onWithdraw={withdrawRequest}
+                                    working={busy.startsWith('withdraw-')}
+                                />
+                            </Section>
+                        )}
 
                         <Section
                             id='payments'
@@ -775,7 +940,7 @@ function BookingWorkspace() {
                                         disabled={!hotels.length}
                                         onClick={() => openMail({ kind: 'guestService', type: 'Hotel' })}
                                     >
-                                        {hotels.length ? 'Preview and email' : 'Add a hotel first'}
+                                        {guestMailLabel(hotels, 'hotel')}
                                     </Button>
                                     <EmailNote email={booking?.emails?.hotel} />
                                 </Box>
@@ -789,7 +954,7 @@ function BookingWorkspace() {
                                         disabled={!taxis.length}
                                         onClick={() => openMail({ kind: 'guestService', type: 'Taxi' })}
                                     >
-                                        {taxis.length ? 'Preview and email' : 'Add transport first'}
+                                        {guestMailLabel(taxis, 'transport')}
                                     </Button>
                                     <EmailNote email={booking?.emails?.taxi} />
                                 </Box>
@@ -831,10 +996,17 @@ function BookingWorkspace() {
                                     The guest {soon}.
                                 </Typography>
                             ) : null}
-                            {step ? (
+                            {step && doNext ? (
                                 <Button variant='contained' fullWidth onClick={doNext} sx={{ mt: 1.5 }}>
                                     {step.next}
                                 </Button>
+                            ) : null}
+                            {step && !doNext ? (
+                                <Typography color='text.secondary' sx={{ fontSize: '0.875rem', mt: 0.5 }}>
+                                    {step.key === 'suppliersPaid'
+                                        ? 'Accounts pays the suppliers.'
+                                        : 'Operations books this.'}
+                                </Typography>
                             ) : null}
                         </Box>
                         <Stack spacing={2}>
@@ -858,34 +1030,17 @@ function BookingWorkspace() {
                                     ) : null
                                 }
                             />
-                            <MoneyCard
-                                title='To suppliers'
-                                lines={[
-                                    ['Cost', rupees(suppliers.cost)],
-                                    ['Paid', rupees(suppliers.paid)],
-                                    ['Due', rupees(suppliers.due), true]
-                                ]}
-                            />
-                            {services.length ? (
+                            {rights.view ? (
                                 <MoneyCard
-                                    title='Margin'
+                                    title='To suppliers'
                                     lines={[
-                                        [
-                                            gstInPrice > 0 ? 'Price − GST − supplier costs' : 'Price − supplier costs',
-                                            rupees(margin),
-                                            true
-                                        ],
-                                        [
-                                            gstInPrice > 0 ? 'Share of price without GST' : 'Share of price',
-                                            money.price - gstInPrice > 0
-                                                ? `${Math.round((margin / (money.price - gstInPrice)) * 100)}%`
-                                                : '—'
-                                        ]
+                                        ['Cost', rupees(suppliers.cost)],
+                                        ['Paid', rupees(suppliers.paid)],
+                                        ['Due', rupees(suppliers.due), true]
                                     ]}
                                 />
-                            ) : (
-                                <MoneyCard title='Margin' lines={[['Shown once hotels and transport are added', '']]} />
-                            )}
+                            ) : null}
+                            {marginCard}
                         </Stack>
                     </Box>
                 </Box>
@@ -898,6 +1053,28 @@ function BookingWorkspace() {
                 onClose={() => setServiceForm(current => ({ ...current, open: false }))}
                 onSave={saveService}
                 isLoading={savingService}
+            />
+            <RequestDialog
+                open={requestForm.open}
+                draft={requestForm.draft}
+                error={requestForm.error}
+                sending={sendingRequest}
+                guestName={guestName}
+                onChange={(field, value) =>
+                    setRequestForm(current => ({
+                        ...current,
+                        error: '',
+                        draft: { ...current.draft, [field]: value }
+                    }))
+                }
+                onClose={() => setRequestForm(current => ({ ...current, open: false, error: '' }))}
+                onSend={sendRequest}
+            />
+            <DeclineDialog
+                request={declining}
+                sending={decliningRequest}
+                onClose={() => setDeclining(null)}
+                onDecline={declineIt}
             />
             <GuestPaymentModal
                 open={guestPaymentOpen}

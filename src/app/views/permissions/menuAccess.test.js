@@ -112,8 +112,16 @@ describe('access levels', () => {
 
     it('uses the server’s wording when it sends one', () => {
         const levels = accessLevelsWith({ staff: 'Staff — their own work' })
-        expect(levels.map(level => level.value)).toEqual(['admin', 'manager', 'accounts', 'staff'])
-        expect(levels[3].meaning).toBe('their own work')
+        expect(levels.map(level => level.value)).toEqual(['admin', 'manager', 'accounts', 'operations', 'staff'])
+        expect(levels[4].meaning).toBe('their own work')
+    })
+
+    it('has an Operations level: it books hotels and transport, sales only asks', () => {
+        expect(accessMeta('operations')).toMatchObject({
+            title: 'Operations',
+            meaning:
+                'books hotels and transport on every booking; sales staff only ask them; can’t manage users or roles'
+        })
     })
 })
 

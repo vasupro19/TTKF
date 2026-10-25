@@ -2,7 +2,7 @@ import { accessMeta, ACCESS_LEVELS, plural } from '@views/permissions/menuAccess
 
 // ? the Roles list is small and arrives whole, so its search and Access filter run here, not on the server
 
-/** @description the Access dropdown: the four levels */
+/** @description the Access dropdown: the levels */
 export const ACCESS_OPTIONS = ACCESS_LEVELS.map(level => ({ value: level.value, label: level.title }))
 
 /** @description the roles whose name or description has the text and whose access is the one chosen ('' = any) */

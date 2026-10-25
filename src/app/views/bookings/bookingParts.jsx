@@ -74,7 +74,7 @@ Section.propTypes = {
     children: PropTypes.node.isRequired
 }
 
-export function StepsBar({ progress }) {
+export function StepsBar({ progress, steps = STEPS }) {
     return (
         <Stack
             component='ol'
@@ -85,7 +85,7 @@ export function StepsBar({ progress }) {
             sx={{ listStyle: 'none', m: 0, p: 0 }}
             aria-label='Booking progress'
         >
-            {STEPS.map(step => (
+            {steps.map(step => (
                 <Box component='li' key={step.key}>
                     {/* ? a step is a shortcut to the part of the page where it gets done */}
                     <Box
@@ -127,7 +127,12 @@ export function StepsBar({ progress }) {
     )
 }
 
-StepsBar.propTypes = { progress: PropTypes.objectOf(PropTypes.bool).isRequired }
+StepsBar.propTypes = {
+    progress: PropTypes.objectOf(PropTypes.bool).isRequired,
+    steps: PropTypes.arrayOf(
+        PropTypes.shape({ key: PropTypes.string, label: PropTypes.string, section: PropTypes.string })
+    )
+}
 
 export function MoneyCard({ title, lines, action = null }) {
     return (
@@ -159,7 +164,19 @@ MoneyCard.propTypes = {
 const STATUS_COLOR = { 'Fully Paid': 'success.dark', 'Partially Paid': '#b45309' }
 const STATUS_TEXT = { 'Fully Paid': 'Paid', 'Partially Paid': 'Part paid' }
 
-export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove, emailing = false }) {
+/**
+ * One hotel or transport line. What can be done to it is what it is given handlers for: operations edits, emails and
+ * removes it; accounts records a payment; a line given none is only read.
+ */
+export function ServiceRow({
+    service,
+    onPay = null,
+    onEmail = null,
+    onCancel = null,
+    onEdit = null,
+    onRemove = null,
+    emailing = false
+}) {
     const [confirmRemove, setConfirmRemove] = useState(false)
     const cost = amount(service.cost)
     const paid = amount(service.paidAmount)
@@ -230,7 +247,7 @@ export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove
                 </Box>
             </Stack>
             <Stack direction='row' spacing={0.5} flexWrap='wrap' useFlexGap sx={{ mt: 1, ml: -0.75 }}>
-                {confirmRemove && booked ? (
+                {confirmRemove && booked && onRemove && onCancel ? (
                     <>
                         <Typography sx={{ fontSize: '0.875rem', px: 0.75, alignSelf: 'center' }}>
                             {name} has this booking. Send them a cancellation?
@@ -253,7 +270,7 @@ export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove
                         </Button>
                     </>
                 ) : null}
-                {confirmRemove && !booked ? (
+                {confirmRemove && !booked && onRemove ? (
                     <>
                         <Typography sx={{ fontSize: '0.875rem', px: 0.75, alignSelf: 'center' }}>
                             Remove {name} from this booking?
@@ -268,30 +285,40 @@ export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove
                 ) : null}
                 {confirmRemove ? null : (
                     <>
-                        {due ? (
+                        {due && onPay ? (
                             <Button size='small' onClick={() => onPay(service)}>
                                 Record payment
                             </Button>
                         ) : null}
-                        <Button
-                            size='small'
-                            onClick={() => onEmail(service)}
-                            disabled={emailing}
-                            startIcon={emailing ? <CircularProgress size={14} color='inherit' /> : null}
-                        >
-                            {emailing ? 'Sending…' : `Email ${service.type === 'Hotel' ? 'hotel' : 'transporter'}`}
-                        </Button>
-                        <Button size='small' onClick={() => onEdit(service)}>
-                            Edit
-                        </Button>
-                        {booked ? (
+                        {onEmail ? (
+                            <Button
+                                size='small'
+                                onClick={() => onEmail(service)}
+                                disabled={emailing}
+                                startIcon={emailing ? <CircularProgress size={14} color='inherit' /> : null}
+                            >
+                                {emailing ? 'Sending…' : `Email ${service.type === 'Hotel' ? 'hotel' : 'transporter'}`}
+                            </Button>
+                        ) : null}
+                        {onEdit ? (
+                            <Button size='small' onClick={() => onEdit(service)}>
+                                Edit
+                            </Button>
+                        ) : null}
+                        {booked && onCancel ? (
                             <Button size='small' color='error' onClick={() => onCancel(service, false)}>
                                 Cancel booking
                             </Button>
                         ) : null}
-                        <Button size='small' sx={{ color: 'text.secondary' }} onClick={() => setConfirmRemove(true)}>
-                            Remove
-                        </Button>
+                        {onRemove ? (
+                            <Button
+                                size='small'
+                                sx={{ color: 'text.secondary' }}
+                                onClick={() => setConfirmRemove(true)}
+                            >
+                                Remove
+                            </Button>
+                        ) : null}
                     </>
                 )}
             </Stack>
@@ -301,11 +328,11 @@ export function ServiceRow({ service, onPay, onEmail, onCancel, onEdit, onRemove
 
 ServiceRow.propTypes = {
     service: serviceShape.isRequired,
-    onPay: PropTypes.func.isRequired,
-    onEmail: PropTypes.func.isRequired,
-    onCancel: PropTypes.func.isRequired,
-    onEdit: PropTypes.func.isRequired,
-    onRemove: PropTypes.func.isRequired,
+    onPay: PropTypes.func,
+    onEmail: PropTypes.func,
+    onCancel: PropTypes.func,
+    onEdit: PropTypes.func,
+    onRemove: PropTypes.func,
     emailing: PropTypes.bool
 }
 
