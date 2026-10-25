@@ -45,7 +45,7 @@ export const inputsLine = (inputs, canSeeCosts) => {
         inputs.vehicle ? `${inputs.vehicle} cab` : 'no cab'
     ]
     if (canSeeCosts && inputs.marginPct !== null && inputs.marginPct !== undefined)
-        parts.push(`${inputs.marginPct}% margin`)
+        parts.push(`${inputs.marginPct}% margin${inputs.marginFrom ? ` (${inputs.marginFrom})` : ''}`)
     return parts.join(' · ')
 }
 

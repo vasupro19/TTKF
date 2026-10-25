@@ -10,6 +10,7 @@ import {
     draftHotelRow,
     duplicateCabRows,
     duplicateHotelRows,
+    marginKit,
     ticketKit,
     excelDay,
     hotelPayload,
@@ -358,5 +359,33 @@ describe('ticket fares', () => {
         const twice = [fare(), fare({ fromPlace: 'Shimla', toPlace: 'Delhi' })]
         expect(Object.keys(ticketKit.duplicates(twice))).toEqual([twice[1].key])
         expect(ticketKit.copy(saved).childRate).toBe('600')
+    })
+})
+
+describe('margin by campaign and season', () => {
+    const margin = extra => ({ ...marginKit.blank(), campaignId: '1', marginPct: '20', ...extra })
+
+    test('takes any percentage from 0, for a campaign or all campaigns, and refuses nonsense', () => {
+        expect(marginKit.problem(margin())).toBe('')
+        expect(marginKit.problem(margin({ campaignId: '' }))).toBe('')
+        expect(marginKit.problem(margin({ marginPct: '0' }))).toBe('')
+        expect(marginKit.problem(margin({ marginPct: '' }))).toMatch(/Enter the margin/)
+        expect(marginKit.problem(margin({ marginPct: '600' }))).toMatch(/between 0 and 500/)
+        expect(marginKit.problem(margin({ validFrom: '2026-12-20' }))).toMatch(/start and an end/)
+    })
+
+    test('sends the campaign as typed and the margin as a plain number', () => {
+        expect(marginKit.payload(margin({ marginPct: '22.5%'.replace('%', '') }))).toMatchObject({
+            campaignId: '1',
+            marginPct: '22.5'
+        })
+        expect(marginKit.payload(margin({ campaignId: '' }))).toMatchObject({ campaignId: '' })
+    })
+
+    test('refuses one campaign’s margin twice for the same dates, but not for another campaign or a season', () => {
+        const rows = [margin(), margin({ marginPct: '25' })]
+        expect(Object.keys(marginKit.duplicates(rows))).toEqual([rows[1].key])
+        const fine = [margin(), margin({ campaignId: '2' }), margin({ validFrom: '2026-12-20', validTo: '2027-01-05' })]
+        expect(marginKit.duplicates(fine)).toEqual({})
     })
 })

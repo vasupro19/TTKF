@@ -205,7 +205,17 @@ const SEASON_FIELDS = ['season', 'validFrom', 'validTo']
  * @description the helpers of a cab table, built from what the table holds. `texts` are the fields compared as text,
  *              `amount` the price field, `problemOf` the row's own check and `idOf` what makes two rows the same rate
  */
-const cabKit = ({ texts, amount, extras = [], blank, problemOf, idOf, said }) => {
+const cabKit = ({
+    texts,
+    amount,
+    extras = [],
+    amountMessage = 'Enter the price, such as 4500',
+    allowZero = false,
+    blank,
+    problemOf,
+    idOf,
+    said
+}) => {
     const empty = () => ({
         key: nextKey(),
         id: null,
@@ -241,7 +251,7 @@ const cabKit = ({ texts, amount, extras = [], blank, problemOf, idOf, said }) =>
             const own = problemOf(row)
             if (own) return own
             const value = tidyAmount(row[amount])
-            if (!AMOUNT.test(value) || Number(value) <= 0) return 'Enter the price, such as 4500'
+            if (!AMOUNT.test(value) || (!allowZero && Number(value) <= 0)) return amountMessage
             const badExtra = extras.find(field => tidyAmount(row[field]) && !AMOUNT.test(tidyAmount(row[field])))
             if (badExtra) return 'The child fare must be an amount, such as 600'
             if (Boolean(row.validFrom) !== Boolean(row.validTo)) return 'A season needs a start and an end date'
@@ -335,6 +345,18 @@ export const ticketKit = cabKit({
         return `${nameKey(row.mode)}|${places}|${dates(row)}`
     },
     said: row => `${row.mode.trim()} ${row.fromPlace.trim()} to ${row.toPlace.trim()}`
+})
+
+/** @description the margin of a campaign (or every campaign) and, when it has dates, a season; 0% is a margin */
+export const marginKit = cabKit({
+    texts: ['campaignId'],
+    amount: 'marginPct',
+    amountMessage: 'Enter the margin as a percentage, such as 20',
+    allowZero: true,
+    blank: { campaignId: '', marginPct: '' },
+    problemOf: row => (Number(tidyAmount(row.marginPct)) > 500 ? 'The margin is a percentage between 0 and 500' : ''),
+    idOf: row => `${String(row.campaignId || 'all')}|${dates(row)}`,
+    said: row => (row.campaignId ? 'This campaign' : 'All campaigns')
 })
 
 /** @description a day in one place (local sightseeing): this cab, one price */

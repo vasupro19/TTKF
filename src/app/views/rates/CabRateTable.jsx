@@ -17,7 +17,7 @@ import {
 import { Add } from '@mui/icons-material'
 import { useDispatch } from 'react-redux'
 import { openSnackbar } from '@app/store/slices/snackbar'
-import { RateInput, RateTick, RowActions } from './rateFields'
+import { RateInput, RatePick, RateTick, RowActions } from './rateFields'
 
 const cell = { py: 0.75, px: 0.75, verticalAlign: 'top' }
 
@@ -26,7 +26,8 @@ const cell = { py: 0.75, px: 0.75, verticalAlign: 'top' }
  * holds (see `routeKit` and `localKit` in rateFacts.js); the rest — adding, copying, removing, checking, saving all at once —
  * is the same for both.
  *
- * A column is { field, label, kind: 'cab' | 'place' | 'amount' | 'date' | 'text' | 'check', minWidth }.
+ * A column is { field, label, kind: 'cab' | 'place' | 'amount' | 'date' | 'text' | 'check' | 'pick', minWidth }; a 'pick' column
+ * also has its `options`, [{ value, label }].
  */
 export default function CabRateTable({
     title,
@@ -123,12 +124,15 @@ export default function CabRateTable({
                 />
             )
         }
+        if (column.kind === 'pick') {
+            return <RatePick label={label} options={column.options} value={row[column.field]} onChange={onChange} />
+        }
         if (column.kind === 'amount') {
             return (
                 <RateInput
                     label={label}
                     inputMode='decimal'
-                    placeholder='₹'
+                    placeholder={column.placeholder || '₹'}
                     value={row[column.field]}
                     onChange={event => update(row.key, column.field, event.target.value.replace(/[^0-9.,]/g, ''))}
                 />

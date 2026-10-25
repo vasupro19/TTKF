@@ -15,6 +15,8 @@ const EMPTY = {
     cabLocal: [],
     tickets: [],
     ticketModes: [],
+    marginRules: [],
+    campaigns: [],
     vehicleNames: [],
     settings: { defaultMarginPct: 15, roundTo: 100 },
     places: []
@@ -71,7 +73,9 @@ export default function RatesPage() {
                 {tab === 'tickets' ? (
                     <TicketRatesTab tickets={card.tickets} modes={card.ticketModes} places={card.places} />
                 ) : null}
-                {tab === 'margin' ? <MarginTab settings={card.settings} /> : null}
+                {tab === 'margin' ? (
+                    <MarginTab settings={card.settings} rules={card.marginRules} campaigns={card.campaigns} />
+                ) : null}
             </>
         )
     }

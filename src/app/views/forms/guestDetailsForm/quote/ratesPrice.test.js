@@ -104,3 +104,22 @@ describe('the prices typed beside missing rates', () => {
         ])
     })
 })
+
+describe('the line under the heading', () => {
+    test('says where the margin came from, for those who may see it', () => {
+        const inputs = {
+            persons: 2,
+            nights: 5,
+            rooms: 1,
+            mealPlan: 'CP',
+            vehicle: 'Sedan',
+            marginPct: 25,
+            marginFrom: 'Himachal, New Year'
+        }
+        expect(inputsLine(inputs, true)).toBe(
+            '2 guests · 5 nights · 1 room · CP meals · Sedan cab · 25% margin (Himachal, New Year)'
+        )
+        expect(inputsLine({ ...inputs, marginFrom: null }, true)).toMatch(/· 25% margin$/)
+        expect(inputsLine(inputs, false)).not.toMatch(/margin/)
+    })
+})

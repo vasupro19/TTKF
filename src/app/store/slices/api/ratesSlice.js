@@ -9,7 +9,7 @@ const handle = async result => customResponseHandler({ result })
  */
 export const ratesSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
-        // ---- `{ hotels, vehicles, cabRoutes, cabLocal, tickets, ticketModes, vehicleNames, settings: { defaultMarginPct, roundTo }, places }`
+        // ---- `{ hotels, vehicles, cabRoutes, cabLocal, tickets, ticketModes, marginRules, campaigns, vehicleNames, settings: { defaultMarginPct, roundTo }, places }`
         getRateCard: build.query({
             query: () => ({ url: '/rates', responseHandler: handle }),
             providesTags: ['RateCard']
@@ -32,6 +32,11 @@ export const ratesSlice = apiSliceConfig.injectEndpoints({
         // `{ rows: [{ id?, mode, fromPlace, toPlace, adultRate, childRate, bothWays, season, validFrom, validTo, repeatsYearly }], removeIds }`
         saveTickets: build.mutation({
             query: body => ({ url: '/rates/tickets', method: 'PUT', body, responseHandler: handle }),
+            invalidatesTags: ['RateCard']
+        }),
+        // `{ rows: [{ id?, campaignId ('' for all campaigns), marginPct, season, validFrom, validTo, repeatsYearly }], removeIds }`
+        saveMargins: build.mutation({
+            query: body => ({ url: '/rates/margins', method: 'PUT', body, responseHandler: handle }),
             invalidatesTags: ['RateCard']
         }),
         // `{ rows: [{ id?, vehicle, perDayRate }], removeIds }`
@@ -63,6 +68,7 @@ export const {
     useSaveCabRoutesMutation,
     useSaveCabDaysMutation,
     useSaveTicketsMutation,
+    useSaveMarginsMutation,
     useSaveRateSettingsMutation,
     useImportRatesMutation,
     usePriceFromRatesMutation
