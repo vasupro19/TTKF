@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
 import { Alert, Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
 import dayjs from 'dayjs'
-import { GUEST_METHODS, isCash, isoDay, paymentFormErrors } from '@/app/views/payments/paymentFacts'
+import { GUEST_METHODS, isCash, isoDay, paymentFormErrors, transactionIdHint } from '@/app/views/payments/paymentFacts'
 import { ProofFileField } from '@/app/views/payments/paymentParts'
+import useProofReader from '@/app/views/payments/useProofReader'
 import CustomButton from '../extended/CustomButton'
 
 /**
@@ -26,6 +27,14 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading, payment = nu
 
     const [proof, setProof] = useState(null)
     const [tried, setTried] = useState(false)
+    // ? the transaction ID is read off the proof as soon as it is attached (not for cash, which needs none)
+    const fillTransactionId = useCallback(id => setForm(current => ({ ...current, transactionId: id })), [])
+    const reader = useProofReader({
+        current: form.transactionId,
+        onFill: fillTransactionId,
+        enabled: !isCash(form.paymentMethod)
+    })
+    const { reset: resetReader } = reader
 
     // Reset form when modal opens with a new row
     useEffect(() => {
@@ -39,8 +48,9 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading, payment = nu
             })
             setProof(null)
             setTried(false)
+            resetReader()
         }
-    }, [open, today, payment])
+    }, [open, today, payment, resetReader])
 
     const hasProof = Boolean(payment?.hasProof)
     const rejected = payment?.status === 'REJECTED'
@@ -107,6 +117,20 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading, payment = nu
                 </Box>
 
                 <Stack spacing={2}>
+                    <ProofFileField
+                        file={proof}
+                        onChange={file => {
+                            setProof(file)
+                            reader.check(file)
+                        }}
+                        error={proofError}
+                        required={!isCash(form.paymentMethod)}
+                        hasProof={hasProof}
+                        reading={reader.status}
+                        prompt
+                        onUseRead={reader.use}
+                    />
+
                     <Stack direction='row' spacing={2}>
                         <TextField
                             label='Payment Date'
@@ -146,15 +170,13 @@ function GuestPaymentModal({ open, onClose, onSave, row, isLoading, payment = nu
                         fullWidth
                         value={form.transactionId}
                         placeholder='e.g. UTR Number'
+                        helperText={transactionIdHint({
+                            canRead: !isCash(form.paymentMethod),
+                            hasFile: Boolean(proof),
+                            hasId: Boolean(form.transactionId.trim()),
+                            reading: reader.status
+                        })}
                         onChange={e => setForm({ ...form, transactionId: e.target.value })}
-                    />
-
-                    <ProofFileField
-                        file={proof}
-                        onChange={setProof}
-                        error={proofError}
-                        required={!isCash(form.paymentMethod)}
-                        hasProof={hasProof}
                     />
 
                     <TextField

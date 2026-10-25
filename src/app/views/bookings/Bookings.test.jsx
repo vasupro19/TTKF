@@ -143,7 +143,9 @@ vi.mock('@/app/store/slices/api/paymentSlice', () => ({
     useVerifyGuestPaymentMutation: () => [api.verifyPayment, { isLoading: false }],
     useRejectGuestPaymentMutation: () => [api.rejectPayment, { isLoading: false }],
     useReverseGuestPaymentMutation: () => [api.reversePayment, { isLoading: false }],
-    useUpdateGuestPaymentMutation: () => [api.updatePayment, { isLoading: false }]
+    useUpdateGuestPaymentMutation: () => [api.updatePayment, { isLoading: false }],
+    // ? the supplier payment form reads the transaction ID off its proof
+    useReadPaymentProofMutation: () => [vi.fn()]
 }))
 vi.mock('@/app/store/slices/api/gstSlice', () => ({
     useGetBookingInvoicesQuery: () => query({ data: api.invoices, summary: api.invoiceSummary }),

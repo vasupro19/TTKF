@@ -31,6 +31,15 @@ const decide = (action, KEY) => ({
  */
 export const paymentSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
+        // ? the transaction ID printed on a proof that has just been attached, so the form can fill it in (nothing is
+        // ? stored): a File → { data: { transactionId | null, reason, message } }. Never an error for a file it cannot read.
+        readPaymentProof: build.mutation({
+            query: file => ({
+                url: '/package/payment-proof/read',
+                method: 'POST',
+                body: toFormData({ proof: file })
+            })
+        }),
         // ? `{ status, from, to, method, q, page, pageSize }` → { rows, summary, page, pageSize, recordsTotal, canDecide }
         getGuestPayments: build.query({
             query: (filters = {}) => ({
@@ -75,5 +84,6 @@ export const {
     useVerifyGuestPaymentMutation,
     useRejectGuestPaymentMutation,
     useReverseGuestPaymentMutation,
+    useReadPaymentProofMutation,
     endpoints: { getGuestPayments, getSupplierPayments }
 } = paymentSlice

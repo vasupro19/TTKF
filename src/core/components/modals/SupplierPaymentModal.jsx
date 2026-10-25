@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Modal, Box, Divider, Typography, TextField, Stack, MenuItem } from '@mui/material'
 import dayjs from 'dayjs'
-import { SUPPLIER_METHODS, paymentFormErrors, rupees } from '@/app/views/payments/paymentFacts'
+import { SUPPLIER_METHODS, paymentFormErrors, rupees, transactionIdHint } from '@/app/views/payments/paymentFacts'
 import { ProofFileField } from '@/app/views/payments/paymentParts'
+import useProofReader from '@/app/views/payments/useProofReader'
 import CustomButton from '../extended/CustomButton'
 
 // ? every supplier payment carries its proof (screenshot or PDF), whatever the method; `onSave` gets the form with
@@ -22,11 +23,16 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
 
     const [proof, setProof] = useState(null)
     const [tried, setTried] = useState(false)
+    // ? the transaction ID is read off the proof as soon as it is attached
+    const fillTransactionId = useCallback(id => setForm(current => ({ ...current, transactionId: id })), [])
+    const reader = useProofReader({ current: form.transactionId, onFill: fillTransactionId })
+    const { reset: resetReader } = reader
 
     useEffect(() => {
         if (open) {
             setProof(null)
             setTried(false)
+            resetReader()
             setForm({
                 amount: '',
                 paymentMethod: 'Bank Transfer',
@@ -35,7 +41,7 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                 paymentDate: today
             })
         }
-    }, [open, today])
+    }, [open, today, resetReader])
 
     // row.cost is the total amount to be paid to supplier
     // row.paidAmount is what has already been paid
@@ -97,6 +103,19 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                 </Box>
 
                 <Stack spacing={2}>
+                    <ProofFileField
+                        file={proof}
+                        onChange={file => {
+                            setProof(file)
+                            reader.check(file)
+                        }}
+                        error={proofError}
+                        required
+                        reading={reader.status}
+                        prompt
+                        onUseRead={reader.use}
+                    />
+
                     <Stack direction='row' spacing={2}>
                         <TextField
                             label='Payment Date'
@@ -136,10 +155,14 @@ function SupplierPaymentModal({ open, onClose, onSave, row, isLoading }) {
                         fullWidth
                         value={form.transactionId}
                         placeholder='e.g. UTR or Check Number'
+                        helperText={transactionIdHint({
+                            canRead: true,
+                            hasFile: Boolean(proof),
+                            hasId: Boolean(form.transactionId.trim()),
+                            reading: reader.status
+                        })}
                         onChange={e => setForm({ ...form, transactionId: e.target.value })}
                     />
-
-                    <ProofFileField file={proof} onChange={setProof} error={proofError} required />
 
                     <TextField
                         label='Internal Remarks'

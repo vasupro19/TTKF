@@ -15,7 +15,10 @@ import {
     summaryTotal,
     supplierExportRows,
     toCsv,
-    toFormData
+    toFormData,
+    canReadProof,
+    settleReading,
+    transactionIdHint
 } from './paymentFacts'
 
 const file = (name, type, size = 1000) => {
@@ -177,5 +180,61 @@ describe('lists', () => {
             `'=SUM(A1),"line\nbreak",10`
         ])
         expect(toCsv([])).toBe('')
+    })
+})
+
+describe('reading the transaction ID off a proof', () => {
+    test('only a photo or PDF of the right size is sent to be read', () => {
+        expect(canReadProof(new File(['x'], 'a.png', { type: 'image/png' }))).toBe(true)
+        expect(canReadProof(new File(['x'], 'a.pdf', { type: 'application/pdf' }))).toBe(true)
+        expect(canReadProof(new File(['x'], 'a.txt', { type: 'text/plain' }))).toBe(false)
+        expect(canReadProof(null)).toBe(false)
+        const big = new File(['x'], 'big.png', { type: 'image/png' })
+        Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+        expect(canReadProof(big)).toBe(false)
+    })
+
+    test('an empty field is filled; so is one the form filled itself from an earlier file', () => {
+        expect(settleReading('412345678901', '')).toEqual({ state: 'filled', fill: '412345678901' })
+        expect(settleReading('412345678901', '  ')).toEqual({ state: 'filled', fill: '412345678901' })
+        expect(settleReading('999988887777', '412345678901', '412345678901')).toEqual({
+            state: 'filled',
+            fill: '999988887777'
+        })
+    })
+
+    test('what the person typed is never overwritten', () => {
+        expect(settleReading('412345678901', 'MYREF123')).toEqual({ state: 'differs', fill: null })
+        // ? they changed what the form had filled in: it is theirs now
+        expect(settleReading('999988887777', 'EDITED', '412345678901')).toEqual({ state: 'differs', fill: null })
+    })
+
+    test('the same as typed (whatever the case) is a match; nothing read is nothing', () => {
+        expect(settleReading('AXISP00123456789', 'axisp00123456789')).toEqual({ state: 'matched', fill: null })
+        expect(settleReading(null, 'MYREF123')).toEqual({ state: 'none', fill: null })
+        expect(settleReading('', '')).toEqual({ state: 'none', fill: null })
+    })
+})
+
+describe('the nudge under the Transaction ID box', () => {
+    const base = { canRead: true, hasFile: false, hasId: false }
+
+    test('before a screenshot and before anything typed: attach the screenshot first', () => {
+        expect(transactionIdHint(base)).toMatch(/Attach the screenshot above first/)
+    })
+
+    test('once a screenshot is chosen, or an ID is there, nothing is said', () => {
+        expect(transactionIdHint({ ...base, hasFile: true })).toBe('')
+        expect(transactionIdHint({ ...base, hasId: true })).toBe('')
+    })
+
+    test('while the file is being read, that is said', () => {
+        expect(transactionIdHint({ ...base, hasFile: true, reading: { state: 'reading' } })).toBe(
+            'Reading it from the file…'
+        )
+    })
+
+    test('a payment that has no proof to read (cash) is not told to attach one', () => {
+        expect(transactionIdHint({ ...base, canRead: false })).toBe('')
     })
 })

@@ -176,11 +176,33 @@ ProofLink.propTypes = {
 /**
  * @description the proof file input: a button, the chosen file's name, and what is needed or wrong
  */
-export function ProofFileField({ file, onChange, error = '', required = true, hasProof = false }) {
+export function ProofFileField({
+    file,
+    onChange,
+    error = '',
+    required = true,
+    hasProof = false,
+    reading = null,
+    onUseRead = null,
+    prompt = false
+}) {
     let hint = required ? 'Screenshot or PDF, up to 5 MB' : 'Not needed for cash'
     if (hasProof && !file) hint = 'A proof is attached — choose a file only to replace it'
+    // ? the first thing on the form: the transaction ID is read from the screenshot, so it is where to start
+    const startHere = prompt && required && !file && !hasProof
     return (
         <Box>
+            {startHere ? (
+                <Box sx={{ mb: 1.25, p: 1.25, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                        Start with the payment screenshot
+                    </Typography>
+                    <Typography color='text.secondary' sx={{ fontSize: '0.8125rem' }}>
+                        Attach it first: the transaction ID is read from it and filled in for you, so you don’t have to
+                        type it.
+                    </Typography>
+                </Box>
+            ) : null}
             <Stack direction='row' spacing={1} alignItems='center' sx={{ minWidth: 0 }}>
                 <Button
                     component='label'
@@ -221,8 +243,50 @@ export function ProofFileField({ file, onChange, error = '', required = true, ha
             >
                 {error || hint}
             </Typography>
+            <ReadingNote reading={reading} onUse={onUseRead} />
         </Box>
     )
+}
+
+/**
+ * What became of reading the transaction ID off the proof: being read, filled in (check it against the receipt), the
+ * same as what was typed, different (and offered), or not found. Nothing here is an error: the ID can always be typed.
+ */
+function ReadingNote({ reading, onUse }) {
+    if (!reading || reading.state === 'idle') return null
+    const { state, id, message } = reading
+    if (state === 'reading') {
+        return (
+            <Stack direction='row' spacing={0.75} alignItems='center' role='status' sx={{ mt: 0.5 }}>
+                <CircularProgress size={12} />
+                <Typography color='text.secondary' sx={{ fontSize: '0.75rem' }}>
+                    Reading the transaction ID from the file…
+                </Typography>
+            </Stack>
+        )
+    }
+    const words = {
+        filled: { color: 'success.dark', text: 'Transaction ID read from the file — check it matches the receipt.' },
+        matched: { color: 'success.dark', text: 'The transaction ID matches the file.' },
+        differs: { color: 'warning.dark', text: `The file shows ${id}, not what you typed.` },
+        none: { color: 'text.secondary', text: message || 'No transaction ID found in this file — type it in.' }
+    }[state]
+    if (!words) return null
+    return (
+        <Stack direction='row' spacing={0.5} alignItems='center' role='status' flexWrap='wrap' sx={{ mt: 0.5 }}>
+            <Typography sx={{ fontSize: '0.75rem', color: words.color }}>{words.text}</Typography>
+            {state === 'differs' && onUse ? (
+                <Button size='small' sx={{ fontSize: '0.75rem', minWidth: 0, py: 0 }} onClick={onUse}>
+                    Use it
+                </Button>
+            ) : null}
+        </Stack>
+    )
+}
+
+ReadingNote.propTypes = {
+    reading: PropTypes.shape({ state: PropTypes.string, id: PropTypes.string, message: PropTypes.string }),
+    onUse: PropTypes.func
 }
 
 ProofFileField.propTypes = {
@@ -230,7 +294,12 @@ ProofFileField.propTypes = {
     onChange: PropTypes.func.isRequired,
     error: PropTypes.string,
     required: PropTypes.bool,
-    hasProof: PropTypes.bool
+    hasProof: PropTypes.bool,
+    // ? { state, id, message } from useProofReader, and what "Use it" does
+    reading: PropTypes.shape({ state: PropTypes.string, id: PropTypes.string, message: PropTypes.string }),
+    onUseRead: PropTypes.func,
+    // ? asks for the screenshot first, because the transaction ID is read from it
+    prompt: PropTypes.bool
 }
 
 const TITLES = {

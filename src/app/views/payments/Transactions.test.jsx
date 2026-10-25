@@ -5,7 +5,7 @@ import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal'
 import SupplierPaymentModal from '@/core/components/modals/SupplierPaymentModal'
 import GuestPaymentsTab from './GuestPaymentsTab'
 
-const api = vi.hoisted(() => ({ args: [], response: null, verify: null, reject: null, reverse: null }))
+const api = vi.hoisted(() => ({ args: [], response: null, verify: null, reject: null, reverse: null, readProof: null }))
 
 vi.mock('react-redux', () => ({ useDispatch: () => action => action, useSelector: select => select({}) }))
 vi.mock('@/app/guards/UiPermissionGuard', () => ({ default: ({ children }) => children }))
@@ -27,7 +27,8 @@ vi.mock('@/app/store/slices/api/paymentSlice', () => ({
     getGuestPayments: { initiate: () => ({ unwrap: () => Promise.resolve(api.response) }) },
     useVerifyGuestPaymentMutation: () => [api.verify, { isLoading: false }],
     useRejectGuestPaymentMutation: () => [api.reject, { isLoading: false }],
-    useReverseGuestPaymentMutation: () => [api.reverse, { isLoading: false }]
+    useReverseGuestPaymentMutation: () => [api.reverse, { isLoading: false }],
+    useReadPaymentProofMutation: () => [api.readProof]
 }))
 
 const ok = message => vi.fn(() => ({ unwrap: () => Promise.resolve({ message }) }))
@@ -241,5 +242,216 @@ describe('payment forms', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Confirm Payment' }))
         expect(onSave).not.toHaveBeenCalled()
         expect(screen.getByRole('alert')).toHaveTextContent('Attach the payment screenshot or PDF')
+    })
+})
+
+describe('the transaction ID is read from the proof', () => {
+    const file = name => new File(['x'], name, { type: 'image/png' })
+    // ? what the server says it read: { transactionId, reason, message }
+    const reading = (transactionId, message = '') =>
+        vi.fn(() => ({
+            unwrap: () => Promise.resolve({ data: { transactionId, reason: transactionId ? null : 'none', message } })
+        }))
+    const attach = proof => fireEvent.change(screen.getByLabelText('Payment proof'), { target: { files: [proof] } })
+    const idField = () => screen.getByLabelText('Transaction ID / Ref')
+    const renderGuest = () =>
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={vi.fn()} onClose={vi.fn()} />)
+
+    beforeEach(() => {
+        api.readProof = reading('412345678901')
+    })
+
+    test('attaching a screenshot fills the transaction ID, and says to check it', async () => {
+        renderGuest()
+        const proof = file('upi.png')
+        attach(proof)
+        expect(screen.getByText('Reading the transaction ID from the file…')).toBeInTheDocument()
+        await waitFor(() => expect(idField()).toHaveValue('412345678901'))
+        expect(api.readProof).toHaveBeenCalledWith(proof)
+        expect(
+            screen.getByText('Transaction ID read from the file — check it matches the receipt.')
+        ).toBeInTheDocument()
+    })
+
+    test('what the person typed is never overwritten: the form says what the file shows, and offers it', async () => {
+        renderGuest()
+        fireEvent.change(idField(), { target: { value: 'MYREF123' } })
+        attach(file('upi.png'))
+        expect(await screen.findByText('The file shows 412345678901, not what you typed.')).toBeInTheDocument()
+        expect(idField()).toHaveValue('MYREF123')
+        fireEvent.click(screen.getByRole('button', { name: 'Use it' }))
+        expect(idField()).toHaveValue('412345678901')
+    })
+
+    test('the same as what was typed: says so', async () => {
+        renderGuest()
+        fireEvent.change(idField(), { target: { value: '412345678901' } })
+        attach(file('upi.png'))
+        expect(await screen.findByText('The transaction ID matches the file.')).toBeInTheDocument()
+        expect(idField()).toHaveValue('412345678901')
+    })
+
+    test('a second file replaces an ID the form filled in, but not one the person changed since', async () => {
+        const said = id => ({ unwrap: () => Promise.resolve({ data: { transactionId: id } }) })
+        api.readProof = vi
+            .fn()
+            .mockReturnValueOnce(said('412345678901'))
+            .mockReturnValueOnce(said('999988887777'))
+            .mockReturnValueOnce(said('555566667777'))
+        renderGuest()
+        attach(file('first.png'))
+        await waitFor(() => expect(idField()).toHaveValue('412345678901'))
+
+        attach(file('second.png'))
+        await waitFor(() => expect(idField()).toHaveValue('999988887777'))
+
+        fireEvent.change(idField(), { target: { value: 'EDITED' } })
+        attach(file('third.png'))
+        expect(await screen.findByText('The file shows 555566667777, not what you typed.')).toBeInTheDocument()
+        expect(idField()).toHaveValue('EDITED')
+    })
+
+    test('nothing found: the field is left alone, the reason is said, and the payment can still be saved', async () => {
+        api.readProof = reading(null, 'No transaction ID found in this file — type it in.')
+        const onSave = vi.fn()
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={onSave} onClose={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText('Amount Received'), { target: { value: '5000' } })
+        attach(file('blurry.png'))
+        expect(await screen.findByText('No transaction ID found in this file — type it in.')).toBeInTheDocument()
+        expect(idField()).toHaveValue('')
+        fireEvent.click(screen.getByRole('button', { name: 'Save Payment' }))
+        expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ amount: '5000', transactionId: '' }))
+    })
+
+    test('a reader that fails is only a line of text', async () => {
+        api.readProof = vi.fn(() => ({ unwrap: () => Promise.reject(new Error('network')) }))
+        renderGuest()
+        attach(file('upi.png'))
+        expect(
+            await screen.findByText('Couldn’t read the transaction ID from this file — type it in.')
+        ).toBeInTheDocument()
+        expect(idField()).toHaveValue('')
+    })
+
+    test('an answer for a file that was replaced meanwhile is dropped', async () => {
+        let slow
+        api.readProof = vi
+            .fn()
+            .mockReturnValueOnce({
+                unwrap: () =>
+                    new Promise(resolve => {
+                        slow = resolve
+                    })
+            })
+            .mockReturnValueOnce({ unwrap: () => Promise.resolve({ data: { transactionId: 'SECOND000111' } }) })
+        renderGuest()
+        attach(file('first.png'))
+        attach(file('second.png'))
+        await waitFor(() => expect(idField()).toHaveValue('SECOND000111'))
+        slow({ data: { transactionId: 'FIRST9990000' } })
+        await new Promise(resolve => {
+            setTimeout(resolve, 20)
+        })
+        expect(idField()).toHaveValue('SECOND000111')
+    })
+
+    test('removing the file stops reading and clears the note', async () => {
+        renderGuest()
+        attach(file('upi.png'))
+        await screen.findByText('Transaction ID read from the file — check it matches the receipt.')
+        fireEvent.click(screen.getByRole('button', { name: 'Remove the chosen file' }))
+        expect(screen.queryByText(/read from the file/)).not.toBeInTheDocument()
+    })
+
+    test('cash needs no proof, so nothing is read', () => {
+        renderGuest()
+        fireEvent.mouseDown(screen.getByRole('combobox'))
+        fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
+        attach(file('note.png'))
+        expect(api.readProof).not.toHaveBeenCalled()
+    })
+
+    test('a file that is not a photo or PDF is not sent to be read', () => {
+        renderGuest()
+        attach(new File(['x'], 'notes.txt', { type: 'text/plain' }))
+        expect(api.readProof).not.toHaveBeenCalled()
+        expect(screen.getByRole('alert')).toHaveTextContent('The proof must be a photo')
+    })
+
+    test('a supplier payment fills it too', async () => {
+        render(<SupplierPaymentModal open row={{ cost: 9000, paidAmount: 0 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        attach(file('imps.png'))
+        await waitFor(() => expect(idField()).toHaveValue('412345678901'))
+    })
+})
+
+describe('the form starts with the screenshot', () => {
+    const png = () => new File(['x'], 'upi.png', { type: 'image/png' })
+    // ? whether `first` comes before `second` on the page
+    const before = (first, second) => first.compareDocumentPosition(second) === Node.DOCUMENT_POSITION_FOLLOWING
+
+    beforeEach(() => {
+        api.readProof = vi.fn(() => ({ unwrap: () => Promise.resolve({ data: { transactionId: '412345678901' } }) }))
+    })
+
+    test('a guest payment asks for it first, above the amount and the transaction ID, and says why', () => {
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        expect(screen.getByText('Start with the payment screenshot')).toBeInTheDocument()
+        expect(screen.getByText(/the transaction ID is read from it and filled in for you/)).toBeInTheDocument()
+        expect(before(screen.getByLabelText('Payment proof'), screen.getByLabelText('Amount Received'))).toBe(true)
+        expect(before(screen.getByLabelText('Payment proof'), screen.getByLabelText('Transaction ID / Ref'))).toBe(true)
+        expect(screen.getByText(/Attach the screenshot above first and this fills in by itself/)).toBeInTheDocument()
+    })
+
+    test('once it is attached the prompt and the nudge go, and the ID is there', async () => {
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText('Payment proof'), { target: { files: [png()] } })
+        await waitFor(() => expect(screen.getByLabelText('Transaction ID / Ref')).toHaveValue('412345678901'))
+        expect(screen.queryByText('Start with the payment screenshot')).not.toBeInTheDocument()
+        expect(screen.queryByText(/Attach the screenshot above first/)).not.toBeInTheDocument()
+    })
+
+    test('typing the ID first is still allowed, and the nudge goes once something is typed', () => {
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText('Transaction ID / Ref'), { target: { value: 'UTR1' } })
+        expect(screen.getByLabelText('Transaction ID / Ref')).toHaveValue('UTR1')
+        expect(screen.queryByText(/Attach the screenshot above first/)).not.toBeInTheDocument()
+    })
+
+    test('cash needs no screenshot, so nothing asks for one', () => {
+        render(<GuestPaymentModal open row={{ sellingPrice: 50000 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        fireEvent.mouseDown(screen.getByRole('combobox'))
+        fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
+        expect(screen.queryByText('Start with the payment screenshot')).not.toBeInTheDocument()
+        expect(screen.queryByText(/Attach the screenshot above first/)).not.toBeInTheDocument()
+        expect(screen.getByText('Not needed for cash')).toBeInTheDocument()
+    })
+
+    test('a payment being corrected, which already has its proof, is not told to start over', () => {
+        render(
+            <GuestPaymentModal
+                open
+                row={{ sellingPrice: 50000 }}
+                payment={{
+                    id: 8,
+                    amount: '4000',
+                    paymentMethod: 'UPI',
+                    transactionId: 'UTR8',
+                    status: 'REJECTED',
+                    hasProof: true
+                }}
+                onSave={vi.fn()}
+                onClose={vi.fn()}
+            />
+        )
+        expect(screen.queryByText('Start with the payment screenshot')).not.toBeInTheDocument()
+        expect(screen.getByText('A proof is attached — choose a file only to replace it')).toBeInTheDocument()
+    })
+
+    test('a supplier payment starts with it too', () => {
+        render(<SupplierPaymentModal open row={{ cost: 9000, paidAmount: 0 }} onSave={vi.fn()} onClose={vi.fn()} />)
+        expect(screen.getByText('Start with the payment screenshot')).toBeInTheDocument()
+        expect(before(screen.getByLabelText('Payment proof'), screen.getByLabelText('Amount Paid'))).toBe(true)
+        expect(screen.getByText(/Attach the screenshot above first/)).toBeInTheDocument()
     })
 })

@@ -63,6 +63,43 @@ export const proofProblem = file => {
     return ''
 }
 
+/**
+ * @description what sits under the Transaction ID box: while the screenshot is being read, that; before any screenshot and before
+ *              anything is typed, a nudge to attach the screenshot first — the ID fills itself in from it. Nothing once there is one.
+ * @param {object} state
+ * @param {boolean} state.canRead  whether a proof can be read for this payment (not for cash)
+ * @param {boolean} state.hasFile  a screenshot or PDF has been chosen
+ * @param {boolean} state.hasId    the box holds something
+ * @param {{ state?: string }} [state.reading]  from useProofReader
+ */
+export const transactionIdHint = ({ canRead, hasFile, hasId, reading = null }) => {
+    if (!canRead) return ''
+    if (reading?.state === 'reading') return 'Reading it from the file…'
+    if (!hasFile && !hasId) return 'Attach the screenshot above first and this fills in by itself — or type it.'
+    return ''
+}
+
+/** @description whether a chosen proof is one the server can read the transaction ID from: a photo or PDF of the right size */
+export const canReadProof = file => Boolean(file) && !proofProblem(file)
+
+/**
+ * @description what the form does with the transaction ID the server read from a proof. It fills an empty field, and a
+ *              field it filled itself from an earlier file; what the person typed is never overwritten — the form says
+ *              what the file shows instead, and offers it.
+ * @param {string|null} read   the ID read from the file
+ * @param {string} typed       what the field holds now
+ * @param {string} filled      the ID this form last filled in by itself ('' if none)
+ * @returns {{ state: 'filled'|'matched'|'differs'|'none', fill: string|null }}
+ */
+export const settleReading = (read, typed, filled = '') => {
+    const id = String(read || '').trim()
+    if (!id) return { state: 'none', fill: null }
+    const current = String(typed || '').trim()
+    if (!current || (filled && current === filled)) return { state: 'filled', fill: id }
+    if (current.toLowerCase() === id.toLowerCase()) return { state: 'matched', fill: null }
+    return { state: 'differs', fill: null }
+}
+
 /** @description a stored proof is a PDF (by its original name); otherwise it is a picture */
 // ? the API says proofType ('pdf' | 'image'); older answers only had the file's name
 export const isPdfProof = (proofName, proofType) =>
