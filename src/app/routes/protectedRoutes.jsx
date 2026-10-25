@@ -139,6 +139,7 @@ const IncentivesPage = lazy(() => import('@views/masters/incentives'))
 const GstSettingsPage = lazy(() => import('@views/masters/gst'))
 const CompanyPage = lazy(() => import('@views/masters/company'))
 const RatesPage = lazy(() => import('@views/masters/rates'))
+const VehiclesPage = lazy(() => import('@views/masters/vehicles'))
 
 // const SetupUserTable = lazy(() => import('@/app/views/tables/user'))
 const JobCandidates = lazy(() => import('@views/masters/JobCandidates/JobCandidates'))
@@ -548,6 +549,14 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <RatesPage />
+                </Suspense>
+            )
+        },
+        {
+            path: '/master/vehicles',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <VehiclesPage />
                 </Suspense>
             )
         }

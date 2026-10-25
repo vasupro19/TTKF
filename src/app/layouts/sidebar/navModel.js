@@ -28,6 +28,7 @@ export const NAV_SECTIONS = [
         items: [
             { url: CAMPAIGNS_URL, label: 'Campaigns', campaigns: true },
             { url: '/master/supplier', label: 'Suppliers' },
+            { url: '/master/vehicles', label: 'Vehicles' },
             { url: '/master/agent', label: 'Agents' }
         ]
     },

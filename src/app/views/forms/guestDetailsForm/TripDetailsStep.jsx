@@ -12,11 +12,11 @@ import {
     MEAL_PLANS,
     TRAVEL_WAYS,
     TRIP_TYPES,
-    VEHICLES,
     hasMoreDetails,
     suggestedRooms,
     validateTripDetails
 } from './tripDetails'
+import useVehicles from '../../vehicles/useVehicles'
 
 const formikShape = PropTypes.shape({
     values: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
@@ -120,13 +120,15 @@ Choice.propTypes = {
 const filled = value => value !== null && value !== undefined && String(value).trim() !== ''
 
 /**
- * The guest's vehicle, from the agency's list. A vehicle saved before the list changed (e.g. "Hatchback") still
+ * The guest's vehicle, from the agency's list (the Vehicles screen). A vehicle saved before the list changed (e.g. "Hatchback") still
  * shows, so opening an older trip doesn't blank it.
  */
 function VehicleSelect({ formik }) {
+    // ? the agency's own vehicles (Vehicles screen); the built-in list until the server has it
+    const { choices } = useVehicles()
     const value = String(formik.values.taxiType ?? '')
     const options =
-        value && !VEHICLES.some(option => option.value === value) ? [{ value, label: value }, ...VEHICLES] : VEHICLES
+        value && !choices.some(option => option.value === value) ? [{ value, label: value }, ...choices] : choices
     return (
         <TextField
             select

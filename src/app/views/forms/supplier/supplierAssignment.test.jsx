@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import SupplierAssignmentForm from './supplierAssignment'
 
+// ? none loaded means the server has no vehicle list yet: the built-in names are suggested
+const vehicles = vi.hoisted(() => ({ response: undefined }))
+vi.mock('@/app/store/slices/api/vehicleSlice', () => ({ useGetVehiclesQuery: () => ({ data: vehicles.response }) }))
 vi.mock('@/app/store/slices/api/supplierSlice', () => ({
     useGetSuppliersQuery: () => ({
         data: { data: [{ id: 3, businessname: 'Lucky Bhai Manali', city: 'Manali' }] },
@@ -87,5 +90,42 @@ describe('hotel', () => {
             roomType: 'Swiss tent',
             details: { mealPlan: 'MAP', extraBeds: '2', inclusions: 'Bonfire' }
         })
+    })
+})
+
+describe('the vehicle suggestions', () => {
+    const suggestions = () => {
+        fireEvent.keyDown(screen.getByLabelText('Vehicle type'), { key: 'ArrowDown' })
+        return screen.getAllByRole('option').map(option => option.textContent)
+    }
+
+    test('are the agency’s own vehicles, those shown and no hidden ones', () => {
+        vehicles.response = {
+            data: [
+                { id: 1, name: 'Mini Bus 32 seater', seats: 32, active: true },
+                { id: 2, name: 'Sedan', seats: 4, active: true },
+                { id: 3, name: 'Old Swift', seats: 4, active: false }
+            ],
+            summary: { ready: true, canEdit: true }
+        }
+        render(<SupplierAssignmentForm type='Taxi' row={newTransport} onDataChange={changes} />)
+        expect(suggestions()).toEqual(['Mini Bus 32 seater', 'Sedan'])
+        vehicles.response = undefined
+    })
+
+    test('are the built-in ones until the server has the agency’s list', () => {
+        vehicles.response = undefined
+        render(<SupplierAssignmentForm type='Taxi' row={newTransport} onDataChange={changes} />)
+        const names = suggestions()
+        expect(names).toContain('Innova Crysta')
+        expect(names).toContain('Tempo Traveller 17 seater')
+        expect(names.some(name => /volvo/i.test(name))).toBe(false)
+    })
+
+    test('any other name can still be typed', () => {
+        vehicles.response = undefined
+        render(<SupplierAssignmentForm type='Taxi' row={newTransport} onDataChange={changes} />)
+        fireEvent.change(screen.getByLabelText('Vehicle type'), { target: { value: 'Winger' } })
+        expect(last().details.vehicleType).toBe('Winger')
     })
 })

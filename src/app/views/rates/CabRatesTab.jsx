@@ -6,7 +6,7 @@ import CabRateTable from './CabRateTable'
 import CabRouteSheet from './CabRouteSheet'
 import { localKit } from './rateFacts'
 
-// ? the names a quote's cab field offers; a rate is found by the same name, so these are the usual ones to start from
+// ? the names a quote's cab field offers when the agency has no vehicles listed yet (a rate is found by the same name)
 const USUAL_CABS = ['Sedan', 'SUV', 'Innova', 'Innova Crysta', 'Tempo Traveller', 'Mini Bus']
 
 const SEASON_COLUMNS = [
@@ -29,7 +29,8 @@ const LOCAL_COLUMNS = [
  * day rate, and with none of those it is listed as missing.
  */
 export default function CabRatesTab({ vehicles, routes, local, cabNames, places }) {
-    const cabs = [...new Set([...cabNames, ...USUAL_CABS])]
+    // ? the card's cab names already include the agency's own vehicles (Vehicles screen); the usual ones only start an empty card
+    const cabs = cabNames.length ? cabNames : USUAL_CABS
     return (
         <Box>
             <CabRouteSheet routes={routes} cabSuggestions={cabs} places={places} />
@@ -48,7 +49,7 @@ export default function CabRatesTab({ vehicles, routes, local, cabNames, places 
                 emptyText='No day rates yet. Add what a day of local sightseeing costs in each place.'
                 noun='day rate'
             />
-            <CabDayRates vehicles={vehicles} />
+            <CabDayRates vehicles={vehicles} cabNames={cabs} />
         </Box>
     )
 }

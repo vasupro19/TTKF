@@ -35,6 +35,7 @@ const { api, dispatch, thunk, mutation, idle } = vi.hoisted(() => {
 
 vi.mock('react-redux', () => ({ useDispatch: () => dispatch, useSelector: select => select({ loading: {} }) }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
+vi.mock('@/app/store/slices/api/vehicleSlice', () => ({ useGetVehiclesQuery: () => ({ data: undefined }) }))
 vi.mock('@/app/store/slices/api/guestSlice', () => ({
     useCreateGuestDetailMutation: mutation((...args) => api.createGuest(...args)),
     useUpdateGuestDetailMutation: mutation((...args) => api.updateGuest(...args)),

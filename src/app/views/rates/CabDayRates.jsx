@@ -31,7 +31,7 @@ const USUAL_CABS = ['Sedan', 'SUV', 'Innova', 'Innova Crysta', 'Tempo Traveller'
 /**
  * What a cab costs for any other day: a day in a place that has no local-day rate above. The quote's cab type names it.
  */
-export default function CabDayRates({ vehicles }) {
+export default function CabDayRates({ vehicles, cabNames }) {
     const dispatch = useDispatch()
     const [save, { isLoading: saving }] = useSaveCabRatesMutation()
     const original = useMemo(() => vehicles.map(draftCabRow), [vehicles])
@@ -130,7 +130,7 @@ export default function CabDayRates({ vehicles }) {
                                         <Autocomplete
                                             freeSolo
                                             size='small'
-                                            options={USUAL_CABS}
+                                            options={cabNames.length ? cabNames : USUAL_CABS}
                                             inputValue={row.vehicle}
                                             onInputChange={(event, value) => update(row.key, 'vehicle', value)}
                                             renderInput={params => (
@@ -226,5 +226,6 @@ export default function CabDayRates({ vehicles }) {
 }
 
 CabDayRates.propTypes = {
-    vehicles: PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.number })).isRequired
+    vehicles: PropTypes.arrayOf(PropTypes.shape({ id: PropTypes.number })).isRequired,
+    cabNames: PropTypes.arrayOf(PropTypes.string).isRequired
 }

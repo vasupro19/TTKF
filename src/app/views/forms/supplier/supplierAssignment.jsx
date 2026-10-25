@@ -2,10 +2,7 @@ import React, { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { Box, TextField, Autocomplete, Grid, MenuItem, Typography } from '@mui/material'
 import { useGetSuppliersQuery } from '@/app/store/slices/api/supplierSlice'
-import { VEHICLE_NAMES } from '../guestDetailsForm/tripDetails'
-
-// ? the agency's vehicles — the same list as the guest's trip details; any other can be typed
-const VEHICLE_TYPES = VEHICLE_NAMES
+import useVehicles from '../../vehicles/useVehicles'
 
 const MEAL_PLANS = [
     { value: '', label: 'Not set' },
@@ -47,6 +44,8 @@ const emptyState = type => ({
  * line starts from the guest's trip details (`row.defaults`).
  */
 function SupplierAssignmentForm({ type, onDataChange, row = null }) {
+    // ? the agency's vehicles — the same list as the guest's trip details; any other can be typed
+    const { names: vehicleTypes } = useVehicles()
     const [formState, setFormState] = useState(() => emptyState(type))
 
     const { data: response, isLoading } = useGetSuppliersQuery(`type=${type}`)
@@ -212,7 +211,7 @@ function SupplierAssignmentForm({ type, onDataChange, row = null }) {
                         <Grid item xs={12}>
                             <Autocomplete
                                 freeSolo
-                                options={VEHICLE_TYPES}
+                                options={vehicleTypes}
                                 value={formState.details.vehicleType || ''}
                                 onInputChange={(e, value) => updateDetail('vehicleType', value)}
                                 renderInput={params => (
