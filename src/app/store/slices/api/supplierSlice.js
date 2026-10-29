@@ -35,7 +35,14 @@ export const supplierSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['createSuppliers']
+            // ? the list provides 'getSuppliers': a supplier just added must make it load again
+            invalidatesTags: ['getSuppliers']
+        }),
+        // ? suppliers from an Excel sheet the screen has read: `{ rows, dryRun }` → { added, skipped, problems }; a dry run saves nothing
+        importSuppliers: build.mutation({
+            query: payload => ({ url: '/suppliers/import', method: 'POST', body: payload }),
+            // ? (result, error, what was sent): a check that saves nothing leaves the list as it is
+            invalidatesTags: (result, error, sent) => (sent?.dryRun ? [] : ['getSuppliers'])
         }),
         updateSupplier: build.mutation({
             query: ({ id, ...updateData }) => {
@@ -48,13 +55,15 @@ export const supplierSlice = apiSliceConfig.injectEndpoints({
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             },
-            invalidatesTags: ['locationMaster', 'locationMasterById']
+            // ? the list, and the supplier's own form (copied from the location screens, these named other lists)
+            invalidatesTags: ['getSuppliers', 'agentMasterById']
         })
     })
 })
 
 export const {
     useCreateSuppliersMutation,
+    useImportSuppliersMutation,
     useGetSuppliersQuery,
     useUpdateSupplierMutation,
     endpoints: { getSuppliers, getSupplierById }

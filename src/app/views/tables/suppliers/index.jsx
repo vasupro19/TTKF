@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Box, IconButton, Tooltip } from '@mui/material'
 import { Edit } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
@@ -8,6 +8,7 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import useUiAccess from '@/hooks/useUiAccess'
 import { getSuppliers } from '@/app/store/slices/api/supplierSlice'
 import { headers } from './helper'
+import SupplierImport from './SupplierImport'
 
 const TYPES = [
     { value: 'Hotel', label: 'Hotels' },
@@ -20,6 +21,8 @@ function MasterSupplierTable() {
     const navigate = useNavigate()
     const hasCreateAccess = useUiAccess('create')
     const add = useCallback(() => navigate('/master/supplier/add'), [navigate])
+    // ? the list loads again after an import
+    const [reload, setReload] = useState(0)
     useKeyboardShortcut('Alt+A', () => {
         if (hasCreateAccess) add()
     })
@@ -35,6 +38,12 @@ function MasterSupplierTable() {
             reqKey='getSuppliersListKey'
             filters={FILTERS}
             csvName='suppliers'
+            reloadSignal={reload}
+            extraActions={
+                <UiAccessGuard type='create'>
+                    <SupplierImport onDone={() => setReload(count => count + 1)} />
+                </UiAccessGuard>
+            }
             canAdd
             addLabel='Add Supplier'
             onAdd={add}
