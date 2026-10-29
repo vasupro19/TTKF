@@ -35,6 +35,19 @@ const { api, dispatch, thunk, mutation, idle } = vi.hoisted(() => {
 
 vi.mock('react-redux', () => ({ useDispatch: () => dispatch, useSelector: select => select({ loading: {} }) }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
+// ? the mail themes the send dialogs offer
+vi.mock('@/app/store/slices/api/mailTemplateSlice', () => ({
+    useGetMailThemesQuery: () => ({
+        data: {
+            data: {
+                themes: [
+                    { key: 'classic', label: 'Classic', description: 'Navy on white', swatch: ['#0f4c81'] },
+                    { key: 'coastal', label: 'Coastal', description: 'A teal header band', swatch: ['#0b6e78'] }
+                ]
+            }
+        }
+    })
+}))
 vi.mock('@/app/store/slices/api/vehicleSlice', () => ({ useGetVehiclesQuery: () => ({ data: undefined }) }))
 vi.mock('@/app/store/slices/api/guestSlice', () => ({
     useCreateGuestDetailMutation: mutation((...args) => api.createGuest(...args)),

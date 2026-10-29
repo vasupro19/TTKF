@@ -97,7 +97,8 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
         shareLeadDetails: build.mutation({
             // 🚀 Use ({ leadId, quotationNo }) to pull the properties out of the object
             query: arg => {
-                const { leadId, quotationNo } = arg // Explicitly pull them out
+                // ? theme: the mail theme picked in the preview (empty: the agency's own)
+                const { leadId, quotationNo, theme } = arg // Explicitly pull them out
                 const KEY = 'shareLeadDetailsKey'
                 dispatchLoaderEvent(KEY)
 
@@ -105,6 +106,7 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
                     // Now ${leadId} will be the actual ID, not [object Object]
                     url: `/leads/share-details/${leadId}?quotationNo=${quotationNo}`,
                     method: 'POST',
+                    ...(theme ? { body: { theme } } : {}),
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
@@ -118,8 +120,8 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             })
         }),
         getLeadPreview: build.query({
-            query: ({ leadId, quoteNo }) => ({
-                url: `/leads/preview/${leadId}?quoteNo=${quoteNo}`,
+            query: ({ leadId, quoteNo, theme }) => ({
+                url: `/leads/preview/${leadId}?quoteNo=${quoteNo}${theme ? `&theme=${encodeURIComponent(theme)}` : ''}`,
                 responseHandler: async result => customResponseHandler({ result })
             }),
             providesTags: ['leadPreview']

@@ -77,6 +77,14 @@ describe('buildSections', () => {
         ])
     })
 
+    it('lists Mail templates under Setup when the API returns it', () => {
+        const sections = buildSections([
+            { id: 'master', label: 'Master', children: [item('/master/mail-templates', 'Mail templates', 'master')] }
+        ])
+        expect(shape(sections)).toEqual([['Setup', ['Mail templates']]])
+        expect(activeKeyFor('/master/mail-templates', sections)).toBe('/master/mail-templates')
+    })
+
     it('puts a screen the config does not know under its API group, with its API label', () => {
         const sections = buildSections([
             ...API_MENU,

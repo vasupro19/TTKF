@@ -33,6 +33,7 @@ import { usePaySupplierMutation } from '@/app/store/slices/api/confirmedService'
 import { useUpdateGuestPaymentMutation } from '@/app/store/slices/api/paymentSlice'
 import usePaymentDecision from '@/app/views/payments/usePaymentDecision'
 import { useGetLeadByIdQuery } from '@/app/store/slices/api/leadSlice'
+import { useGetMailThemesQuery } from '@/app/store/slices/api/mailTemplateSlice'
 import { useGetGuestByIdQuery } from '@/app/store/slices/api/guestSlice'
 import { useGetGuestTourByIdQuery } from '@/app/store/slices/api/guestTourSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
@@ -136,6 +137,9 @@ function BookingWorkspace() {
     const [sendHotelEmail] = useSendGuestHotelConfirmationEmailMutation()
     const [sendTaxiEmail] = useSendGuestTaxiConfirmationEmailMutation()
     const [downloadPdf] = useDownloadConfirmedVoucherPdfMutation()
+    // ? the themes an email can go in (picked per email in the preview); none loaded: no picker, the agency's own theme
+    const { data: themesData } = useGetMailThemesQuery()
+    const mailThemes = Array.isArray(themesData?.data?.themes) ? themesData.data.themes : []
 
     // ? `requestId`: the request this line answers, when operations adds it from one
     const [serviceForm, setServiceForm] = useState({ open: false, type: 'Hotel', row: null, requestId: null })
@@ -162,8 +166,9 @@ function BookingWorkspace() {
      *   { kind: 'supplier', id, emailKind: 'request' | 'amendment' | 'cancellation', previous, name, paid }
      *   { kind: 'receipt', paymentId }
      *   { kind: 'guestService', type: 'Hotel' | 'Taxi' }
-     * `next` is the email to show once this one is sent or skipped (after a supplier change: the cancellation to the
-     * supplier who still holds the booking).
+     * and `theme` when the agent picked a theme for it. `next` is the email to show once this one is sent or skipped (after a
+     * supplier change: the cancellation to the supplier who still holds the booking). `theme` (outside `send`) is the theme the
+     * preview came back in — the one it is sent in.
      */
     const closedMail = {
         open: false,
@@ -177,6 +182,7 @@ function BookingWorkspace() {
         note: '',
         from: '',
         fromNote: '',
+        theme: '',
         remove: false
     }
     const [mail, setMail] = useState(closedMail)
@@ -323,17 +329,19 @@ function BookingWorkspace() {
             'Couldn’t decline it.'
         )
 
+    // ? send.theme: the theme picked in the dialog; none the first time (the agency's own for that kind of email)
     const PREVIEWS = {
-        voucher: () => getConfirmedVoucherPreview.initiate(packageId, { forceRefetch: true }),
+        voucher: send => getConfirmedVoucherPreview.initiate({ packageId, theme: send.theme }, { forceRefetch: true }),
         supplier: send =>
             getSupplierEmailPreview.initiate(
-                { id: send.id, kind: send.emailKind, previous: send.previous },
+                { id: send.id, kind: send.emailKind, previous: send.previous, theme: send.theme },
                 { forceRefetch: true }
             ),
-        receipt: send => getGuestReceiptPreview.initiate(send.paymentId, { forceRefetch: true }),
+        receipt: send =>
+            getGuestReceiptPreview.initiate({ paymentId: send.paymentId, theme: send.theme }, { forceRefetch: true }),
         guestService: send =>
             getGuestServicePreview.initiate(
-                { packageId, kind: send.type === 'Hotel' ? 'hotel' : 'taxi' },
+                { packageId, kind: send.type === 'Hotel' ? 'hotel' : 'taxi', theme: send.theme },
                 { forceRefetch: true }
             )
     }
@@ -356,6 +364,8 @@ function BookingWorkspace() {
             next,
             title: titleOf(send),
             to: send.kind === 'voucher' ? lead.senderEmail || '' : '',
+            // ? the theme picked stays shown while the preview is drawn again in it
+            theme: send.theme || '',
             remove: Boolean(send.remove)
         })
         const { data, error } = await dispatch(PREVIEWS[send.kind](send))
@@ -405,8 +415,17 @@ function BookingWorkspace() {
             html: email.html || '',
             // ? who it goes from — the user's own mailbox for a guest, the supplier mailbox for a supplier
             from: email.from || '',
-            fromNote: email.fromNote || ''
+            fromNote: email.fromNote || '',
+            // ? the theme the preview is drawn in: the one that is sent
+            theme: email.theme || ''
         }))
+    }
+
+    // ? another theme for this one email: the preview is drawn again in it, and that is what goes
+    const changeMailTheme = theme => {
+        if (!mail.send || theme === mail.theme) return
+        // ? whether to take a cancelled line off the booking stays as the agent ticked it
+        openMail({ ...mail.send, theme, remove: mail.remove }, mail.next)
     }
 
     const openPreview = () => openMail({ kind: 'voucher' })
@@ -431,17 +450,22 @@ function BookingWorkspace() {
 
     const sendMail = async () => {
         const { send } = mail
+        // ? sent in the theme it was previewed in (a preview that names none: the agency's own)
+        const theme = mail.theme || undefined
+        const withTheme = (idKey, id) => (theme ? { [idKey]: id, theme } : id)
         const tasks = {
-            voucher: () => sendVoucherEmail(packageId).unwrap(),
+            voucher: () => sendVoucherEmail(withTheme('packageId', packageId)).unwrap(),
             supplier: () =>
                 sendSupplierEmail({
                     id: send.id,
                     kind: send.emailKind,
                     previous: Boolean(send.previous),
-                    remove: send.emailKind === 'cancellation' && !send.previous && mail.remove
+                    remove: send.emailKind === 'cancellation' && !send.previous && mail.remove,
+                    ...(theme ? { theme } : {})
                 }).unwrap(),
-            receipt: () => sendGuestReceipt(send.paymentId).unwrap(),
-            guestService: () => (send.type === 'Hotel' ? sendHotelEmail : sendTaxiEmail)(packageId).unwrap()
+            receipt: () => sendGuestReceipt(withTheme('paymentId', send.paymentId)).unwrap(),
+            guestService: () =>
+                (send.type === 'Hotel' ? sendHotelEmail : sendTaxiEmail)(withTheme('packageId', packageId)).unwrap()
         }
         const ok = await run('mail', tasks[send.kind], 'Email sent', 'Couldn’t send the email.')
         if (ok) closeMail()
@@ -1117,6 +1141,9 @@ function BookingWorkspace() {
                 fromNote={mail.fromNote}
                 note={mail.note}
                 extra={removeOption}
+                themes={mailThemes}
+                theme={mail.theme || ''}
+                onThemeChange={changeMailTheme}
                 onClose={closeMail}
                 onSend={sendMail}
             />

@@ -23,6 +23,7 @@ import {
     isCounted
 } from '../payments/paymentFacts'
 import { PaymentStatusChip, ProofLink } from '../payments/paymentParts'
+import ThemeSelect from '../mailTemplates/ThemeSelect'
 
 // ? read by screen readers, not shown
 const visuallyHidden = {
@@ -459,6 +460,9 @@ export function EmailPreview({
     fromNote = '',
     note = '',
     extra = null,
+    themes = [],
+    theme = '',
+    onThemeChange = null,
     onClose,
     onSend
 }) {
@@ -560,7 +564,17 @@ export function EmailPreview({
                     spacing={2}
                     sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}
                 >
-                    {extra ? <Box sx={{ flex: 1, minWidth: 0 }}>{extra}</Box> : null}
+                    {onThemeChange && themes.length ? (
+                        // ? how this one email looks: its words stay; the preview shows the theme it will go in
+                        <ThemeSelect
+                            themes={themes}
+                            value={theme}
+                            label='Email theme'
+                            disabled={loading || sending}
+                            onChange={onThemeChange}
+                        />
+                    ) : null}
+                    {extra ? <Box sx={{ flex: 1, minWidth: 0 }}>{extra}</Box> : <Box sx={{ flex: 1 }} />}
                     <Button onClick={onClose}>{closeLabel}</Button>
                     <Button
                         variant='contained'
@@ -591,6 +605,10 @@ EmailPreview.propTypes = {
     fromNote: PropTypes.string,
     note: PropTypes.string,
     extra: PropTypes.node,
+    // ? the mail themes ([{ key, label, description, swatch }]), the one shown, and what changes it — no picker without onThemeChange
+    themes: PropTypes.arrayOf(PropTypes.shape({ key: PropTypes.string.isRequired })),
+    theme: PropTypes.string,
+    onThemeChange: PropTypes.func,
     onClose: PropTypes.func.isRequired,
     onSend: PropTypes.func.isRequired
 }

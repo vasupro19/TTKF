@@ -44,6 +44,7 @@ const api = vi.hoisted(() => {
         createInvoice: call(),
         formChanges: {},
         supplierPreview: null,
+        voucherPreviews: [],
         snackbars: [],
         people: []
     }
@@ -68,7 +69,11 @@ vi.mock('react-router-dom', async importOriginal => {
 })
 vi.mock('react-redux', () => ({
     useDispatch: () => action => {
-        if (action?.type === 'preview') return Promise.resolve({ data: { data: { html: '<p>voucher</p>' } } })
+        if (action?.type === 'preview') {
+            api.voucherPreviews.push(action.arg)
+            const theme = action.arg?.theme || 'classic'
+            return Promise.resolve({ data: { data: { html: `<p>voucher in ${theme}</p>`, theme } } })
+        }
         if (action?.type === 'supplierPreview')
             return Promise.resolve(
                 typeof api.supplierPreview === 'function' ? api.supplierPreview(action.arg) : api.supplierPreview
@@ -92,6 +97,19 @@ vi.mock('react-redux', () => ({
     useSelector: select => select({ loading: {} })
 }))
 vi.mock('@app/store/slices/snackbar', () => ({ openSnackbar: payload => ({ type: 'snackbar', payload }) }))
+// ? the mail themes the send dialogs offer
+vi.mock('@/app/store/slices/api/mailTemplateSlice', () => ({
+    useGetMailThemesQuery: () => ({
+        data: {
+            data: {
+                themes: [
+                    { key: 'classic', label: 'Classic', description: 'Navy on white', swatch: ['#0f4c81'] },
+                    { key: 'coastal', label: 'Coastal', description: 'A teal header band', swatch: ['#0b6e78'] }
+                ]
+            }
+        }
+    })
+}))
 vi.mock('@/app/store/slices/api/packageConvert', () => ({
     getBookingsPage: { initiate: arg => ({ type: 'bookingsPage', arg }) },
     useGetBookingsPageQuery: args => {
@@ -114,7 +132,7 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
     useSendGuestHotelConfirmationEmailMutation: () => [api.sendHotel],
     useSendGuestTaxiConfirmationEmailMutation: () => [api.sendTaxi],
     useDownloadConfirmedVoucherPdfMutation: () => [api.downloadPdf],
-    getConfirmedVoucherPreview: { initiate: () => ({ type: 'preview' }) },
+    getConfirmedVoucherPreview: { initiate: arg => ({ type: 'preview', arg }) },
     getSupplierEmailPreview: { initiate: arg => ({ type: 'supplierPreview', arg }) },
     getGuestReceiptPreview: { initiate: arg => ({ type: 'receiptPreview', arg }) },
     getGuestServicePreview: { initiate: arg => ({ type: 'guestServicePreview', arg }) }
@@ -544,13 +562,32 @@ describe('One booking', () => {
         await waitFor(() => expect(api.deleteService).toHaveBeenCalledWith(21))
     })
 
-    test('the voucher is previewed before it is sent', async () => {
+    test('the voucher is previewed before it is sent, in the theme the preview was drawn in', async () => {
         renderBooking()
         fireEvent.click(screen.getAllByRole('button', { name: 'Preview and email' })[0])
         const send = await screen.findByRole('button', { name: 'Send to asha@example.com' })
         expect(api.sendVoucher).not.toHaveBeenCalled()
         fireEvent.click(send)
-        await waitFor(() => expect(api.sendVoucher).toHaveBeenCalledWith(1))
+        await waitFor(() => expect(api.sendVoucher).toHaveBeenCalledWith({ packageId: 1, theme: 'classic' }))
+    })
+
+    test('another theme for one email: the preview is drawn again in it, and that is what is sent', async () => {
+        api.voucherPreviews.length = 0
+        renderBooking()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Preview and email' })[0])
+        await screen.findByRole('button', { name: 'Send to asha@example.com' })
+        expect(api.voucherPreviews[0]).toEqual({ packageId: 1, theme: undefined })
+
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Email theme' }))
+        fireEvent.click(await screen.findByRole('option', { name: /Coastal/ }))
+        await waitFor(() => expect(api.voucherPreviews.at(-1)).toEqual({ packageId: 1, theme: 'coastal' }))
+        const dialog = screen.getByRole('dialog', { name: 'Booking voucher' })
+        await waitFor(() =>
+            expect(within(dialog).getByTitle('Booking voucher')).toHaveAttribute('srcdoc', '<p>voucher in coastal</p>')
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send to asha@example.com' }))
+        await waitFor(() => expect(api.sendVoucher).toHaveBeenCalledWith({ packageId: 1, theme: 'coastal' }))
     })
 
     test('a hotel’s booking request is previewed, with who it goes to and the subject, before it is sent', async () => {

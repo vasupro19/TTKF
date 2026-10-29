@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Dashboard, Email, FiberManualRecord, FolderSpecial, People } from '@mui/icons-material'
+import { Dashboard, Email, FiberManualRecord, FolderSpecial, ForwardToInbox, People } from '@mui/icons-material'
 import { menuIconFor } from './menuIcons'
 
 describe('menuIconFor', () => {
@@ -7,6 +7,7 @@ describe('menuIconFor', () => {
         expect(menuIconFor({ url: '/dashboard', icon: 'BlurOn' })).toBe(Dashboard)
         expect(menuIconFor({ url: '/master/user', icon: 'BlurOn' })).toBe(People)
         expect(menuIconFor({ url: '/integration/gmail', icon: 'Memory' })).toBe(Email)
+        expect(menuIconFor({ url: '/master/mail-templates', icon: 'BlurOn' })).toBe(ForwardToInbox)
     })
 
     it('gives the groups an icon, and an unknown screen a dot', () => {

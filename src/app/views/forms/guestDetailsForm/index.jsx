@@ -49,6 +49,8 @@ import { useGetGuestQuotesQuery, useSetGuestQuoteCampaignMutation } from '@/app/
 import { openSnackbar } from '@app/store/slices/snackbar'
 
 import { objectLength } from '@/utilities'
+import { useGetMailThemesQuery } from '@/app/store/slices/api/mailTemplateSlice'
+import ThemeSelect from '@/app/views/mailTemplates/ThemeSelect'
 import GuestTourPriceForm from './pricingTour'
 import PackageConversion from './packageConvertModal'
 import ItinerarySection from './itenarySection'
@@ -232,6 +234,9 @@ function GuestForm() {
     const [assistAi] = useAssistAiMutation()
     const { data: confirmedPackage } = useGetPackageByLeadIdQuery(leadId)
     const [shareLeadDetails, { isLoading }] = useShareLeadDetailsMutation()
+    // ? the themes the quotation can go in, picked in its preview
+    const { data: themesData } = useGetMailThemesQuery()
+    const mailThemes = Array.isArray(themesData?.data?.themes) ? themesData.data.themes : []
     const [getQuoteLink] = useGetQuoteLinkMutation()
     // ? the list is paged at 25 by default, which hid older packages from the picker
     const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery('?length=200')
@@ -908,12 +913,15 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
     // ? who the quotation goes from: the signed-in user's mailbox, and why when it is another
     const [previewFrom, setPreviewFrom] = useState({ from: '', fromNote: '' })
     const [loadingPreview, setLoadingPreview] = useState(false)
+    // ? the theme the preview is drawn in — the one the quotation is sent in
+    const [previewTheme, setPreviewTheme] = useState('')
 
     const handleShare = async () => {
         try {
             await shareLeadDetails({
                 leadId,
-                quotationNo: currentQuoteNo
+                quotationNo: currentQuoteNo,
+                theme: previewTheme || undefined
             }).unwrap()
 
             setPreviewOpen(false)
@@ -982,14 +990,23 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
         }
     }
 
-    const handlePreview = async () => {
+    // ? picked: a theme chosen in the preview; on opening (a button's click) none — the agency's own for quotations
+    const handlePreview = async picked => {
+        const theme = typeof picked === 'string' ? picked : ''
         setLoadingPreview(true)
         setPreviewOpen(true)
+        setPreviewTheme(theme)
         try {
-            const { data } = await dispatch(getLeadPreview.initiate({ leadId, quoteNo: currentQuoteNo }))
+            const { data } = await dispatch(
+                getLeadPreview.initiate(
+                    { leadId, quoteNo: currentQuoteNo, theme: theme || undefined },
+                    { forceRefetch: true }
+                )
+            )
             setPreviewHtml(data?.data?.html || '')
             setPreviewSubject(data?.data?.subject || '')
             setPreviewFrom({ from: data?.data?.from || '', fromNote: data?.data?.fromNote || '' })
+            setPreviewTheme(data?.data?.theme || theme || '')
         } catch (err) {
             notify('Failed to load preview', 'error')
             setPreviewOpen(false)
@@ -1250,11 +1267,23 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                             borderTop: '1px solid',
                             borderColor: 'divider',
                             display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
                             justifyContent: 'flex-end',
                             gap: 2,
                             '& .MuiButton-root': { textTransform: 'none' }
                         }}
                     >
+                        {mailThemes.length ? (
+                            <ThemeSelect
+                                themes={mailThemes}
+                                value={previewTheme}
+                                label='Email theme'
+                                disabled={loadingPreview || isLoading}
+                                onChange={theme => theme !== previewTheme && handlePreview(theme)}
+                                sx={{ mr: 'auto' }}
+                            />
+                        ) : null}
                         <Button variant='text' onClick={() => setPreviewOpen(false)}>
                             Cancel
                         </Button>

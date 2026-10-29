@@ -2,6 +2,12 @@ import { customResponseHandler, dispatchLoaderEvent } from '@store/helpers'
 import { toFormData } from '@/app/views/payments/paymentFacts'
 import { apiSliceConfig } from './configSlice'
 
+// ? an email call's argument: the record's id, or `{ [idKey]: id, theme }` — theme is a mail theme's key (Helpers/mailTheme.helper.js),
+// ? empty for the agency's own choice
+const withTheme = (arg, idKey = 'id') => (arg && typeof arg === 'object' ? arg : { [idKey]: arg })
+const themeQuery = theme => (theme ? `?theme=${encodeURIComponent(theme)}` : '')
+const themeBody = theme => (theme ? { body: { theme } } : {})
+
 export const bookingSlice = apiSliceConfig.injectEndpoints({
     endpoints: build => ({
         // === GET CONFIRMED BOOKING BY LEAD ID ===
@@ -167,14 +173,16 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
             // ? a cancellation can take the line off the booking
             invalidatesTags: ['ServiceList', 'confirmedBooking']
         }),
-        // ? the guest's receipt for one payment, once the agent has seen it
+        // ? the guest's receipt for one payment, once the agent has seen it: the payment's id, or `{ paymentId, theme }`
         sendGuestReceipt: build.mutation({
-            query: paymentId => {
+            query: arg => {
+                const { paymentId, theme } = withTheme(arg, 'paymentId')
                 const KEY = 'sendGuestReceiptKey'
                 dispatchLoaderEvent(KEY)
                 return {
                     url: `/package/guest-payment/${paymentId}/receipt`,
                     method: 'POST',
+                    ...themeBody(theme),
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
@@ -198,44 +206,50 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 'confirmedBooking'
             ]
         }),
+        // ? the booking's id, or `{ packageId, theme }`
         sendVoucherEmail: build.mutation({
-            query: packageId => ({
-                url: `/package/send-email/${packageId}`,
-                method: 'POST'
-            }),
+            query: arg => {
+                const { packageId, theme } = withTheme(arg, 'packageId')
+                return { url: `/package/send-email/${packageId}`, method: 'POST', ...themeBody(theme) }
+            },
             // ? the booking becomes "Voucher Sent"
             invalidatesTags: ['confirmedBooking', 'ConfirmedPackage']
         }),
         sendGuestHotelConfirmationEmail: build.mutation({
-            query: packageId => {
+            query: arg => {
+                const { packageId, theme } = withTheme(arg, 'packageId')
                 const KEY = 'sendGuestHotelConfirmationEmailKey'
                 dispatchLoaderEvent(KEY)
                 return {
                     url: `/package/send-email/${packageId}/hotel`,
                     method: 'POST',
+                    ...themeBody(theme),
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
         }),
         sendGuestTaxiConfirmationEmail: build.mutation({
-            query: packageId => {
+            query: arg => {
+                const { packageId, theme } = withTheme(arg, 'packageId')
                 const KEY = 'sendGuestTaxiConfirmationEmailKey'
                 dispatchLoaderEvent(KEY)
                 return {
                     url: `/package/send-email/${packageId}/taxi`,
                     method: 'POST',
+                    ...themeBody(theme),
                     responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
                 }
             }
         }),
         // ? the booking request, amendment or cancellation to a hotel or transporter, exactly as it will be emailed:
-        // ? `{ id, kind, previous }` (previous: to the supplier the line had before) — or just the line's id
+        // ? `{ id, kind, previous, theme }` (previous: to the supplier the line had before) — or just the line's id
         getSupplierEmailPreview: build.query({
             query: arg => {
-                const { id, kind, previous } = typeof arg === 'object' ? arg : { id: arg }
+                const { id, kind, previous, theme } = typeof arg === 'object' ? arg : { id: arg }
                 const params = new URLSearchParams()
                 if (kind) params.set('kind', kind)
                 if (previous) params.set('previous', '1')
+                if (theme) params.set('theme', theme)
                 const search = params.toString()
                 return {
                     url: `/package/supplier/email/${id}/preview${search ? `?${search}` : ''}`,
@@ -244,25 +258,26 @@ export const bookingSlice = apiSliceConfig.injectEndpoints({
                 }
             }
         }),
-        // ? the receipt for one guest payment, exactly as it will be emailed
+        // ? the receipt for one guest payment, exactly as it will be emailed: the payment's id, or `{ paymentId, theme }`
         getGuestReceiptPreview: build.query({
-            query: paymentId => ({
-                url: `/package/guest-payment/${paymentId}/receipt/preview`,
+            query: arg => ({
+                url: `/package/guest-payment/${withTheme(arg, 'paymentId').paymentId}/receipt/preview${themeQuery(withTheme(arg).theme)}`,
                 method: 'GET',
                 responseHandler: async result => customResponseHandler({ result })
             })
         }),
         // ? the guest's hotel ('hotel') or transport ('taxi') details, exactly as they will be emailed
         getGuestServicePreview: build.query({
-            query: ({ packageId, kind }) => ({
-                url: `/package/preview/${packageId}/${kind}`,
+            query: ({ packageId, kind, theme }) => ({
+                url: `/package/preview/${packageId}/${kind}${themeQuery(theme)}`,
                 method: 'GET',
                 responseHandler: async result => customResponseHandler({ result })
             })
         }),
+        // ? the booking's id, or `{ packageId, theme }`
         getConfirmedVoucherPreview: build.query({
-            query: packageId => ({
-                url: `/package/preview/${packageId}`,
+            query: arg => ({
+                url: `/package/preview/${withTheme(arg, 'packageId').packageId}${themeQuery(withTheme(arg).theme)}`,
                 method: 'GET',
                 responseHandler: async result => customResponseHandler({ result })
             }),
