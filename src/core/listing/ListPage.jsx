@@ -138,8 +138,9 @@ function ListPage({
         )
     }
 
+    // ? always the server's answer, never what a list loaded earlier: a row added or changed since is there
     const fetchList = async query => {
-        const { data: response } = await dispatch(endpoint.initiate(query, false))
+        const { data: response } = await dispatch(endpoint.initiate(query, { forceRefetch: true }))
         return response
     }
 

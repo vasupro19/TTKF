@@ -183,6 +183,13 @@ export const payDate = value => {
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
 }
 
+/** @description a payment date as a Date, for an Excel cell (the day, as payDate shows it); '' when there is none */
+export const payDay = value => {
+    if (!value) return ''
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? '' : date
+}
+
 /** @description for an <input type='date'> */
 export const isoDay = value => {
     if (!value) return ''

@@ -4,8 +4,18 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import GuestPaymentModal from '@/core/components/modals/GuestPaymentModal'
 import SupplierPaymentModal from '@/core/components/modals/SupplierPaymentModal'
 import GuestPaymentsTab from './GuestPaymentsTab'
+import SupplierPaymentsTab from './SupplierPaymentsTab'
 
-const api = vi.hoisted(() => ({ args: [], response: null, verify: null, reject: null, reverse: null, readProof: null }))
+const api = vi.hoisted(() => ({
+    args: [],
+    response: null,
+    supplierResponse: null,
+    verify: null,
+    reject: null,
+    reverse: null,
+    readProof: null,
+    excel: []
+}))
 
 vi.mock('react-redux', () => ({ useDispatch: () => action => action, useSelector: select => select({}) }))
 vi.mock('@/app/guards/UiPermissionGuard', () => ({ default: ({ children }) => children }))
@@ -25,10 +35,20 @@ vi.mock('@/app/store/slices/api/paymentSlice', () => ({
         return { data: api.response, error: null, isFetching: false }
     },
     getGuestPayments: { initiate: () => ({ unwrap: () => Promise.resolve(api.response) }) },
+    useGetSupplierPaymentsQuery: () => ({ data: api.supplierResponse, error: null, isFetching: false }),
+    getSupplierPayments: { initiate: () => ({ unwrap: () => Promise.resolve(api.supplierResponse) }) },
     useVerifyGuestPaymentMutation: () => [api.verify, { isLoading: false }],
     useRejectGuestPaymentMutation: () => [api.reject, { isLoading: false }],
     useReverseGuestPaymentMutation: () => [api.reverse, { isLoading: false }],
     useReadPaymentProofMutation: () => [api.readProof]
+}))
+
+// ? the Excel file is not written here: what would go into it is kept, to be read
+vi.mock('@/core/listing/excelFacts', async importOriginal => ({
+    ...(await importOriginal()),
+    downloadExcel: vi.fn(async (sheets, name) => {
+        api.excel.push({ sheets, name })
+    })
 }))
 
 const ok = message => vi.fn(() => ({ unwrap: () => Promise.resolve({ message }) }))
@@ -453,5 +473,106 @@ describe('the form starts with the screenshot', () => {
         expect(screen.getByText('Start with the payment screenshot')).toBeInTheDocument()
         expect(before(screen.getByLabelText('Payment proof'), screen.getByLabelText('Amount Paid'))).toBe(true)
         expect(screen.getByText(/Attach the screenshot above first/)).toBeInTheDocument()
+    })
+})
+
+describe('Transactions — Excel downloads', () => {
+    const download = async (menuItem, tab) => {
+        fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+        fireEvent.click(await screen.findByText(menuItem))
+        await waitFor(() => expect(api.excel.length).toBeGreaterThan(0))
+        return api.excel[api.excel.length - 1]
+    }
+    const TODAY = /\d{4}-\d{2}-\d{2}\.xlsx?$|\d{4}-\d{2}-\d{2}$/
+
+    beforeEach(() => {
+        api.excel = []
+        api.supplierResponse = {
+            data: {
+                rows: [
+                    {
+                        id: 3,
+                        paymentDate: '2026-10-20T00:00:00.000Z',
+                        amount: '9000.50',
+                        paymentMethod: 'Bank Transfer',
+                        transactionId: '412345678901',
+                        recordedByName: 'Meera',
+                        bookingNo: 'TTK-B-261005-001',
+                        guestName: 'Asha Verma',
+                        supplierName: 'Hotel Snowline',
+                        service: { type: 'Hotel' },
+                        hasProof: true,
+                        proofName: 'imps.png'
+                    }
+                ],
+                recordsTotal: 1,
+                page: 1,
+                pageSize: 25
+            }
+        }
+    })
+
+    test('guest payments: what is on screen as an Excel file — the ID as text, the amount a number, the date a date', async () => {
+        renderTab()
+        const { sheets, name } = await download('Current View')
+        expect(name).toMatch(/^Guest payments - Awaiting verification - /)
+        expect(name).toMatch(TODAY)
+        const [{ name: sheet, data }] = sheets
+        expect(sheet).toBe('Guest payments')
+        expect(data[0]).toEqual(
+            expect.arrayContaining(['Date', 'Booking', 'Guest', 'Amount', 'Method', 'Transaction ID', 'Status'])
+        )
+        const headings = data[0]
+        const row = data[1]
+        expect(row[headings.indexOf('Transaction ID')]).toBe('UTR777')
+        expect(row[headings.indexOf('Amount')]).toBe(12000)
+        expect(row[headings.indexOf('Date')]).toEqual({ t: 'n', v: 46300, z: 'dd-mmm-yyyy' })
+        expect(row[headings.indexOf('Guest')]).toBe('Asha Verma')
+    })
+
+    test('guest payments: "Export All" asks for every payment that matches and downloads them all', async () => {
+        renderTab()
+        const { name, sheets } = await download('Export All')
+        expect(name).toMatch(/^Guest payments - Awaiting verification - all - /)
+        expect(sheets[0].data).toHaveLength(2)
+    })
+
+    test('guest payments: nothing to export says so and writes no file', async () => {
+        respond([])
+        const notify = vi.fn()
+        renderTab(notify)
+        fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+        fireEvent.click(await screen.findByText('Current View'))
+        await waitFor(() => expect(notify).toHaveBeenCalledWith('Nothing to export for these filters.', 'warning'))
+        expect(api.excel).toHaveLength(0)
+    })
+
+    test('a file that cannot be made is said, not lost', async () => {
+        const { downloadExcel } = await import('@/core/listing/excelFacts')
+        downloadExcel.mockRejectedValueOnce(new Error('no library'))
+        const notify = vi.fn()
+        renderTab(notify)
+        fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+        fireEvent.click(await screen.findByText('Current View'))
+        await waitFor(() => expect(notify).toHaveBeenCalledWith('Couldn’t make the Excel file.', 'error'))
+    })
+
+    test('supplier payments: the same, with the supplier and the service', async () => {
+        render(
+            <MemoryRouter initialEntries={['/']}>
+                <SupplierPaymentsTab notify={vi.fn()} />
+            </MemoryRouter>
+        )
+        const { sheets, name } = await download('Current View')
+        expect(name).toMatch(/^Supplier payments - /)
+        const [{ name: sheet, data }] = sheets
+        expect(sheet).toBe('Supplier payments')
+        const headings = data[0]
+        const row = data[1]
+        expect(row[headings.indexOf('Supplier')]).toBe('Hotel Snowline')
+        expect(row[headings.indexOf('Service')]).toBe('Hotel')
+        expect(row[headings.indexOf('Amount')]).toBe(9000.5)
+        expect(row[headings.indexOf('Transaction ID')]).toBe('412345678901')
+        expect(row[headings.indexOf('Date')].z).toBe('dd-mmm-yyyy')
     })
 })

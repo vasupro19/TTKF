@@ -1,6 +1,6 @@
 import { Link as RouterLink } from 'react-router-dom'
 import { Button, Link, Stack, Tooltip } from '@mui/material'
-import { amountOf, canReverse, canVerify, payDate, rupees, statusLabel } from './paymentFacts'
+import { amountOf, canReverse, canVerify, payDate, payDay, rupees, statusLabel } from './paymentFacts'
 import { DuplicateWarning, PaymentStatusChip, ProofLink } from './paymentParts'
 
 const proofText = row => (row.hasProof ? row.proofName || 'Attached' : 'None')
@@ -9,7 +9,8 @@ const dash = value => value || '—'
 
 /**
  * The guest payments table: each column says how it is drawn (`render(row, { canDecide, decide })`) and how it is
- * written to CSV (`csv(row)`). `visible: false` columns start hidden and can be picked.
+ * written to CSV (`csv(row)`) and to Excel (`excel(row)`, a real date or number where the cell should be one). `visible: false`
+ * columns start hidden and can be picked.
  */
 export const GUEST_COLUMNS = [
     {
@@ -17,7 +18,8 @@ export const GUEST_COLUMNS = [
         label: 'Date',
         nowrap: true,
         render: row => payDate(row.paymentDate),
-        csv: row => payDate(row.paymentDate)
+        csv: row => payDate(row.paymentDate),
+        excel: row => payDay(row.paymentDate)
     },
     {
         key: 'bookingNo',
@@ -141,7 +143,8 @@ export const SUPPLIER_COLUMNS = [
         label: 'Date',
         nowrap: true,
         render: row => payDate(row.paymentDate),
-        csv: row => payDate(row.paymentDate)
+        csv: row => payDate(row.paymentDate),
+        excel: row => payDay(row.paymentDate)
     },
     {
         key: 'bookingNo',

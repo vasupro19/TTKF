@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 // MUI Imports
 import { Box, Stack, IconButton, Tooltip, Typography, Chip, TextField, Divider } from '@mui/material'
-import { Edit, AccountBalanceWallet, Hotel, LocalTaxi, FilterAltOff } from '@mui/icons-material'
+import { AccountBalanceWallet, FileDownload, Hotel, LocalTaxi, FilterAltOff } from '@mui/icons-material'
 
 // Project Core Components
 import MainCard from '@core/components/extended/MainCard'
@@ -25,7 +25,8 @@ import {
 } from '@/app/store/slices/api/confirmedService' // Adjust based on your actual slice path
 
 import { TOGGLE_ALL } from '@/constants'
-import { ledgerHeaders } from './helper'
+import { downloadExcel, fileDay, sheetOfShown } from '@/core/listing/excelFacts'
+import { ledgerExcelColumns, ledgerHeaders } from './helper'
 import SupplierPaymentModal from '../../../../core/components/modals/SupplierPaymentModal'
 
 function ServiceLedgerTable() {
@@ -108,6 +109,36 @@ function ServiceLedgerTable() {
         }
     }
 
+    // ? everything the ledger holds for the search on screen, as an Excel file (it is not paged)
+    const exportExcel = async () => {
+        if (!services.length) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Nothing to export.',
+                    variant: 'alert',
+                    alert: { color: 'warning' }
+                })
+            )
+            return
+        }
+        try {
+            await downloadExcel(
+                [{ name: 'What suppliers are owed', data: sheetOfShown(services, ledgerExcelColumns(columns)) }],
+                `Supplier balances - ${fileDay()}`
+            )
+        } catch (error) {
+            dispatch(
+                openSnackbar({
+                    open: true,
+                    message: 'Couldn’t make the Excel file.',
+                    variant: 'alert',
+                    alert: { color: 'error' }
+                })
+            )
+        }
+    }
+
     const handleCheckToggle = key => {
         setColumns(
             columns.map(item =>
@@ -139,6 +170,9 @@ function ServiceLedgerTable() {
                     )}
                     <CustomSearchTextField search={search} setSearch={setSearch} placeholder='Search Suppliers...' />
                     <ToggleColumns columns={columns} handler={handleCheckToggle} />
+                    <CustomButton variant='outlined' startIcon={<FileDownload />} onClick={exportExcel}>
+                        Excel
+                    </CustomButton>
                 </Stack>
             </Box>
 

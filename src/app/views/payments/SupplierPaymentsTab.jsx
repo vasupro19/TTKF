@@ -3,8 +3,7 @@ import PropTypes from 'prop-types'
 import { useDispatch } from 'react-redux'
 import { Alert, Box, Stack, TablePagination, Typography } from '@mui/material'
 import ListEmptyState from '@/core/listing/ListEmptyState'
-import { downloadCsv } from '@/core/listing/listingFacts'
-import { csvOfShown } from '@/core/listing/screenFacts'
+import { downloadExcel, fileDay, sheetOfShown } from '@/core/listing/excelFacts'
 import { getSupplierPayments, useGetSupplierPaymentsQuery } from '@/app/store/slices/api/paymentSlice'
 import { SUPPLIER_METHODS, errorText, rupees } from './paymentFacts'
 import { SUPPLIER_COLUMNS } from './paymentColumns'
@@ -39,9 +38,20 @@ function SupplierPaymentsTab({ notify }) {
         supplier: true
     })
 
-    const exportCurrent = () => {
+    // ? an Excel file: transaction IDs stay whole text, amounts are numbers, dates are dates
+    const saveExcel = (payments, name) =>
+        downloadExcel(
+            [{ name: 'Supplier payments', data: sheetOfShown(payments, list.columns) }],
+            `${name} - ${fileDay()}`
+        )
+
+    const exportCurrent = async () => {
         if (!rows.length) return notify('Nothing to export for these filters.', 'warning')
-        return downloadCsv(csvOfShown(rows, list.columns), 'Supplier payments.csv')
+        try {
+            return await saveExcel(rows, 'Supplier payments')
+        } catch (exportError) {
+            return notify('Couldn’t make the Excel file.', 'error')
+        }
     }
 
     const exportAll = async () => {
@@ -58,7 +68,7 @@ function SupplierPaymentsTab({ notify }) {
                 notify('Nothing to export for these filters.', 'warning')
                 return
             }
-            downloadCsv(csvOfShown(everything, list.columns), 'Supplier payments - all.csv')
+            await saveExcel(everything, 'Supplier payments - all')
             if ((response?.data?.recordsTotal || 0) > everything.length)
                 notify(`Exported the first ${everything.length} payments — narrow the dates for the rest.`, 'warning')
         } catch (exportError) {

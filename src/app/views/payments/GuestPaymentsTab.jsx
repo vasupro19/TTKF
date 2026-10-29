@@ -3,8 +3,7 @@ import PropTypes from 'prop-types'
 import { useDispatch } from 'react-redux'
 import { Alert, Box, Stack, Tab, TablePagination, Tabs, Typography } from '@mui/material'
 import ListEmptyState from '@/core/listing/ListEmptyState'
-import { downloadCsv } from '@/core/listing/listingFacts'
-import { csvOfShown } from '@/core/listing/screenFacts'
+import { downloadExcel, fileDay, sheetOfShown } from '@/core/listing/excelFacts'
 import { getGuestPayments, useGetGuestPaymentsQuery } from '@/app/store/slices/api/paymentSlice'
 import { GUEST_METHODS, PAYMENT_STATUSES, errorText, rupees, summaryTotal } from './paymentFacts'
 import { GUEST_COLUMNS } from './paymentColumns'
@@ -49,9 +48,20 @@ function GuestPaymentsTab({ notify }) {
         anyPayments: all.count > 0
     })
 
-    const exportCurrent = () => {
+    // ? an Excel file: transaction IDs stay whole text, amounts are numbers, dates are dates
+    const saveExcel = (payments, name) =>
+        downloadExcel(
+            [{ name: 'Guest payments', data: sheetOfShown(payments, list.columns) }],
+            `${name} - ${fileDay()}`
+        )
+
+    const exportCurrent = async () => {
         if (!rows.length) return notify('Nothing to export for these filters.', 'warning')
-        return downloadCsv(csvOfShown(rows, list.columns), `Guest payments - ${statusLabel}.csv`)
+        try {
+            return await saveExcel(rows, `Guest payments - ${statusLabel}`)
+        } catch (exportError) {
+            return notify('Couldn’t make the Excel file.', 'error')
+        }
     }
 
     // ? every matching payment, up to the cap the server allows in one go
@@ -69,7 +79,7 @@ function GuestPaymentsTab({ notify }) {
                 notify('Nothing to export for these filters.', 'warning')
                 return
             }
-            downloadCsv(csvOfShown(everything, list.columns), `Guest payments - ${statusLabel} - all.csv`)
+            await saveExcel(everything, `Guest payments - ${statusLabel} - all`)
             if ((response?.data?.recordsTotal || 0) > everything.length)
                 notify(`Exported the first ${everything.length} payments — narrow the dates for the rest.`, 'warning')
         } catch (exportError) {
