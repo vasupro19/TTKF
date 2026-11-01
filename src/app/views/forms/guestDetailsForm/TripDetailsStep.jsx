@@ -17,6 +17,7 @@ import {
     validateTripDetails
 } from './tripDetails'
 import useVehicles from '../../vehicles/useVehicles'
+import PlacesField from '../leads/PlacesField'
 
 const formikShape = PropTypes.shape({
     values: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
@@ -157,7 +158,22 @@ VehicleSelect.propTypes = { formik: formikShape.isRequired }
  * Step 1 after a lead is verified: the trip in a few answers. Adults and the start date are the only
  * required ones — enough to quote — and the rest waits behind "More details" until the guest says it.
  */
-function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error = '', enquiry = '' }) {
+// ? one empty list for every render: a new [] each time would reset the places the agent is typing
+const NO_PLACES = []
+
+function TripDetailsStep({
+    initialValues,
+    isNew,
+    onSave,
+    saving = false,
+    error = '',
+    enquiry = '',
+    places: savedPlaces = NO_PLACES,
+    placeOptions = []
+}) {
+    // ? the places the guest wants, saved on the lead with the trip details
+    const [places, setPlaces] = useState(savedPlaces)
+    useEffect(() => setPlaces(savedPlaces), [savedPlaces])
     const [showMore, setShowMore] = useState(() => hasMoreDetails(initialValues))
     // ? rooms follow the party size (two adults to a room) until the agent sets them
     const [roomsSetByAgent, setRoomsSetByAgent] = useState(() => filled(initialValues.rooms))
@@ -167,7 +183,7 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
         enableReinitialize: true,
         validate: validateTripDetails,
         validateOnChange: false,
-        onSubmit: values => onSave(values)
+        onSubmit: values => onSave(values, places)
     })
 
     useEffect(() => {
@@ -265,6 +281,16 @@ function TripDetailsStep({ initialValues, isNew, onSave, saving = false, error =
                 </Box>
 
                 <Box>
+                    <SectionTitle optional>Where to</SectionTitle>
+                    <PlacesField
+                        value={places}
+                        onChange={setPlaces}
+                        options={placeOptions}
+                        helperText='The places the guest wants, in order. “Create package with AI” plans from these.'
+                    />
+                </Box>
+
+                <Box>
                     <SectionTitle optional>Stay</SectionTitle>
                     <Stack spacing={2.5}>
                         <Choice formik={formik} name='packageType' label='Hotel category' options={HOTEL_CATEGORIES} />
@@ -353,7 +379,9 @@ TripDetailsStep.propTypes = {
     onSave: PropTypes.func.isRequired,
     saving: PropTypes.bool,
     error: PropTypes.string,
-    enquiry: PropTypes.string
+    enquiry: PropTypes.string,
+    places: PropTypes.arrayOf(PropTypes.shape({ name: PropTypes.string, nights: PropTypes.number })),
+    placeOptions: PropTypes.arrayOf(PropTypes.shape({ name: PropTypes.string, group: PropTypes.string }))
 }
 
 export default TripDetailsStep

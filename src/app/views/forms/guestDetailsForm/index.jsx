@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 
 // router
 import { useParams, useLocation } from 'react-router-dom'
@@ -31,6 +31,7 @@ import {
     useShareLeadDetailsMutation,
     useGetQuoteLinkMutation,
     useGetLeadByIdQuery,
+    useUpdateLeadPlacesMutation,
     getLeadPreview
 } from '@/app/store/slices/api/leadSlice'
 import { useAssistAiMutation, useGetTravelImagesQuery } from '@/app/store/slices/api/aiSlice'
@@ -57,6 +58,8 @@ import ItinerarySection from './itenarySection'
 import QuoteJourney from './quote/QuoteJourney'
 import { quoteStageKey, whatsAppMessage } from './quote/quoteStatus'
 import TripDetailsStep from './TripDetailsStep'
+import { cleanPlaces, placeOptions, samePlaces } from '../leads/places'
+import AiPackageDialog from './AiPackageDialog'
 import DayEditor from './quote/DayEditor'
 import { emptyTripDetails, fromGuestDetail, toGuestPayload, tripSummary } from './tripDetails'
 import { byOrder, campaignOfDays, reorderDays, stayBreakdown } from './quote/quoteDays'
@@ -167,6 +170,13 @@ function GuestForm() {
 
     // --- Step 1: trip details ---
 
+    const { data: leadData, refetch: refetchLead } = useGetLeadByIdQuery(leadId)
+    // ? kept by what the places say, not by the object: a refetch with the same places must not reset what is typed
+    const leadPlacesKey = JSON.stringify(cleanPlaces(leadData?.data?.places))
+    const leadPlaces = useMemo(() => JSON.parse(leadPlacesKey), [leadPlacesKey])
+    // ? every place the agency has saved, to suggest while typing the guest's places (the quote's trip first)
+    const { data: allPlaces } = useGetDestinationClientsQuery('?length=500')
+
     const [guestId, setGuestId] = useState(null)
     const [tripValues, setTripValues] = useState(emptyTripDetails)
     const [loadingTrip, setLoadingTrip] = useState(true)
@@ -197,7 +207,20 @@ function GuestForm() {
         }
     }, [leadId, dispatch])
 
-    const saveTripDetails = async values => {
+    // ? the places the guest wants are kept on the lead: saved with the trip details, and from "Create package with AI"
+    const [updateLeadPlaces] = useUpdateLeadPlacesMutation()
+    const savePlaces = async places => {
+        if (samePlaces(places, leadPlaces)) return true
+        try {
+            await updateLeadPlaces({ id: Number(leadId), places: cleanPlaces(places) }).unwrap()
+            return true
+        } catch (error) {
+            notify(errorText(error, 'The places couldn’t be saved.'), 'warning')
+            return false
+        }
+    }
+
+    const saveTripDetails = async (values, places) => {
         setSavingTrip(true)
         setTripError('')
         try {
@@ -208,6 +231,7 @@ function GuestForm() {
             const saved = response?.data || {}
             setGuestId(saved.id || guestId)
             setTripValues(fromGuestDetail({ ...payload, ...saved }))
+            if (places) await savePlaces(places)
             notify(guestId ? 'Trip details updated' : 'Trip details saved — now build the itinerary')
             setActiveTab(1)
         } catch (error) {
@@ -240,11 +264,13 @@ function GuestForm() {
     const [getQuoteLink] = useGetQuoteLinkMutation()
     // ? the list is paged at 25 by default, which hid older packages from the picker
     const { data: packages = [], isLoading: loadingPackages } = useGetAllPackagesClientQuery('?length=200')
-    const { data: leadData, refetch: refetchLead } = useGetLeadByIdQuery(leadId)
 
     const [quoteDays, setQuoteDays] = useState([])
     const [loadingDays, setLoadingDays] = useState(false)
     const [applyingPackage, setApplyingPackage] = useState(false)
+    // ? "Create package with AI", and the quote whose rate-card prices open once its AI days are in
+    const [aiPackageOpen, setAiPackageOpen] = useState(false)
+    const [ratesForQuote, setRatesForQuote] = useState(null)
     const [availableQuotes, setAvailableQuotes] = useState([])
     const [currentQuoteNo, setCurrentQuoteNo] = useState(
         location.state?.convertedQuoteNo || 1 // ← default to converted quote, not 1
@@ -344,9 +370,11 @@ function GuestForm() {
         }
     }
 
-    const applyPackage = async pkg => {
-        const itenaryList = (pkg?.packageItenaries || []).map(item => ({
+    // ? `descriptions`: the text written for this guest, day by day (an AI package); otherwise each saved day's own
+    const applyPackage = async (pkg, descriptions = []) => {
+        const itenaryList = (pkg?.packageItenaries || []).map((item, index) => ({
             title: item.title,
+            ...(descriptions[index] ? { description: descriptions[index] } : {}),
             itenaryId: item.itenary?.id || item.itenaryId || '',
             image: item.image || '',
             destinationId: item?.destination?.id || item.destinationId || '',
@@ -355,17 +383,32 @@ function GuestForm() {
         }))
         if (!itenaryList.length) {
             notify('That package has no days yet.', 'warning')
-            return
+            return false
         }
         setApplyingPackage(true)
         try {
             await createTour({ leadId, itenaryList }).unwrap()
             await loadDays()
             notify(`Quote ${currentQuoteNo} now has the ${itenaryList.length} days of “${pkg.name}”`)
+            return true
         } catch (error) {
             notify(errorText(error, 'Couldn’t add the package’s days.'), 'error')
+            return false
         } finally {
             setApplyingPackage(false)
+        }
+    }
+
+    // ? the AI's package is saved for the trip; its days, written for this guest, go on the quote, then the price check
+    const handleAiPackage = async (pkg, days) => {
+        if (
+            await applyPackage(
+                pkg,
+                days.map(day => day.description)
+            )
+        ) {
+            setAiPackageOpen(false)
+            setRatesForQuote(currentQuoteNo)
         }
     }
 
@@ -1082,6 +1125,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                 {activeTab === 0 && !loadingTrip ? (
                     <TripDetailsStep
                         enquiry={leadData?.data?.message || ''}
+                        places={leadPlaces}
+                        placeOptions={placeOptions(allPlaces?.data, currentCampaignId || leadCampaignId)}
                         initialValues={tripValues}
                         isNew={!guestId}
                         onSave={saveTripDetails}
@@ -1113,6 +1158,7 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                         loadingPackages={loadingPackages}
                         applyingPackage={applyingPackage}
                         onApplyPackage={applyPackage}
+                        onCreateWithAi={() => setAiPackageOpen(true)}
                         onAddDay={openNewDay}
                         onEditDay={onEditItem}
                         onDeleteDay={handleDeleteDay}
@@ -1124,6 +1170,8 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                                 activeTab={activeTab}
                                 guestCategory={tripValues.packageType}
                                 people={headCount(tripValues)}
+                                openRates={ratesForQuote === currentQuoteNo}
+                                onRatesOpened={() => setRatesForQuote(null)}
                             />
                         }
                         priceData={price?.data || null}
@@ -1141,6 +1189,21 @@ Need description: ${shouldFillDescription ? 'yes' : 'no'}`
                     />
                 ) : null}
             </Box>
+
+            <AiPackageDialog
+                open={aiPackageOpen}
+                onClose={() => setAiPackageOpen(false)}
+                tripValues={tripValues}
+                region={campaignTitle(currentCampaignId)}
+                campaignId={currentCampaignId || null}
+                enquiry={leadData?.data?.message || ''}
+                places={leadPlaces}
+                placeOptions={placeOptions(allPlaces?.data, currentCampaignId)}
+                onSavePlaces={savePlaces}
+                replacingDays={currentDays.length}
+                quoteNo={currentQuoteNo}
+                onCreated={handleAiPackage}
+            />
 
             <DayEditor
                 open={openItenaryModal}

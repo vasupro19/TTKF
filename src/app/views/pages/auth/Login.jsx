@@ -17,7 +17,12 @@ import {
 } from '@mui/material'
 import { ArrowRight, Check, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useLoginMutation, useLazyGetMenuQuery } from '@app/store/slices/api/authApiSlice'
+import {
+    useLoginMutation,
+    useLazyGetMenuQuery,
+    useLoginWithCodeMutation,
+    useRequestLoginCodeMutation
+} from '@app/store/slices/api/authApiSlice'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import { setUserDetails, setMenuItems } from '@app/store/slices/auth'
 import { beginSignIn, markSignedIn } from '@app/store/session'
@@ -38,11 +43,18 @@ export default function Login() {
     const navigate = useNavigate()
     const dispatch = useDispatch()
     const [login] = useLoginMutation()
+    const [requestLoginCode] = useRequestLoginCodeMutation()
+    const [loginWithCode] = useLoginWithCodeMutation()
     const [, setToken] = useLocalStorage(LOCAL_STORAGE_KEYS.token, null)
     const [showPassword, setShowPassword] = useState(false)
     const [triggerMenu] = useLazyGetMenuQuery()
     const [showJobForm, setShowJobForm] = useState(false)
     const [showJobStatus, setShowJobStatus] = useState(false)
+    // ? 'password', or 'code': a 6-digit code emailed to the user instead of a password
+    const [mode, setMode] = useState('password')
+    const [codeSent, setCodeSent] = useState(false)
+    const [code, setCode] = useState('')
+    const [busy, setBusy] = useState(false)
 
     // ? why the last session ended, when the app ended it (e.g. "Your agency's account is switched off")
     useEffect(() => {
@@ -73,6 +85,29 @@ export default function Login() {
         }
     }
 
+    const notify = (message, color = 'error') =>
+        dispatch(
+            openSnackbar({
+                open: true,
+                message,
+                variant: 'alert',
+                alert: { color },
+                anchorOrigin: { vertical: 'top', horizontal: 'right' }
+            })
+        )
+
+    // ? the same for a password and an emailed code: the answer carries the signed-in user
+    const finishSignIn = async res => {
+        const userData = res.data.user
+        dispatch(setUserDetails({ user: userData }))
+        // ? only that someone is signed in: the session itself is in httpOnly cookies, out of reach of page scripts
+        await setToken('signed-in')
+        markSignedIn(userData)
+        const menus = await triggerMenu(userData.id).unwrap()
+        dispatch(setMenuItems(menus.data))
+        navigate('/dashboard', { replace: true })
+    }
+
     const formik = useFormik({
         initialValues: { email: '', password: '', rememberMe: false },
         validate,
@@ -80,36 +115,98 @@ export default function Login() {
             try {
                 // ? nothing from an earlier session may show in this one
                 beginSignIn()
-                const res = await login(values).unwrap()
-                const userData = res.data.user
-                dispatch(setUserDetails({ user: userData }))
-                // ? only that someone is signed in: the session itself is in httpOnly cookies, out of reach of page scripts
-                await setToken('signed-in')
-                markSignedIn(userData)
-                const menus = await triggerMenu(userData.id).unwrap()
-                dispatch(setMenuItems(menus.data))
-                navigate('/dashboard', { replace: true })
+                await finishSignIn(await login(values).unwrap())
             } catch (err) {
-                dispatch(
-                    openSnackbar({
-                        open: true,
-                        message: err.data?.message || 'An error occurred, please try again',
-                        variant: 'alert',
-                        alert: { color: 'error' },
-                        anchorOrigin: { vertical: 'top', horizontal: 'right' }
-                    })
-                )
+                notify(err.data?.message || 'An error occurred, please try again')
             } finally {
                 setSubmitting(false)
             }
         }
     })
 
+    const emailError = () => {
+        try {
+            loginSchema.shape.email.parse(formik.values.email)
+            return ''
+        } catch (error) {
+            return error.errors[0].message
+        }
+    }
+
+    const sendCode = async () => {
+        formik.setFieldTouched('email', true)
+        if (emailError()) return
+        setBusy(true)
+        try {
+            const res = await requestLoginCode(formik.values.email.trim()).unwrap()
+            setCodeSent(true)
+            setCode('')
+            notify(res.message || 'A sign-in code is on its way. Check your email.', 'success')
+        } catch (err) {
+            notify(err.data?.message || 'Couldn’t send the code. Please try again.')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const signInWithCode = async () => {
+        if (!/^\d{6}$/.test(code)) {
+            notify('Enter the 6-digit code from the email')
+            return
+        }
+        setBusy(true)
+        try {
+            beginSignIn()
+            await finishSignIn(await loginWithCode({ email: formik.values.email.trim(), otp: code }).unwrap())
+        } catch (err) {
+            notify(err.data?.message || 'That code didn’t work. Please try again.')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const switchMode = next => {
+        setMode(next)
+        setCodeSent(false)
+        setCode('')
+    }
+
+    const onFormSubmit = event => {
+        if (mode === 'password') return formik.handleSubmit(event)
+        event.preventDefault()
+        return codeSent ? signInWithCode() : sendCode()
+    }
+
     const POINTS = [
         'Leads, quotations and bookings in one place',
         'GST and non-GST quotes, with invoices',
         'Every salesperson’s sales, profit and incentive'
     ]
+
+    const linkSx = {
+        p: 0,
+        border: 0,
+        background: 'none',
+        font: 'inherit',
+        fontSize: '0.875rem',
+        color: GREEN,
+        fontWeight: 700,
+        cursor: 'pointer',
+        '&:hover': { textDecoration: 'underline' },
+        '&:disabled': { color: MUTED, cursor: 'default' }
+    }
+
+    const submitSx = {
+        borderRadius: '10px',
+        py: 1.5,
+        fontSize: '1rem',
+        fontWeight: 700,
+        textTransform: 'none',
+        bgcolor: GREEN,
+        boxShadow: '0 8px 20px rgba(49,101,35,0.28)',
+        '&:hover': { bgcolor: '#285419', boxShadow: '0 10px 24px rgba(49,101,35,0.36)' },
+        '&.Mui-disabled': { bgcolor: '#9bb892', color: '#fff' }
+    }
 
     const fieldSx = {
         '& .MuiOutlinedInput-root': {
@@ -226,7 +323,7 @@ export default function Login() {
                         Sign in to your agency’s workspace.
                     </Typography>
 
-                    <Box component='form' onSubmit={formik.handleSubmit} noValidate>
+                    <Box component='form' onSubmit={onFormSubmit} noValidate>
                         <TextField
                             fullWidth
                             label='Email'
@@ -236,7 +333,11 @@ export default function Login() {
                             autoComplete='email'
                             placeholder='you@youragency.com'
                             value={formik.values.email}
-                            onChange={formik.handleChange}
+                            onChange={event => {
+                                formik.handleChange(event)
+                                // ? a code is for the email it was sent to
+                                if (codeSent) setCodeSent(false)
+                            }}
                             onBlur={formik.handleBlur}
                             error={formik.touched.email && Boolean(formik.errors.email)}
                             helperText={formik.touched.email && formik.errors.email}
@@ -249,102 +350,154 @@ export default function Login() {
                                 )
                             }}
                         />
-                        <TextField
-                            fullWidth
-                            label='Password'
-                            id='password'
-                            name='password'
-                            type={showPassword ? 'text' : 'password'}
-                            autoComplete='current-password'
-                            value={formik.values.password}
-                            onChange={formik.handleChange}
-                            onBlur={formik.handleBlur}
-                            error={formik.touched.password && Boolean(formik.errors.password)}
-                            helperText={formik.touched.password && formik.errors.password}
-                            sx={fieldSx}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position='start'>
-                                        <Lock size={18} color='#94a3b8' />
-                                    </InputAdornment>
-                                ),
-                                endAdornment: (
-                                    <InputAdornment position='end'>
-                                        <IconButton
-                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                            onClick={() => setShowPassword(value => !value)}
-                                            edge='end'
-                                            size='small'
-                                        >
-                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </IconButton>
-                                    </InputAdornment>
-                                )
-                            }}
-                        />
+                        {mode === 'password' ? (
+                            <>
+                                <TextField
+                                    fullWidth
+                                    label='Password'
+                                    id='password'
+                                    name='password'
+                                    type={showPassword ? 'text' : 'password'}
+                                    autoComplete='current-password'
+                                    value={formik.values.password}
+                                    onChange={formik.handleChange}
+                                    onBlur={formik.handleBlur}
+                                    error={formik.touched.password && Boolean(formik.errors.password)}
+                                    helperText={formik.touched.password && formik.errors.password}
+                                    sx={fieldSx}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position='start'>
+                                                <Lock size={18} color='#94a3b8' />
+                                            </InputAdornment>
+                                        ),
+                                        endAdornment: (
+                                            <InputAdornment position='end'>
+                                                <IconButton
+                                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                                    onClick={() => setShowPassword(value => !value)}
+                                                    edge='end'
+                                                    size='small'
+                                                >
+                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        )
+                                    }}
+                                />
 
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                mt: 1.5,
-                                mb: 3
-                            }}
-                        >
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        name='rememberMe'
-                                        size='small'
-                                        checked={formik.values.rememberMe}
-                                        onChange={formik.handleChange}
-                                        sx={{ '&.Mui-checked': { color: GREEN } }}
+                                <Box
+                                    sx={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        mt: 1.5,
+                                        mb: 3
+                                    }}
+                                >
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                name='rememberMe'
+                                                size='small'
+                                                checked={formik.values.rememberMe}
+                                                onChange={formik.handleChange}
+                                                sx={{ '&.Mui-checked': { color: GREEN } }}
+                                            />
+                                        }
+                                        label={
+                                            <Typography sx={{ fontSize: '0.875rem', color: MUTED }}>
+                                                Remember me
+                                            </Typography>
+                                        }
                                     />
-                                }
-                                label={<Typography sx={{ fontSize: '0.875rem', color: MUTED }}>Remember me</Typography>}
-                            />
-                            <Typography
-                                component='a'
-                                href='/forgot-password'
-                                sx={{
-                                    fontSize: '0.875rem',
-                                    color: GREEN,
-                                    fontWeight: 700,
-                                    textDecoration: 'none',
-                                    '&:hover': { textDecoration: 'underline' }
-                                }}
-                            >
-                                Forgot password?
-                            </Typography>
-                        </Box>
-
-                        <Button
-                            fullWidth
-                            type='submit'
-                            variant='contained'
-                            disabled={formik.isSubmitting}
-                            sx={{
-                                borderRadius: '10px',
-                                py: 1.5,
-                                fontSize: '1rem',
-                                fontWeight: 700,
-                                textTransform: 'none',
-                                bgcolor: GREEN,
-                                boxShadow: '0 8px 20px rgba(49,101,35,0.28)',
-                                '&:hover': { bgcolor: '#285419', boxShadow: '0 10px 24px rgba(49,101,35,0.36)' },
-                                '&.Mui-disabled': { bgcolor: '#9bb892', color: '#fff' }
-                            }}
-                        >
-                            {formik.isSubmitting ? (
-                                <CircularProgress size={22} sx={{ color: 'white' }} />
-                            ) : (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    Sign in
-                                    <ArrowRight size={18} />
+                                    <Typography
+                                        component='a'
+                                        href='/forgot-password'
+                                        sx={{
+                                            fontSize: '0.875rem',
+                                            color: GREEN,
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            '&:hover': { textDecoration: 'underline' }
+                                        }}
+                                    >
+                                        Forgot password?
+                                    </Typography>
                                 </Box>
-                            )}
-                        </Button>
+
+                                <Button
+                                    fullWidth
+                                    type='submit'
+                                    variant='contained'
+                                    disabled={formik.isSubmitting}
+                                    sx={submitSx}
+                                >
+                                    {formik.isSubmitting ? (
+                                        <CircularProgress size={22} sx={{ color: 'white' }} />
+                                    ) : (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            Sign in
+                                            <ArrowRight size={18} />
+                                        </Box>
+                                    )}
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                {codeSent && (
+                                    <TextField
+                                        fullWidth
+                                        label='6-digit code'
+                                        id='otp'
+                                        name='otp'
+                                        autoComplete='one-time-code'
+                                        value={code}
+                                        onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        helperText={`Sent to ${formik.values.email}. It works for 10 minutes.`}
+                                        sx={fieldSx}
+                                        inputProps={{
+                                            maxLength: 6,
+                                            inputMode: 'numeric',
+                                            style: { letterSpacing: '0.4em', fontWeight: 700 }
+                                        }}
+                                    />
+                                )}
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5, mb: 3 }}>
+                                    {codeSent && (
+                                        <Typography
+                                            component='button'
+                                            type='button'
+                                            onClick={sendCode}
+                                            disabled={busy}
+                                            sx={linkSx}
+                                        >
+                                            Send a new code
+                                        </Typography>
+                                    )}
+                                </Box>
+                                <Button fullWidth type='submit' variant='contained' disabled={busy} sx={submitSx}>
+                                    {busy ? (
+                                        <CircularProgress size={22} sx={{ color: 'white' }} />
+                                    ) : (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            {codeSent ? 'Sign in' : 'Email me a code'}
+                                            <ArrowRight size={18} />
+                                        </Box>
+                                    )}
+                                </Button>
+                            </>
+                        )}
+                        <Typography
+                            component='button'
+                            type='button'
+                            onClick={() => switchMode(mode === 'password' ? 'code' : 'password')}
+                            sx={{ ...linkSx, display: 'block', mx: 'auto', mt: 2.5 }}
+                        >
+                            {mode === 'password'
+                                ? 'Sign in with a code sent to your email'
+                                : 'Sign in with your password'}
+                        </Typography>
                     </Box>
 
                     <Box sx={{ mt: 4, pt: 3, borderTop: `1px solid ${LINE}`, textAlign: 'center' }}>

@@ -27,7 +27,7 @@ import {
     useMediaQuery
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
-import { Add, Close, OpenInFull } from '@mui/icons-material'
+import { Add, AutoAwesome, Close, OpenInFull } from '@mui/icons-material'
 import DayCard from './quote/DayCard'
 import QuoteRail from './quote/QuoteRail'
 import { sendChecklist, sentLine, viewLine } from './quote/quoteStatus'
@@ -310,6 +310,7 @@ export default function ItinerarySection({
     loadingPackages = false,
     applyingPackage = false,
     onApplyPackage,
+    onCreateWithAi,
     onAddDay,
     onEditDay,
     onDeleteDay,
@@ -446,11 +447,25 @@ export default function ItinerarySection({
                             <Typography color='text.secondary' sx={{ fontSize: '0.9375rem', mt: -1, mb: 2.5 }}>
                                 {loadingDays
                                     ? 'Loading the days…'
-                                    : `Quote ${currentQuoteNo} has no days yet. Start from one of your packages, or add days one at a time.`}
+                                    : `Quote ${currentQuoteNo} has no days yet. Let AI build them from the trip details, start from one of your packages, or add days one at a time.`}
                             </Typography>
                         )}
 
-                        <Box sx={{ mb: 2.5 }}>
+                        <Stack
+                            direction={{ xs: 'column', md: 'row' }}
+                            spacing={1.5}
+                            alignItems={{ xs: 'stretch', md: 'flex-start' }}
+                            sx={{ mb: 2.5 }}
+                        >
+                            <Button
+                                variant={hasDays ? 'outlined' : 'contained'}
+                                startIcon={<AutoAwesome />}
+                                onClick={onCreateWithAi}
+                                disabled={applyingPackage}
+                                sx={{ whiteSpace: 'nowrap', mt: { md: 1 }, flexShrink: 0 }}
+                            >
+                                Create package with AI
+                            </Button>
                             <PackagePicker
                                 campaignId={currentCampaignId}
                                 campaignName={quoteCampaigns[currentQuoteNo] || ''}
@@ -460,7 +475,7 @@ export default function ItinerarySection({
                                 busy={applyingPackage}
                                 onPick={pickPackage}
                             />
-                        </Box>
+                        </Stack>
 
                         {hasDays && view === 'list' ? (
                             <Box component='ol' aria-label='Days of the quote' sx={{ m: 0, p: 0 }}>
@@ -635,6 +650,7 @@ ItinerarySection.propTypes = {
     loadingPackages: PropTypes.bool,
     applyingPackage: PropTypes.bool,
     onApplyPackage: PropTypes.func.isRequired,
+    onCreateWithAi: PropTypes.func.isRequired,
     onAddDay: PropTypes.func.isRequired,
     onEditDay: PropTypes.func.isRequired,
     onDeleteDay: PropTypes.func.isRequired,

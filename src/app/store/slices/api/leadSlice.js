@@ -82,6 +82,20 @@ export const leadsSlice = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['getLeads', 'leadMasterById', 'leadTimeline']
         }),
+        // === THE PLACES THE GUEST WANTS ("Shimla 2N, Manali 3N"): replaces them all, in order ===
+        updateLeadPlaces: build.mutation({
+            query: ({ id, places }) => {
+                const KEY = 'updateLeadPlacesKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: `/leads/${id}/places`,
+                    method: 'PUT',
+                    body: { places },
+                    responseHandler: async result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['getLeads', 'leadMasterById']
+        }),
         deleteLead: build.mutation({
             query: id => {
                 const KEY = 'deleteLeadKey'
@@ -153,6 +167,7 @@ export const {
     useGetLeadTimelineQuery,
     useCreateLeadMutation,
     useUpdateLeadMutation,
+    useUpdateLeadPlacesMutation,
     useDeleteLeadMutation,
     useShareLeadDetailsMutation,
     useGetQuoteLinkMutation,

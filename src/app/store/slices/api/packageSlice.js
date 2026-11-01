@@ -57,6 +57,16 @@ export const packageSlice = apiSliceConfig.injectEndpoints({
             // 🚨 Tag updated
             invalidatesTags: ['PackageClient']
         }),
+        // ? a package the AI planned from a lead's trip details, saved with its places and days in one call
+        createPlannedPackage: build.mutation({
+            query: payload => ({
+                url: '/campaign/package/from-plan',
+                method: 'POST',
+                body: payload,
+                responseHandler: async result => customResponseHandler({ result })
+            }),
+            invalidatesTags: ['PackageClient']
+        }),
         updatePackageClient: build.mutation({
             query: ({ id, ...updateData }) => {
                 // 🚨 Key updated
@@ -94,6 +104,7 @@ export const {
     useGetPackageClientByIdQuery,
     useGetAllPackagesClientQuery,
     useCreatePackageClientMutation,
+    useCreatePlannedPackageMutation,
     useUpdatePackageClientMutation,
     useDeletePackageClientMutation,
 

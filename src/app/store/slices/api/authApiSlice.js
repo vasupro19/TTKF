@@ -16,6 +16,28 @@ export const authApi = apiSliceConfig.injectEndpoints({
             },
             invalidatesTags: ['getClientAccounts', 'getAuthUser']
         }),
+        // ? signing in with a 6-digit code sent to the user's email instead of a password
+        requestLoginCode: build.mutation({
+            query: email => ({
+                url: '/auth/login/otp',
+                method: 'POST',
+                body: { email },
+                responseHandler: result => customResponseHandler({ result })
+            })
+        }),
+        loginWithCode: build.mutation({
+            query: ({ email, otp }) => {
+                const KEY = 'loginLKey'
+                dispatchLoaderEvent(KEY)
+                return {
+                    url: '/auth/login/otp/verify',
+                    method: 'POST',
+                    body: { email, otp },
+                    responseHandler: result => customResponseHandler({ result, requestKey: KEY })
+                }
+            },
+            invalidatesTags: ['getClientAccounts', 'getAuthUser']
+        }),
         getMenu: build.query({
             query: userId => {
                 const KEY = 'menuKey'
@@ -87,6 +109,8 @@ export const authApi = apiSliceConfig.injectEndpoints({
 
 export const {
     useLoginMutation,
+    useRequestLoginCodeMutation,
+    useLoginWithCodeMutation,
     useLogoutMutation,
     // useGetAuthUserMutation,
     useGetMenuQuery,

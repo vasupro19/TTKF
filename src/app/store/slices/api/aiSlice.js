@@ -33,5 +33,6 @@ export const aiSlice = apiSliceConfig.injectEndpoints({
 export const {
     useAssistAiMutation,
     useGetTravelImagesQuery,
+    useLazyGetTravelImagesQuery,
     endpoints: { getTravelImages }
 } = aiSlice

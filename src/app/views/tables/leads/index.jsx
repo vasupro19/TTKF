@@ -62,6 +62,7 @@ import {
     ReceivedCell,
     StageCell
 } from './leadParts'
+import { placesText } from '../../forms/leads/places'
 
 const EMPTY_DATES = { created_at: { from: '', to: '' } }
 const EMPTY_SUMMARY = { stages: {}, total: 0 }
@@ -130,6 +131,13 @@ const displayRow = (lead, now) => ({
     tripCell: lead.campaignName ? (
         <Typography sx={{ fontSize: '12px', textAlign: 'left' }} noWrap title={lead.campaignName}>
             {lead.campaignName}
+        </Typography>
+    ) : (
+        dash
+    ),
+    placesCell: placesText(lead.places) ? (
+        <Typography sx={{ fontSize: '12px', textAlign: 'left' }} noWrap title={placesText(lead.places)}>
+            {placesText(lead.places)}
         </Typography>
     ) : (
         dash

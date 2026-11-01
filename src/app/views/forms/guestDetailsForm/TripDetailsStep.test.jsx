@@ -58,7 +58,9 @@ describe('the guest’s vehicle', () => {
         ])
         fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Volvo + SUV' }))
         fireEvent.click(screen.getByRole('button', { name: /save|continue|next/i }))
-        await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ taxiType: 'Volvo + SUV' })))
+        await waitFor(() =>
+            expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ taxiType: 'Volvo + SUV' }), [])
+        )
     })
 
     test('a vehicle saved before the list changed still shows', () => {
@@ -117,7 +119,7 @@ describe('the guest’s vehicle, from the agency’s own list', () => {
         pick('Mini Bus 32 seater')
         fireEvent.click(screen.getByRole('button', { name: /save|continue|next/i }))
         await waitFor(() =>
-            expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ taxiType: 'Mini Bus 32 seater' }))
+            expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ taxiType: 'Mini Bus 32 seater' }), [])
         )
     })
 

@@ -24,7 +24,13 @@ const { api, dispatch, thunk, mutation, idle } = vi.hoisted(() => {
             createSingleTour: vi.fn(),
             savedQuotes: [],
             setQuoteCampaign: vi.fn(),
-            refetchQuotes: vi.fn()
+            refetchQuotes: vi.fn(),
+            createPlanned: vi.fn(),
+            planFromTrip: vi.fn(),
+            assistAi: vi.fn(),
+            findPhotos: vi.fn(),
+            leadPlaces: [],
+            updatePlaces: vi.fn()
         },
         dispatch: mockDispatch,
         thunk: thunkAction,
@@ -79,14 +85,26 @@ vi.mock('@/app/store/slices/api/packageConvert', () => ({
 vi.mock('@/app/store/slices/api/leadSlice', () => ({
     useShareLeadDetailsMutation: idle,
     useGetQuoteLinkMutation: idle,
-    useGetLeadByIdQuery: () => ({ data: { data: { fullName: 'Asha Verma', phone: '9999999999', campaignId: 1 } } }),
+    useGetLeadByIdQuery: () => ({
+        data: { data: { fullName: 'Asha Verma', phone: '9999999999', campaignId: 1, places: api.leadPlaces } }
+    }),
+    useUpdateLeadPlacesMutation: mutation((...args) => api.updatePlaces(...args)),
     getLeadPreview: { initiate: () => thunk(() => ({ data: { data: { html: '' } } })) }
 }))
 vi.mock('@/app/store/slices/api/aiSlice', () => ({
-    useAssistAiMutation: idle,
+    useAssistAiMutation: mutation((...args) => api.assistAi(...args)),
+    useLazyGetTravelImagesQuery: mutation((...args) => api.findPhotos(...args)),
     useGetTravelImagesQuery: () => ({ data: undefined, isLoading: false })
 }))
+// ? the AI planner itself is tested in aiPackage.test.js: here it answers with a ready two-day plan
+vi.mock('./aiPackage', async importOriginal => ({
+    ...(await importOriginal()),
+    planFromTrip: (...args) => api.planFromTrip(...args),
+    daysFromPlan: trip => trip.plannedDays,
+    packageNameFor: () => 'Manali 2D/1N'
+}))
 vi.mock('@/app/store/slices/api/packageSlice', () => ({
+    useCreatePlannedPackageMutation: mutation((...args) => api.createPlanned(...args)),
     useGetAllPackagesClientQuery: () => ({
         data: {
             data: [
@@ -196,6 +214,15 @@ beforeEach(() => {
     api.createSingleTour.mockImplementation(() => ({ success: true }))
     api.savedQuotes = []
     api.setQuoteCampaign.mockImplementation(payload => ({ success: true, data: payload }))
+    api.planFromTrip.mockReset()
+    api.createPlanned.mockReset()
+    api.assistAi.mockReset()
+    api.assistAi.mockImplementation(() => ({ content: [{ text: '{}' }] }))
+    api.findPhotos.mockReset()
+    api.findPhotos.mockImplementation(() => ({ urls: [] }))
+    api.leadPlaces = []
+    api.updatePlaces.mockReset()
+    api.updatePlaces.mockImplementation(({ places }) => ({ success: true, data: places }))
 })
 
 describe('Quotation for a verified lead', () => {
@@ -331,7 +358,7 @@ describe('Quotation for a verified lead', () => {
         expect(api.createItenary.mock.calls[0][0]).toMatchObject({ title: 'Rishikesh rafting', campaignId: 2 })
         await waitFor(() => expect(api.createSingleTour).toHaveBeenCalled())
         expect(api.createSingleTour.mock.calls[0][0]).toMatchObject({ quoteNo: 2, itenaryId: 555 })
-    })
+    }, 15000) // ? two quotes and a trip change: about 5s when the whole suite runs at once
 
     test('the package picker of a quote offers only the packages of that quote’s trip', async () => {
         api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
@@ -411,5 +438,138 @@ describe('Quotation for a verified lead', () => {
         renderPage()
 
         expect(await screen.findByRole('button', { name: /Quote 2 · Uttarakhand/ })).toBeInTheDocument()
+    })
+    test('“Create package with AI” plans from the trip details, saves the package for the trip, fills the quote with the guest’s days and opens the rate check', async () => {
+        api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05', leadRemarks: 'Wants snow' }
+        const plannedDays = [
+            { title: 'Delhi to Manali', description: 'Drive up for Asha.', place: 'Manali', entryType: 'TransitStay' },
+            { title: 'Manali to Delhi Return', description: 'Drive home.', place: '', entryType: 'Transit' }
+        ]
+        // ? the places are known before the days are planned: their hotels and photos are looked up meanwhile
+        api.planFromTrip.mockImplementation(async ({ onPlaces }) => {
+            onPlaces(['Manali'])
+            return { status: 'ready', plannedDays, assumptions: [] }
+        })
+        api.assistAi.mockImplementation(() => ({
+            content: [{ text: '{"places":[{"name":"Manali","delux_hotel":"Snow Valley | Apple Country"}]}' }]
+        }))
+        api.findPhotos.mockImplementation(place =>
+            place === 'Manali' ? { urls: [{ url: 'https://p/manali-1.jpg' }, { url: 'https://p/manali-2.jpg' }] } : {}
+        )
+        api.createPlanned.mockImplementation(payload => ({
+            success: true,
+            data: {
+                id: 77,
+                name: payload.name,
+                packageItenaries: [
+                    {
+                        title: 'Delhi to Manali',
+                        itenary: { id: 801 },
+                        destination: { id: 31 },
+                        entryType: 'TransitStay'
+                    },
+                    { title: 'Manali to Delhi Return', itenary: { id: 802 }, destination: null, entryType: 'Transit' }
+                ]
+            }
+        }))
+        // ? the saved days come back on the reload, as on the server
+        api.createTour.mockImplementation(({ itenaryList }) => {
+            api.tourRows = itenaryList.map((item, index) => ({
+                ...row(index + 1, index + 1, item.title),
+                entryType: item.entryType,
+                description: item.description
+            }))
+            return { success: true }
+        })
+        renderPage()
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Create package with AI' }))
+        const dialog = await screen.findByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText(/Anything else the guest wants/), {
+            target: { value: 'Solang Valley' }
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create package' }))
+
+        await waitFor(() => expect(api.createTour).toHaveBeenCalledTimes(1))
+        expect(api.planFromTrip.mock.calls[0][0]).toMatchObject({ region: 'Himachal', extra: 'Solang Valley' })
+        expect(api.planFromTrip.mock.calls[0][0].values).toMatchObject({ adults: '2', leadRemarks: 'Wants snow' })
+        expect(api.createPlanned).toHaveBeenCalledWith({
+            campaignId: 1,
+            name: 'Manali 2D/1N',
+            // ? the drive home shows the place of the night before
+            days: [
+                { ...plannedDays[0], image: 'https://p/manali-1.jpg' },
+                { ...plannedDays[1], image: 'https://p/manali-2.jpg' }
+            ],
+            places: [{ name: 'Manali', delux_hotel: 'Snow Valley | Apple Country' }]
+        })
+        // ? one photo search per place, not per day
+        expect(api.findPhotos).toHaveBeenCalledTimes(1)
+        expect(api.createTour.mock.calls[0][0].itenaryList).toEqual([
+            {
+                title: 'Delhi to Manali',
+                description: 'Drive up for Asha.',
+                itenaryId: 801,
+                image: '',
+                destinationId: 31,
+                entryType: 'TransitStay',
+                quoteNo: 1
+            },
+            {
+                title: 'Manali to Delhi Return',
+                description: 'Drive home.',
+                itenaryId: 802,
+                image: '',
+                destinationId: '',
+                entryType: 'Transit',
+                quoteNo: 1
+            }
+        ])
+        // ? the quote shows the guest's own text, and its prices are checked against the rate card next
+        expect(await screen.findByText('Drive up for Asha.')).toBeInTheDocument()
+        expect(await screen.findByText('Prices from your rates — Quote 1')).toBeInTheDocument()
+    })
+
+    test('the lead’s places are the route: shown in the dialog, an edit is saved on the lead and planned', async () => {
+        api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
+        api.leadPlaces = [{ name: 'Shimla', nights: 2 }]
+        api.planFromTrip.mockResolvedValue({ status: 'needs-input', questions: [{ id: 'x', text: 'Stop here' }] })
+        renderPage()
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Create package with AI' }))
+        const dialog = await screen.findByRole('dialog')
+        expect(within(dialog).getByRole('combobox', { name: 'Place' })).toHaveValue('Shimla')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Add a place' }))
+        fireEvent.change(within(dialog).getByRole('combobox', { name: 'Place 2' }), { target: { value: 'Manali' } })
+        fireEvent.change(within(dialog).getByRole('spinbutton', { name: 'Nights in Manali' }), {
+            target: { value: '3' }
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create package' }))
+
+        const route = [
+            { name: 'Shimla', nights: 2 },
+            { name: 'Manali', nights: 3 }
+        ]
+        await waitFor(() => expect(api.planFromTrip).toHaveBeenCalledTimes(1))
+        expect(api.updatePlaces).toHaveBeenCalledWith({ id: 7, places: route })
+        expect(api.planFromTrip.mock.calls[0][0].places).toEqual(route)
+    })
+
+    test('when the AI needs more, it asks, and nothing is saved', async () => {
+        api.guestDetail = { id: 'g1', leadId: 7, adults: 2, pickupDate: '2026-10-05' }
+        api.planFromTrip.mockResolvedValue({
+            status: 'needs-input',
+            questions: [{ id: 'destinations', text: 'Which destinations, and how many nights in each?' }]
+        })
+        renderPage()
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Create package with AI' }))
+        const dialog = await screen.findByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create package' }))
+
+        expect(await within(dialog).findByText('Which destinations, and how many nights in each?')).toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+        expect(api.createPlanned).not.toHaveBeenCalled()
+        expect(api.createTour).not.toHaveBeenCalled()
     })
 })

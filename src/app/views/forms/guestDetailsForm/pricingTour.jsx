@@ -37,7 +37,15 @@ const fromPriceData = data =>
  * The price of each hotel category for one quote — per person, or a total for the whole group. A category left
  * empty is not offered, and is left out of the quotation.
  */
-function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = '', people = 0 }) {
+function GuestTourPriceForm({
+    tourId,
+    quotationNo,
+    activeTab,
+    guestCategory = '',
+    people = 0,
+    openRates = false,
+    onRatesOpened = () => {}
+}) {
     const dispatch = useDispatch()
     const [savePrices, { isLoading: savingPrices }] = useUpsertGuestTourPriceMutation()
     // ? how this quote charges GST: saved with the prices, shown in each box
@@ -53,6 +61,12 @@ function GuestTourPriceForm({ tourId, quotationNo, activeTab, guestCategory = ''
     const [basis, setBasis] = useState(PER_PERSON)
     const [savedBasis, setSavedBasis] = useState(PER_PERSON)
     const [ratesOpen, setRatesOpen] = useState(false)
+    // ? asked to open (the AI just built this quote's days): the rate-card prices, once
+    useEffect(() => {
+        if (!openRates) return
+        setRatesOpen(true)
+        onRatesOpened()
+    }, [openRates, onRatesOpened])
 
     useEffect(() => {
         const loaded = fromPriceData(price?.data)
@@ -237,7 +251,9 @@ GuestTourPriceForm.propTypes = {
     quotationNo: PropTypes.number.isRequired,
     activeTab: PropTypes.number.isRequired,
     guestCategory: PropTypes.string,
-    people: PropTypes.number
+    people: PropTypes.number,
+    openRates: PropTypes.bool,
+    onRatesOpened: PropTypes.func
 }
 
 export default GuestTourPriceForm

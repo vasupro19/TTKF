@@ -18,10 +18,12 @@ export const headers = [
     column(1, 'Lead', 'leadCell', 13, 18, { stick: true }),
     column(2, 'Contact', 'contactCell', 12, 16),
     column(3, 'Trip', 'tripCell', 9, 14),
-    column(4, 'Step', 'stepCell', 11, 14),
-    column(5, 'Follow-up', 'followUpCell', 7, 9),
-    column(6, 'Assigned to', 'assignedCell', 7, 10),
-    column(7, 'Received', 'receivedCell', 7, 9)
+    // ? what the guest wants to see: "Shimla 2N, Manali 3N"
+    column(4, 'Places', 'placesCell', 9, 14),
+    column(5, 'Step', 'stepCell', 11, 14),
+    column(6, 'Follow-up', 'followUpCell', 7, 9),
+    column(7, 'Assigned to', 'assignedCell', 7, 10),
+    column(8, 'Received', 'receivedCell', 7, 9)
 ]
 
 export default headers
