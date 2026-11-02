@@ -14,6 +14,7 @@ const AdminDashboard = lazy(() => import('@views/dashboard/admin/Home'))
 const ComponentsView = lazy(() => import('@views/pages/ComponentView'))
 const MasterUserForm = lazy(() => import('@views/forms/user/MasterUserForm'))
 const MasterClient = lazy(() => import('@views/masters/client'))
+const Prospects = lazy(() => import('@views/tables/prospects'))
 const MasterClientForm = lazy(() => import('@views/masters/client/create'))
 const MasterAccount = lazy(() => import('@views/masters/account'))
 const MasterAccountForm = lazy(() => import('@views/masters/account/create'))
@@ -182,6 +183,15 @@ const protectedRoutes = {
             element: (
                 <Suspense fallback={<Loader />}>
                     <MasterClient />
+                </Suspense>
+            )
+        },
+        {
+            // ? the super admin's sales list of agencies (TTKB Controllers/prospect.controller.js)
+            path: '/master/prospects',
+            element: (
+                <Suspense fallback={<Loader />}>
+                    <Prospects />
                 </Suspense>
             )
         },
