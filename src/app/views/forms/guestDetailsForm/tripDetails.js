@@ -5,10 +5,12 @@
  * sharpens it and can be added whenever the guest says it, so none of it blocks the agent.
  */
 
+// ? the value is what is saved and priced; the label says the star level a guest asks for ("3 star" is Deluxe —
+// ? the enquiry reader reads it the same way, leads/enquiryReader.js)
 export const HOTEL_CATEGORIES = [
-    { value: 'Deluxe', label: 'Deluxe' },
-    { value: 'Super Deluxe', label: 'Super Deluxe' },
-    { value: 'Luxury', label: 'Luxury' },
+    { value: 'Deluxe', label: 'Deluxe (3 star)' },
+    { value: 'Super Deluxe', label: 'Super Deluxe (4 star)' },
+    { value: 'Luxury', label: 'Luxury (5 star)' },
     { value: 'Premium', label: 'Premium' }
 ]
 
@@ -215,5 +217,6 @@ export const tripSummary = values => {
             : `from ${shortDate(values.pickupDate)}`
     }
     const meals = MEAL_PLANS.find(plan => plan.value === values.foodPlan)?.label || ''
-    return [people, dates, values.packageType, meals].filter(Boolean).join(' · ')
+    const hotels = HOTEL_CATEGORIES.find(item => item.value === values.packageType)?.label || values.packageType
+    return [people, dates, hotels, meals].filter(Boolean).join(' · ')
 }

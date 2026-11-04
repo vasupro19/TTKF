@@ -105,7 +105,7 @@ describe('trip details', () => {
                     foodPlan: 'CP'
                 })
             )
-        ).toBe('2 adults, 1 child · 5 Oct – 10 Oct · Deluxe · Breakfast')
+        ).toBe('2 adults, 1 child · 5 Oct – 10 Oct · Deluxe (3 star) · Breakfast')
         expect(tripSummary(withValues({ adults: '1', pickupDate: '2026-10-05' }))).toBe('1 adult · from 5 Oct')
     })
 })

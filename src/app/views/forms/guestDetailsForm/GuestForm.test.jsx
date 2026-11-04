@@ -276,7 +276,7 @@ describe('Quotation for a verified lead', () => {
         expect(
             within(days[0]).getByRole('button', { name: /Hotels · Deluxe: Hotel Willow Banks, Hotel Combermere/ })
         ).toBeInTheDocument()
-        expect(screen.getByText('2 adults · from 5 Oct · Deluxe')).toBeInTheDocument()
+        expect(screen.getByText('2 adults · from 5 Oct · Deluxe (3 star)')).toBeInTheDocument()
     })
 
     test('moving a day writes the new order; deleting one asks first', async () => {
