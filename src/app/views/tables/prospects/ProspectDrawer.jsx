@@ -32,6 +32,7 @@ import {
     useUpdateProspectMutation
 } from '@/app/store/slices/api/prospectSlice'
 import { ACTIVITY_WORDS, STATUS_OPTIONS, emailStateOf, statusOption, timeOf } from './prospectFacts'
+import { canShareVideo, sendOnWhatsapp } from './whatsappVideo'
 
 const EDIT_FIELDS = [
     ['name', 'Agency name'],
@@ -53,7 +54,7 @@ const hrefOf = value => {
  * One agency: how to reach it, where it stands, the next email (editable before it goes), WhatsApp in one click, calls
  * and notes, and everything that happened, newest first.
  */
-function ProspectDrawer({ prospectId = null, onClose, onChanged }) {
+function ProspectDrawer({ prospectId = null, onClose, onChanged, video = null }) {
     const dispatch = useDispatch()
     const open = Boolean(prospectId)
     const { data, isFetching, refetch } = useGetProspectQuery(prospectId, {
@@ -116,10 +117,21 @@ function ProspectDrawer({ prospectId = null, onClose, onChanged }) {
         }
     }
 
-    const openWhatsapp = () => {
-        // ? opened in the click itself, or the browser blocks the new tab
-        window.open(prospect.whatsappUrl, '_blank', 'noopener')
-        run(() => whatsappOpened(prospect.id), 'Noted as contacted on WhatsApp')
+    const sharesVideo = Boolean(video) && canShareVideo()
+    const openWhatsapp = async withVideo => {
+        const result = await sendOnWhatsapp({ whatsappUrl: prospect.whatsappUrl, video, withVideo })
+        if (result === 'cancelled') return
+        if (result === 'failed') {
+            notify('The video could not be shared. Use “Message only”.', 'error')
+            return
+        }
+        const shared = result === 'shared'
+        run(
+            () => whatsappOpened({ id: prospect.id, withVideo: shared }),
+            shared
+                ? 'Video shared. The message is copied too, in case WhatsApp left it out.'
+                : 'Noted as contacted on WhatsApp'
+        )
     }
 
     const handleSend = () => run(() => sendEmail({ id: prospect.id, subject, body }))
@@ -286,11 +298,21 @@ function ProspectDrawer({ prospectId = null, onClose, onChanged }) {
                                 variant='contained'
                                 color='success'
                                 startIcon={<WhatsApp />}
-                                onClick={openWhatsapp}
+                                onClick={() => openWhatsapp(true)}
                                 disabled={!prospect.whatsappUrl}
                             >
-                                WhatsApp
+                                {sharesVideo ? 'WhatsApp with video' : 'WhatsApp'}
                             </Button>
+                            {sharesVideo && (
+                                <Button
+                                    variant='outlined'
+                                    color='success'
+                                    onClick={() => openWhatsapp(false)}
+                                    disabled={!prospect.whatsappUrl}
+                                >
+                                    Message only
+                                </Button>
+                            )}
                             <Button variant='outlined' startIcon={<Phone />} onClick={handleCall} disabled={adding}>
                                 I called them
                             </Button>
@@ -298,6 +320,19 @@ function ProspectDrawer({ prospectId = null, onClose, onChanged }) {
                         {!prospect.whatsappUrl && (
                             <Typography variant='caption' color='text.secondary'>
                                 No mobile number to open WhatsApp on. Add one with Edit details.
+                            </Typography>
+                        )}
+                        {prospect.whatsappUrl && sharesVideo && (
+                            <Typography variant='caption' color='text.secondary'>
+                                “WhatsApp with video” opens the share menu: choose WhatsApp, then this agency (
+                                {prospect.phone}). The video goes with the message under it.
+                            </Typography>
+                        )}
+                        {prospect.whatsappUrl && video && !sharesVideo && (
+                            <Typography variant='caption' color='text.secondary'>
+                                This browser can’t hand WhatsApp a file, so the message carries the video’s link, and
+                                WhatsApp shows its preview picture. To send the video file itself, open Prospects on
+                                your phone, or in Safari or Chrome on a Mac.
                             </Typography>
                         )}
 
@@ -443,7 +478,9 @@ function ProspectDrawer({ prospectId = null, onClose, onChanged }) {
 ProspectDrawer.propTypes = {
     prospectId: PropTypes.number,
     onClose: PropTypes.func.isRequired,
-    onChanged: PropTypes.func
+    onChanged: PropTypes.func,
+    // the uploaded demo video `{ url, name }`, shared to WhatsApp where the browser can
+    video: PropTypes.shape({ url: PropTypes.string, name: PropTypes.string })
 }
 
 export default ProspectDrawer

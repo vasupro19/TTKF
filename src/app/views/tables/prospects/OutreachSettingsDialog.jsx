@@ -22,9 +22,19 @@ import {
 import { openSnackbar } from '@app/store/slices/snackbar'
 import {
     useGetOutreachSettingsQuery,
+    useRemoveOutreachMediaMutation,
     useSaveOutreachSettingsMutation,
-    useTestOutreachSettingsMutation
+    useTestOutreachSettingsMutation,
+    useUploadOutreachMediaMutation
 } from '@/app/store/slices/api/prospectSlice'
+
+const ATTACH_OPTIONS = [
+    ['first', 'Attach it to the first email (suggested)'],
+    ['all', 'Attach it to every email'],
+    ['off', 'Don’t attach it: the link and picture only']
+]
+
+const megabytes = bytes => (bytes ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : '')
 
 // ? common providers: sending (SMTP) and reading replies (IMAP) in one click
 const PRESETS = [
@@ -81,6 +91,7 @@ const draftOf = settings => ({
     followUpDays: String(settings?.followUpDays ?? 3),
     maxFollowUps: String(settings?.maxFollowUps ?? 2),
     videoLink: settings?.videoLink || '',
+    attachVideo: settings?.attachVideo || 'first',
     ...Object.fromEntries(TEXTS.map(key => [key, settings?.[key] || '']))
 })
 
@@ -97,13 +108,18 @@ function OutreachSettingsDialog({ open, onClose, onSaved }) {
     })
     const [save, { isLoading: saving }] = useSaveOutreachSettingsMutation()
     const [test, { isLoading: testing }] = useTestOutreachSettingsMutation()
+    const [uploadMedia, { isLoading: uploading }] = useUploadOutreachMediaMutation()
+    const [removeMedia] = useRemoveOutreachMediaMutation()
     const settings = data?.data || null
     const [draft, setDraft] = useState(draftOf(null))
     const [testResult, setTestResult] = useState(null)
+    // ? the video and picture change at once on upload, without reloading the form (that would lose typed changes)
+    const [media, setMedia] = useState({ video: null, poster: null })
 
     useEffect(() => {
         setDraft(draftOf(settings))
         setTestResult(null)
+        setMedia({ video: settings?.video || null, poster: settings?.poster || null })
     }, [settings, open])
 
     const notify = (message, color = 'success') =>
@@ -165,6 +181,29 @@ function OutreachSettingsDialog({ open, onClose, onSaved }) {
         }
     }
 
+    const handleUpload = kind => async event => {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+        try {
+            const result = await uploadMedia({ kind, file }).unwrap()
+            setMedia({ video: result?.data?.video || null, poster: result?.data?.poster || null })
+            notify(result?.message || 'Uploaded')
+        } catch (error) {
+            notify(error?.data?.message || 'The upload did not work', 'error')
+        }
+    }
+
+    const handleRemoveMedia = kind => async () => {
+        try {
+            const result = await removeMedia(kind).unwrap()
+            setMedia({ video: result?.data?.video || null, poster: result?.data?.poster || null })
+            notify(result?.message || 'Removed')
+        } catch (error) {
+            notify(error?.data?.message || 'Could not remove it', 'error')
+        }
+    }
+
     const resetText = key => setDraft(previous => ({ ...previous, [key]: settings?.defaults?.[key] || '' }))
 
     return (
@@ -185,6 +224,12 @@ function OutreachSettingsDialog({ open, onClose, onSaved }) {
                             </Alert>
                         )}
                         {settings.lastError && <Alert severity='error'>Last problem: {settings.lastError}</Alert>}
+                        {!draft.fromName.trim() && (
+                            <Alert severity='info'>
+                                Add your name below: the messages say “I’m {'{sender}'} from Travelytics”, and without a
+                                name it reads “I’m Travelytics from Travelytics”.
+                            </Alert>
+                        )}
 
                         <Box>
                             <Typography variant='subtitle1' fontWeight={700}>
@@ -334,13 +379,108 @@ function OutreachSettingsDialog({ open, onClose, onSaved }) {
                                 {'{video}'} the video link. Every email ends with a “Don’t email me again” link.
                             </Typography>
                         </Box>
+                        <Box>
+                            <Typography variant='subtitle2' fontWeight={700}>
+                                Demo video
+                            </Typography>
+                            <Typography variant='body2' color='text.secondary'>
+                                Upload the video once. It is attached to the emails you choose below, shared with the
+                                WhatsApp message (on a phone, or Safari or Chrome on a Mac), and gets its own page that
+                                {' {video}'} links to. The picture is what WhatsApp and the email show before anyone
+                                presses play.
+                            </Typography>
+                        </Box>
+                        {!settings.publicLinks && (
+                            <Alert severity='warning'>
+                                Set BASE_URL in the API’s .env (for example https://api.travelytics.cloud) so the
+                                video’s page has a link that works outside this screen.
+                            </Alert>
+                        )}
+                        {media.video?.missing && (
+                            <Alert severity='error'>The video file is missing on the server. Upload it again.</Alert>
+                        )}
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+                            <Button variant='outlined' component='label' disabled={uploading}>
+                                {media.video ? 'Replace the video' : 'Upload the video'}
+                                <input
+                                    hidden
+                                    type='file'
+                                    accept='video/mp4,video/quicktime,video/webm'
+                                    onChange={handleUpload('video')}
+                                />
+                            </Button>
+                            {media.video ? (
+                                <Stack direction='row' spacing={1} alignItems='center' flexWrap='wrap' useFlexGap>
+                                    <Typography variant='body2'>
+                                        {media.video.name} · {megabytes(media.video.size)}
+                                    </Typography>
+                                    {media.video.watchUrl && (
+                                        <Button size='small' href={media.video.watchUrl} target='_blank' rel='noopener'>
+                                            Open its page
+                                        </Button>
+                                    )}
+                                    <Button size='small' color='error' onClick={handleRemoveMedia('video')}>
+                                        Remove
+                                    </Button>
+                                </Stack>
+                            ) : (
+                                <Typography variant='body2' color='text.secondary'>
+                                    MP4, at most {settings.maxVideoMb} MB (so it can go as an email attachment).
+                                </Typography>
+                            )}
+                            {uploading && <CircularProgress size={20} />}
+                        </Stack>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+                            <Button variant='outlined' component='label' disabled={uploading}>
+                                {media.poster ? 'Replace the picture' : 'Upload a preview picture'}
+                                <input
+                                    hidden
+                                    type='file'
+                                    accept='image/jpeg,image/png,image/webp'
+                                    onChange={handleUpload('poster')}
+                                />
+                            </Button>
+                            {media.poster ? (
+                                <Stack direction='row' spacing={1} alignItems='center'>
+                                    <Box
+                                        component='img'
+                                        src={media.poster.url}
+                                        alt='Preview picture'
+                                        sx={{ width: 120, height: 63, objectFit: 'cover', borderRadius: 1 }}
+                                    />
+                                    <Button size='small' color='error' onClick={handleRemoveMedia('poster')}>
+                                        Remove
+                                    </Button>
+                                </Stack>
+                            ) : (
+                                <Typography variant='body2' color='text.secondary'>
+                                    1200 × 628 works best (JPG or PNG).
+                                </Typography>
+                            )}
+                        </Stack>
                         <TextField
-                            label='Demo video link'
+                            select
+                            label='Emails with the video attached'
+                            value={draft.attachVideo}
+                            onChange={set('attachVideo')}
+                            size='small'
+                            sx={{ maxWidth: 420 }}
+                            helperText='An attachment makes the email about 14 MB. A few mail servers turn big emails away; the link always goes too.'
+                        >
+                            {ATTACH_OPTIONS.map(([value, label]) => (
+                                <MenuItem key={value} value={value}>
+                                    {label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <TextField
+                            label='Or a video link instead of the uploaded video’s page'
                             value={draft.videoLink}
                             onChange={set('videoLink')}
                             placeholder='https://youtu.be/…'
                             InputLabelProps={{ shrink: true }}
                             size='small'
+                            helperText='Leave empty to use the uploaded video’s page.'
                         />
                         {[
                             ['firstSubject', 'First email: subject', 1],

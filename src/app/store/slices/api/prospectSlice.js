@@ -45,8 +45,16 @@ export const prospectSlice = apiSliceConfig.injectEndpoints({
         emailProspect: build.mutation({
             query: ({ id, ...body }) => handled({ url: `/prospects/${id}/email`, method: 'POST', body })
         }),
+        // an id, or `{ id, withVideo }` when the video file itself was shared to WhatsApp
         prospectWhatsappOpened: build.mutation({
-            query: id => handled({ url: `/prospects/${id}/whatsapp`, method: 'POST' })
+            query: arg => {
+                const { id, withVideo } = typeof arg === 'object' ? arg : { id: arg }
+                return handled({
+                    url: `/prospects/${id}/whatsapp`,
+                    method: 'POST',
+                    body: { withVideo: Boolean(withVideo) }
+                })
+            }
         }),
         // `{ id, kind: 'note' | 'call', text }`
         addProspectActivity: build.mutation({
@@ -68,6 +76,17 @@ export const prospectSlice = apiSliceConfig.injectEndpoints({
         }),
         testOutreachSettings: build.mutation({
             query: body => handled({ url: '/prospects/settings/test', method: 'POST', body })
+        }),
+        // `{ kind: 'video' | 'poster', file }`: replaces the demo video or its preview picture; answers with the settings
+        uploadOutreachMedia: build.mutation({
+            query: ({ kind, file }) => {
+                const body = new FormData()
+                body.append('file', file)
+                return handled({ url: `/prospects/settings/${kind}`, method: 'POST', body })
+            }
+        }),
+        removeOutreachMedia: build.mutation({
+            query: kind => handled({ url: `/prospects/settings/${kind}`, method: 'DELETE' })
         })
     })
 })
@@ -88,5 +107,7 @@ export const {
     useGetOutreachSettingsQuery,
     useSaveOutreachSettingsMutation,
     useTestOutreachSettingsMutation,
+    useUploadOutreachMediaMutation,
+    useRemoveOutreachMediaMutation,
     endpoints: { getProspects }
 } = prospectSlice

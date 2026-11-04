@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 import { useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
@@ -21,6 +21,7 @@ import StatusBadge from '@core/components/StatusBadge'
 import { openSnackbar } from '@app/store/slices/snackbar'
 import {
     getProspects,
+    useGetOutreachSettingsQuery,
     useGetProspectSummaryQuery,
     useProspectWhatsappOpenedMutation,
     useStartProspectSequenceMutation
@@ -29,6 +30,7 @@ import { dayOf, emailStateOf, filtersOf, statusOption } from './prospectFacts'
 import ProspectDrawer from './ProspectDrawer'
 import ProspectImportDialog from './ProspectImportDialog'
 import OutreachSettingsDialog from './OutreachSettingsDialog'
+import { canShareVideo, prefetchVideo, sendOnWhatsapp } from './whatsappVideo'
 
 const column = (id, label, key, width, extra = {}) => ({
     id,
@@ -91,6 +93,12 @@ function ProspectsPage() {
     })
     const summary = summaryData?.data || null
     const [whatsappOpened] = useProspectWhatsappOpenedMutation()
+    const { data: settingsData, refetch: refetchSettings } = useGetOutreachSettingsQuery(undefined, {
+        refetchOnMountOrArgChange: true
+    })
+    const uploaded = settingsData?.data?.video
+    const video = uploaded && !uploaded.missing ? uploaded : null
+    const sharesVideo = Boolean(video) && canShareVideo()
     const [startSequence, { isLoading: starting }] = useStartProspectSequenceMutation()
 
     const [openId, setOpenId] = useState(null)
@@ -115,11 +123,25 @@ function ProspectsPage() {
             })
         )
 
+    // ? the video is fetched ahead, so a click can share it at once
+    useEffect(() => {
+        if (sharesVideo) prefetchVideo(video.url, video.name)
+    }, [sharesVideo, video?.url, video?.name])
+
+    const whatsappTip = row => {
+        if (!row.whatsappUrl) return 'No mobile number'
+        return sharesVideo ? 'Share the video and the message to WhatsApp' : 'WhatsApp with the message ready'
+    }
+
     const openWhatsapp = async row => {
-        // ? opened in the click itself, or the browser blocks the new tab
-        window.open(row.whatsappUrl, '_blank', 'noopener')
+        const result = await sendOnWhatsapp({ whatsappUrl: row.whatsappUrl, video })
+        if (result === 'cancelled') return
+        if (result === 'failed') {
+            notify('The video could not be shared. Open the agency and use “Message only”.', 'error')
+            return
+        }
         try {
-            await whatsappOpened(row.id).unwrap()
+            await whatsappOpened({ id: row.id, withVideo: result === 'shared' }).unwrap()
             reload()
         } catch (error) {
             notify('WhatsApp opened, but it could not be noted on the list', 'warning')
@@ -293,7 +315,7 @@ function ProspectsPage() {
                 }
                 renderAction={row => (
                     <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
-                        <Tooltip title={row.whatsappUrl ? 'WhatsApp with the message ready' : 'No mobile number'}>
+                        <Tooltip title={whatsappTip(row)}>
                             <span>
                                 <IconButton
                                     size='small'
@@ -319,9 +341,16 @@ function ProspectsPage() {
                 )}
             />
 
-            <ProspectDrawer prospectId={openId} onClose={() => setOpenId(null)} onChanged={reload} />
+            <ProspectDrawer prospectId={openId} onClose={() => setOpenId(null)} onChanged={reload} video={video} />
             <ProspectImportDialog open={importOpen} onClose={() => setImportOpen(false)} onDone={reload} />
-            <OutreachSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={reload} />
+            <OutreachSettingsDialog
+                open={settingsOpen}
+                onClose={() => {
+                    setSettingsOpen(false)
+                    refetchSettings()
+                }}
+                onSaved={reload}
+            />
 
             <Dialog open={confirmStart} onClose={() => setConfirmStart(false)} maxWidth='xs' fullWidth>
                 <DialogTitle>Start automatic emails?</DialogTitle>
